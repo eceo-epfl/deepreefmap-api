@@ -1,8 +1,8 @@
 from fastapi import Depends, FastAPI, APIRouter, Query
 from sqlmodel import select, Session
-from main import app
-from db import get_session, AsyncSession
-from areas.models import Area, AreaCreate, AreaRead
+from app.db import get_session, AsyncSession
+from app.areas.models import Area, AreaCreate, AreaRead
+from uuid import UUID
 
 router = APIRouter()
 
@@ -10,9 +10,9 @@ router = APIRouter()
 @router.get("/{area_id}", response_model=AreaRead)
 async def get_area(
     session: AsyncSession = Depends(get_session),
-    sort: list[str] | None = Query(None),
-    range: list[int] | None = Query(None),
-    filter: dict[str, str] | None = Query(None),
+    sort: list[str] | None = None,
+    range: list[int] | None = None,
+    filter: dict[str, str] | None = None,
 ) -> AreaRead:
     pass
 
@@ -28,8 +28,7 @@ async def get_areas(
 
     return [
         AreaRead(
-            id=area.id,
-            uuid=area.uuid,
+            id=area.uuid,
             name=area.name,
             description=area.description,
         )
@@ -52,22 +51,37 @@ async def create_area(
     return AreaRead(
         name=area.name,
         description=area.description,
-        uuid=area.uuid,
-        id=area.id,
+        id=area.uuid,
     )
 
 
 @router.put("/{area_id}", response_model=AreaRead)
 async def update_area(
+    area_id: UUID,
     session: AsyncSession = Depends(get_session),
 ) -> AreaRead:
-    pass
+    res = await session.execute(select(Area).where(Area.uuid == area_id))
+    area = res.one()
+
+    # Update area
+    area.name = area.name
+    area.description = area.description
+
+    await session.add(area)
+    await session.commit()
+    await session.refresh(area)
+
+    return AreaRead(
+        name=area.name,
+        description=area.description,
+        id=area.uuid,
+    )
 
 
 @router.put("/", response_model=list[AreaRead])
 async def update_areas(
     session: AsyncSession = Depends(get_session),
-    filter: dict[str, str] | None = Query(None),
+    filter: dict[str, str] | None = None,
 ) -> list[AreaRead]:
     pass
 
@@ -82,6 +96,6 @@ async def delete_areas(
 @router.delete("/{area_id}", response_model=AreaRead)
 async def delete_area(
     session: AsyncSession = Depends(get_session),
-    filter: dict[str, str] | None = Query(None),
+    filter: dict[str, str] | None = None,
 ) -> None:
     pass

@@ -27,8 +27,7 @@ class Area(AreaBase, table=True):
 
 
 class AreaRead(AreaBase):
-    id: int
-    uuid: UUID
+    id: UUID  # We use the UUID as the return ID
 
 
 class AreaCreate(AreaBase):
