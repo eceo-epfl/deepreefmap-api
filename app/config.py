@@ -3,7 +3,7 @@ from functools import lru_cache
 
 
 class Config(BaseSettings):
-    API_V1_PREFIX = "/api/v1"
+    API_V1_PREFIX = "/v1"
 
 
 @lru_cache()
