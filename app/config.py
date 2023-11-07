@@ -3,10 +3,7 @@ from functools import lru_cache
 
 
 class Config(BaseSettings):
-    pass
-    # KEYCLOAK_CLIENT_ID: str
-    # KEYCLOAK_REALM: str
-    # KEYCLOAK_URL: str
+    API_V1_PREFIX = "/api/v1"
 
 
 @lru_cache()

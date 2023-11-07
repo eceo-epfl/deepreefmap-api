@@ -49,4 +49,8 @@ def get_health() -> HealthCheck:
     return HealthCheck(status="OK")
 
 
-app.include_router(areas_router, prefix="/areas", tags=["areas"])
+app.include_router(
+    areas_router,
+    prefix=f"{config.API_V1_PREFIX}/areas",
+    tags=["areas"],
+)
