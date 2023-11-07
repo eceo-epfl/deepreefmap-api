@@ -6,6 +6,7 @@ from app.config import config
 from app.areas.models import Area
 from app.db import init_db
 from app.areas.views import router as areas_router
+from app.sensors.views import router as sensors_router
 from pydantic import BaseModel
 
 app = FastAPI()
@@ -53,4 +54,9 @@ app.include_router(
     areas_router,
     prefix=f"{config.API_V1_PREFIX}/areas",
     tags=["areas"],
+)
+app.include_router(
+    sensors_router,
+    prefix=f"{config.API_V1_PREFIX}/sensors",
+    tags=["sensors"],
 )

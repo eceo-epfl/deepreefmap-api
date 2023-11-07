@@ -28,6 +28,8 @@ class Area(AreaBase, table=True):
 
 class AreaRead(AreaBase):
     id: UUID  # We use the UUID as the return ID
+    centroid: Any
+    location: Any
 
 
 class AreaCreate(AreaBase):

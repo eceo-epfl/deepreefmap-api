@@ -4,15 +4,12 @@ from uuid import uuid4, UUID
 from typing import Any
 
 
-class AreaBase(SQLModel):
+class SensorBase(SQLModel):
     name: str = Field(default=None, index=True)
     description: str
-    # boundary: Any = Field(sa_column=Column(Geometry("POLYGON", srid=4326)))
-    # parent_id: int = Field(default=None, foreign_key="area.id")
-    # children: list["Area"] = Field(default=None, sa_relation="*")
 
 
-class Area(AreaBase, table=True):
+class Sensor(SensorBase, table=True):
     id: int = Field(
         default=None,
         nullable=False,
@@ -26,10 +23,11 @@ class Area(AreaBase, table=True):
     )
 
 
-class AreaRead(AreaBase):
-    id: int
-    uuid: UUID
+class SensorRead(SensorBase):
+    id: UUID
+    location: list[float]
+    area_id: UUID
 
 
-class AreaCreate(AreaBase):
+class SensorCreate(SensorBase):
     pass
