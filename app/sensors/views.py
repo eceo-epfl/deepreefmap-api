@@ -3,6 +3,7 @@ from sqlmodel import select, Session
 from app.db import get_session, AsyncSession
 from app.sensors.models import Sensor, SensorCreate, SensorRead
 from uuid import UUID, uuid4
+from sqlalchemy import func
 
 router = APIRouter()
 
@@ -95,29 +96,25 @@ sensors = [
 ]
 
 
-def convert_json_to_model():
-    return [
-        SensorRead(
-            name=sensor["name"],
-            description=sensor["description"],
-            id=sensor["id"],
-            location=sensor["location"],
-            area_id=sensor["area_id"],
-        )
-        for sensor in sensors
-    ]
+async def add_sensors_to_db():
+    from app.db import engine
+    from sqlalchemy.orm import sessionmaker
+    from shapely.geometry import Point
 
-
-# @router.get("/{area_id}", response_model=AreaRead)
-# async def get_area(
-#     session: AsyncSession = Depends(get_session),
-#     *,
-#     area_id: UUID,
-#     sort: list[str] | None = None,
-#     range: list[int] | None = None,
-#     filter: dict[str, str] | None = None,
-# ) -> AreaRead:
-#     pass
+    async_session = sessionmaker(
+        engine, class_=AsyncSession, expire_on_commit=False
+    )
+    async with async_session() as session:
+        for sensor in sensors:
+            record = Sensor(
+                uuid=sensor["id"],
+                name=sensor["name"],
+                description=sensor["description"],
+                geom=Point(sensor["location"]).wkt,
+                area_id=sensor["area_id"],
+            )
+            session.add(record)
+        await session.commit()
 
 
 @router.get("", response_model=list[SensorRead])
@@ -127,25 +124,59 @@ async def get_sensors(
     *,
     sort: list[str] | None = None,
     range: list[int] | None = None,
-    filter: str | None = None,
+    filter: dict | None = None,
 ):
-    """Get all sensors"""
+    """Get all areas"""
 
-    result = await session.execute(select(Sensor))
-    sensors = result.scalars().all()
+    query = select(Sensor)
+    # Query all, including sort, range and filter query params according
+    # to react-admin spec:
+    # ?sort=["title","ASC"]&range=[0, 24]&filter={"title":"bar"}
 
-    start = 0
-    end = len(convert_json_to_model())
-    total = len(convert_json_to_model())
-    response.headers["Content-Range"] = f"sensors {start}-{end}/{total}"
+    # Order by sort field params ie. ["name","ASC"]
+    if sort:
+        sort_field, sort_order = sort
+        if sort_order == "ASC":
+            query = query.order_by(getattr(Sensor, sort_field))
+        else:
+            query = query.order_by(getattr(Sensor, sort_field).desc())
 
-    return convert_json_to_model()
+    if range:
+        start, end = range
+        query = query.offset(start).limit(end - start + 1)
 
-    return [
-        AreaRead(
-            id=area.uuid,
-            name=area.name,
-            description=area.description,
+    # Filter by filter field params ie. {"name":"bar"}
+    if filter:
+        for field, value in filter.items():
+            if field in ["name", "description"]:
+                query = query.where(getattr(Sensor, field).like(f"%{value}%"))
+
+    # Execute query
+    results = await session.execute(query)
+    sensors = results.scalars().all()
+
+    # Do a query to satisfy total count for "Content-Range" header
+    query = await session.execute(select(func.count(Sensor.id)))
+    total_count = query.scalar_one()
+
+    # Return a Content-Range header for react-admin pagination
+
+    if range:
+        start, end = range
+    else:
+        start, end = [0, total_count]
+
+    response.headers["Content-Range"] = f"sensors {start}-{end}/{total_count}"
+
+    payload = []
+    for sensor in sensors:
+        payload.append(
+            SensorRead(
+                id=sensor.uuid,
+                name=sensor.name,
+                description=sensor.description,
+                geom=sensor.geom,
+                area_id=sensor.area_id,
+            )
         )
-        for sensor in sensors
-    ]
+    return payload
