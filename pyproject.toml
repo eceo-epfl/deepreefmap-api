@@ -6,7 +6,7 @@ authors = ["Evan Thomas <evan.thomas@epfl.ch>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = ">=3.11,<3.13"
 fastapi = "^0.104.1"
 uvicorn = "^0.23.2"
 sqlmodel = "^0.0.11"
@@ -19,6 +19,10 @@ shapely = "^2.0.2"
 sqlalchemy-utils = "^0.41.1"
 alembic = "^1.12.1"
 pydantic-geojson = "^0.1.1"
+setuptools = "^68.2.2"
+wheel = "^0.41.3"
+numpy = "^1.26.1"
+geos = "^0.2.3"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.3"
