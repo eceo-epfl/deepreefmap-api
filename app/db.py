@@ -6,12 +6,12 @@ from geoalchemy2 import load_spatialite
 from sqlalchemy.event import listen
 from sqlalchemy import event
 from app.areas.models import Area
-from app.sensors.models import Sensor
+from app.sensors.models import Sensor, SensorData
+from app.config import config
+from datetime import datetime
 
-# DATABASE_URL = os.environ.get("DATABASE_URL")
-DATABASE_URL = "postgresql+asyncpg://postgres:psql@localhost:5432/postgres"
 
-engine = AsyncEngine(create_engine(DATABASE_URL, echo=True, future=True))
+engine = AsyncEngine(create_engine(config.DB_URL, echo=True, future=True))
 
 
 sensors = [
@@ -139,6 +139,56 @@ areas = [
         ],
     }
 ]
+# Sample data
+sensor_data = """
+0;2023.05.30 06:45;4;22,1875;22,1875;22,625;334;202;0;
+1;2023.05.30 07:00;4;22;22,125;22;334;202;0;
+2;2023.05.30 07:15;4;21,125;21,5;21,3125;331;202;0;
+3;2023.05.30 07:30;4;20,625;21;21;329;202;0;
+4;2023.05.30 07:45;4;20,5625;20,8125;20,75;328;202;0;
+5;2023.05.30 08:00;4;20,4375;20,625;20,625;327;202;0;
+6;2023.05.30 08:15;4;20,375;20,5;20,5;327;202;0;
+7;2023.05.30 08:30;4;20,375;20,5;20,5;327;202;0;
+8;2023.05.30 08:45;4;20,375;20,5;20,4375;327;202;0;
+9;2023.05.30 09:00;4;20,375;20,4375;20,375;326;202;0;
+10;2023.05.30 09:15;4;20,375;20,4375;20,375;327;202;0;
+11;2023.05.30 09:30;4;20,375;20,4375;20,375;327;202;0;
+12;2023.05.30 09:45;4;20,375;20,5;20,5;327;202;0;
+13;2023.05.30 10:00;4;20,4375;20,5;20,5;327;202;0;
+"""
+
+
+# Function to convert sample data to SensorData objects
+def convert_sensor_data_to_objects(sample_data: str):
+    sensor_data_objects = []
+    rows = sample_data.strip().split("\n")
+    for row in rows:
+        values = row.split(";")
+        values[1] = datetime.strptime(values[1], "%Y.%m.%d %H:%M")
+        values[3:5] = [
+            float(value.replace(",", ".")) if value and "," in value else None
+            for value in values[3:5]
+        ]
+        for snsr in sensors:
+            sensor_data_objects.append(
+                SensorData(
+                    instrument_seq=int(values[0]),
+                    time=values[1],
+                    time_zone=int(values[2])
+                    if values[2] is not None
+                    else None,
+                    temperature_1=values[3],
+                    temperature_2=values[4],
+                    temperature_3=values[5],
+                    soil_moisture_count=values[6],
+                    shake=int(values[7]) if values[7] is not None else None,
+                    error_flat=int(values[8])
+                    if values[8] is not None
+                    else None,
+                    sensor_id=snsr["id"],
+                )
+            )
+    return sensor_data_objects
 
 
 async def init_db():
@@ -152,23 +202,28 @@ async def init_db():
             engine, class_=AsyncSession, expire_on_commit=False
         )
         async with async_session() as session:
-            for area in areas:
-                record = Area(
-                    id=area["id"],
-                    name=area["name"],
-                    description=area["description"],
-                    geom=Polygon(area["location"]).wkt,
-                )
-                session.add(record)
-            for sensor in sensors:
-                record = Sensor(
-                    id=sensor["id"],
-                    name=sensor["name"],
-                    description=sensor["description"],
-                    geom=Point(sensor["location"]).wkt,
-                    area_id=sensor["area_id"],
-                )
-                session.add(record)
+            # for area in areas:
+            #     record = Area(
+            #         id=area["id"],
+            #         name=area["name"],
+            #         description=area["description"],
+            #         geom=Polygon(area["location"]).wkt,
+            #     )
+            #     session.add(record)
+            # for sensor in sensors:
+            #     record = Sensor(
+            #         id=sensor["id"],
+            #         name=sensor["name"],
+            #         description=sensor["description"],
+            #         geom=Point(sensor["location"]).wkt,
+            #         area_id=sensor["area_id"],
+            #     )
+            #     session.add(record)
+
+            sensor_data_objects = convert_sensor_data_to_objects(sensor_data)
+            for obj in sensor_data_objects:
+                session.add(obj)
+
             await session.commit()
 
     async with engine.begin() as conn:

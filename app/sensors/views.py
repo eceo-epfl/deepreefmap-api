@@ -1,7 +1,12 @@
 from fastapi import Depends, FastAPI, APIRouter, Query, Response
 from sqlmodel import select, Session
 from app.db import get_session, AsyncSession
-from app.sensors.models import Sensor, SensorCreate, SensorRead
+from app.sensors.models import (
+    Sensor,
+    SensorCreate,
+    SensorRead,
+    SensorReadWithData,
+)
 from app.areas.models import AreaRead
 from uuid import UUID, uuid4
 from sqlalchemy import func
@@ -10,7 +15,7 @@ import json
 router = APIRouter()
 
 
-@router.get("/{sensor_id}", response_model=SensorRead)
+@router.get("/{sensor_id}", response_model=SensorReadWithData)
 async def get_sensor(
     session: AsyncSession = Depends(get_session),
     *,
@@ -64,7 +69,6 @@ async def get_sensors(
                 query = query.where(getattr(Sensor, field) == value)
             else:
                 query = query.where(getattr(Sensor, field).like(f"%{value}%"))
-            print("SENSORFILTER", field, value)
 
     # Execute query
     results = await session.execute(query)

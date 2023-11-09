@@ -20,12 +20,6 @@ async def get_area(
     area = res.scalars().one_or_none()
 
     return area
-    return AreaRead(
-        id=area.id,
-        name=area.name,
-        description=area.description,
-        geom=area.geom,
-    )
 
 
 @router.get("", response_model=list[AreaRead])
@@ -37,7 +31,6 @@ async def get_areas(
     session: AsyncSession = Depends(get_session),
 ):
     """Get all areas"""
-    print("SORTKEYS-AREAS", sort, range, filter)
 
     sort = json.loads(sort) if sort else []
     range = json.loads(range) if range else []

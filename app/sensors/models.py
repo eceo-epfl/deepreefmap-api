@@ -42,10 +42,48 @@ class Sensor(SensorBase, table=True):
     )
 
 
-class SensorData(SQLModel, table=True):
+class SensorDataBase(SQLModel):
+    instrument_seq: int = Field(  # The iterator integer in the instrument
+        index=True,
+        nullable=False,
+    )
+    time: datetime.datetime = Field(
+        index=True,
+        nullable=False,
+    )
+    time_zone: int | None = Field(
+        index=False,
+        nullable=True,
+    )
+    temperature_1: float | None = Field(
+        index=True,
+        nullable=True,
+    )
+    temperature_2: float | None = Field(
+        index=True,
+        nullable=True,
+    )
+    temperature_3: float | None = Field(
+        index=True,
+        nullable=True,
+    )
+    soil_moisture_count: float | None = Field(
+        index=True,
+        nullable=True,
+    )
+    shake: int | None = Field(
+        index=False,
+        nullable=True,
+    )
+    error_flat: int | None = Field(
+        index=False,
+        nullable=True,
+    )
+
+
+class SensorData(SensorDataBase, table=True):
     __table_args__ = (UniqueConstraint("id"),)
     iterator: int = Field(
-        default=None,
         nullable=False,
         primary_key=True,
         index=True,
@@ -55,32 +93,10 @@ class SensorData(SQLModel, table=True):
         index=True,
         nullable=False,
     )
-    time: datetime.datetime = Field(
-        index=True,
-        nullable=False,
-    )
-    instrument_seq: int = Field(  # The iterator integer in the instrument
-        index=True,
-        nullable=False,
-    )
 
-    temperature_1: float = Field(
-        index=True,
-        nullable=True,
+    sensor_id: UUID = Field(
+        default=None, foreign_key="sensor.id", nullable=False, index=True
     )
-    temperature_2: float = Field(
-        index=True,
-        nullable=True,
-    )
-    temperature_3: float = Field(
-        index=True,
-        nullable=True,
-    )
-    humidity: float = Field(
-        index=True,
-        nullable=True,
-    )
-    sensor_id: UUID = Field(default=None, foreign_key="sensor.id")
 
     sensor: Sensor = Relationship(
         back_populates="data",
@@ -88,11 +104,15 @@ class SensorData(SQLModel, table=True):
     )
 
 
+class SensorDataRead(SensorDataBase):
+    id: UUID
+    sensor_id: UUID
+
+
 class SensorRead(SensorBase):
     id: UUID
     geom: Any
     area_id: UUID
-    data: list[SensorData]
 
     @validator("geom")
     def convert_wkb_to_json(cls, v: WKBElement) -> Any:
@@ -101,6 +121,10 @@ class SensorRead(SensorBase):
             return shapely.geometry.mapping(shapely.wkb.loads(str(v)))
         else:
             return v
+
+
+class SensorReadWithData(SensorRead):
+    data: list[SensorDataRead] | None
 
 
 class SensorCreate(SensorBase):
