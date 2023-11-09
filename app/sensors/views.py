@@ -33,9 +33,9 @@ async def get_sensors(
     response: Response,
     session: AsyncSession = Depends(get_session),
     *,
-    filter: str = Query(),
-    sort: str = Query(),
-    range: str = Query(),
+    filter: str = Query(None),
+    sort: str = Query(None),
+    range: str = Query(None),
 ):
     """Get all areas"""
     sort = json.loads(sort) if sort else []

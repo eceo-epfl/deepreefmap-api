@@ -25,9 +25,9 @@ async def get_area(
 @router.get("", response_model=list[AreaRead])
 async def get_areas(
     response: Response,
-    filter: str = Query(),
-    sort: str = Query(),
-    range: str = Query(),
+    filter: str = Query(None),
+    sort: str = Query(None),
+    range: str = Query(None),
     session: AsyncSession = Depends(get_session),
 ):
     """Get all areas"""
