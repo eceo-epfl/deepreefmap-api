@@ -1,3 +1,3 @@
 # Run migrations
 poetry run alembic upgrade head
-uvicorn --host=0.0.0.0 --timeout-keep-alive=0 app.main:app
+uvicorn --host=0.0.0.0 --timeout-keep-alive=0 app.main:app --reload

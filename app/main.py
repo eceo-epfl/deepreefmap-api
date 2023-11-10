@@ -4,18 +4,11 @@ from fastapi import FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import config
 from app.areas.models import Area
-from app.db import init_db
 from app.areas.views import router as areas_router
 from app.sensors.views import router as sensors_router
 from pydantic import BaseModel
 
 app = FastAPI()
-
-
-@app.on_event("startup")
-async def on_startup():
-    await init_db()
-
 
 origins = ["*"]
 
