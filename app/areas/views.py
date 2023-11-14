@@ -39,8 +39,20 @@ async def get_areas(
     query = select(Area)
 
     # Do a query to satisfy total count for "Content-Range" header
-    count_query = await session.execute(select(func.count(Area.iterator)))
-    total_count = count_query.scalar_one()
+    count_query = select(func.count(Area.iterator))
+    if len(filter):  # Have to filter twice for some reason? SQLModel state?
+        for field, value in filter.items():
+            for qry in [query, count_query]:  # Apply filter to both queries
+                if isinstance(value, list):
+                    qry = qry.where(getattr(Area, field).in_(value))
+                elif field == "id" or field == "area_id":
+                    qry = qry.where(getattr(Area, field) == value)
+                else:
+                    qry = qry.where(getattr(Area, field).like(f"%{value}%"))
+
+    # Execute total count query (including filter)
+    total_count_query = await session.execute(count_query)
+    total_count = total_count_query.scalar_one()
 
     # Order by sort field params ie. ["name","ASC"]
     if len(sort) == 2:
@@ -49,12 +61,6 @@ async def get_areas(
             query = query.order_by(getattr(Area, sort_field))
         else:
             query = query.order_by(getattr(Area, sort_field).desc())
-
-    if len(range) == 2:
-        start, end = range
-        query = query.offset(start).limit(end - start + 1)
-    else:
-        start, end = [0, total_count]  # For content-range header
 
     # Filter by filter field params ie. {"name":"bar"}
     if len(filter):
@@ -65,6 +71,12 @@ async def get_areas(
                 query = query.where(getattr(Area, field) == value)
             else:
                 query = query.where(getattr(Area, field).like(f"%{value}%"))
+
+    if len(range) == 2:
+        start, end = range
+        query = query.offset(start).limit(end - start + 1)
+    else:
+        start, end = [0, total_count]  # For content-range header
 
     # Execute query
     results = await session.execute(query)

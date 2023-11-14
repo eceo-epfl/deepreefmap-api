@@ -41,8 +41,19 @@ async def get_sensors(
     filter = json.loads(filter) if filter else {}
 
     # Do a query to satisfy total count for "Content-Range" header
-    count_query = await session.execute(select(func.count(Sensor.iterator)))
-    total_count = count_query.scalar_one()
+    count_query = select(func.count(Sensor.iterator))
+    if len(filter):  # Have to filter twice for some reason? SQLModel state?
+        for field, value in filter.items():
+            if field == "id" or field == "area_id":
+                count_query = count_query.filter(
+                    getattr(Sensor, field) == value
+                )
+            else:
+                count_query = count_query.filter(
+                    getattr(Sensor, field).like(f"%{str(value)}%")
+                )
+    total_count = await session.execute(count_query)
+    total_count = total_count.scalar_one()
 
     query = select(Sensor)
 
@@ -54,19 +65,21 @@ async def get_sensors(
         else:
             query = query.order_by(getattr(Sensor, sort_field).desc())
 
+    # Filter by filter field params ie. {"name":"bar"}
+    if len(filter):
+        for field, value in filter.items():
+            if field == "id" or field == "area_id":
+                query = query.filter(getattr(Sensor, field) == value)
+            else:
+                query = query.filter(
+                    getattr(Sensor, field).like(f"%{str(value)}%")
+                )
+
     if len(range) == 2:
         start, end = range
         query = query.offset(start).limit(end - start + 1)
     else:
         start, end = [0, total_count]  # For content-range header
-
-    # Filter by filter field params ie. {"name":"bar"}
-    if len(filter):
-        for field, value in filter.items():
-            if field == "id" or field == "area_id":
-                query = query.where(getattr(Sensor, field) == value)
-            else:
-                query = query.where(getattr(Sensor, field).like(f"%{value}%"))
 
     # Execute query
     results = await session.execute(query)
