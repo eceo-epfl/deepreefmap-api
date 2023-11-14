@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 import datetime
 
 if TYPE_CHECKING:
-    from app.areas.models import AreaRead
     from app.areas.models import Area
 
 

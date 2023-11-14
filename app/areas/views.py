@@ -1,8 +1,8 @@
-from fastapi import Depends, FastAPI, APIRouter, Query, Response
-from sqlmodel import select, Session
+from fastapi import Depends, APIRouter, Query, Response, Body
+from sqlmodel import select
 from app.db import get_session, AsyncSession
-from app.areas.models import Area, AreaCreate, AreaRead
-from uuid import UUID, uuid4
+from app.areas.models import Area, AreaCreate, AreaRead, AreaUpdate
+from uuid import UUID
 from sqlalchemy import func
 import json
 
@@ -75,66 +75,52 @@ async def get_areas(
     return areas
 
 
-@router.post("/", response_model=AreaRead)
+@router.post("", response_model=AreaRead)
 async def create_area(
-    area: AreaCreate,
+    area: AreaCreate = Body(...),
     session: AsyncSession = Depends(get_session),
 ) -> AreaRead:
     """Creates an area"""
-
-    area = Area(name=area.name, description=area.description)
+    print(area)
+    area = Area.from_orm(area)
     session.add(area)
     await session.commit()
     await session.refresh(area)
 
-    return AreaRead(
-        name=area.name,
-        description=area.description,
-        id=area.id,
-    )
+    return area
 
 
 @router.put("/{area_id}", response_model=AreaRead)
 async def update_area(
     area_id: UUID,
+    area_update: AreaUpdate,
     session: AsyncSession = Depends(get_session),
 ) -> AreaRead:
     res = await session.execute(select(Area).where(Area.id == area_id))
     area = res.one()
 
-    # Update area
-    area.name = area.name
-    area.description = area.description
+    # Update the fields from the request
+    for field, value in area.items():
+        if field in area_update.json:
+            setattr(area, field, area_update.json[field])
 
     await session.add(area)
     await session.commit()
     await session.refresh(area)
 
-    return AreaRead(
-        name=area.name,
-        description=area.description,
-        id=area.id,
-    )
+    return area
 
 
-@router.put("/", response_model=list[AreaRead])
-async def update_areas(
-    session: AsyncSession = Depends(get_session),
-    filter: dict[str, str] | None = None,
-) -> list[AreaRead]:
-    pass
-
-
-@router.delete("/")
-async def delete_areas(
-    session: AsyncSession = Depends(get_session),
-) -> None:
-    pass
-
-
-@router.delete("/{area_id}", response_model=AreaRead)
+@router.delete("/{area_id}")
 async def delete_area(
+    area_id: UUID,
     session: AsyncSession = Depends(get_session),
     filter: dict[str, str] | None = None,
 ) -> None:
-    pass
+    """Delete an area by id"""
+    res = await session.execute(select(Area).where(Area.id == area_id))
+    area = res.scalars().one_or_none()
+
+    if area:
+        await session.delete(area)
+        await session.commit()

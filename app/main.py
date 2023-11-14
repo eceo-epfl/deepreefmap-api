@@ -1,9 +1,6 @@
-from typing import Union
-
 from fastapi import FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import config
-from app.areas.models import Area
 from app.areas.views import router as areas_router
 from app.sensors.views import router as sensors_router
 from pydantic import BaseModel

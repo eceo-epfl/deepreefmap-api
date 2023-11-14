@@ -1,14 +1,12 @@
-from fastapi import Depends, FastAPI, APIRouter, Query, Response
-from sqlmodel import select, Session
+from fastapi import Depends, APIRouter, Query, Response
+from sqlmodel import select
 from app.db import get_session, AsyncSession
 from app.sensors.models import (
     Sensor,
-    SensorCreate,
     SensorRead,
     SensorReadWithData,
 )
-from app.areas.models import AreaRead
-from uuid import UUID, uuid4
+from uuid import UUID
 from sqlalchemy import func
 import json
 
