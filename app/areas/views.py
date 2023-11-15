@@ -1,4 +1,4 @@
-from fastapi import Depends, APIRouter, Query, Response, Body
+from fastapi import Depends, APIRouter, Query, Response, Body, HTTPException
 from sqlmodel import select
 from app.db import get_session, AsyncSession
 from app.areas.models import Area, AreaCreate, AreaRead, AreaUpdate
@@ -109,18 +109,22 @@ async def update_area(
     session: AsyncSession = Depends(get_session),
 ) -> AreaRead:
     res = await session.execute(select(Area).where(Area.id == area_id))
-    area = res.one()
+    area_db = res.scalars().one()
+    area_data = area_update.dict(exclude_unset=True)
+
+    if not area_db:
+        raise HTTPException(status_code=404, detail="Area not found")
 
     # Update the fields from the request
-    for field, value in area.items():
-        if field in area_update.json:
-            setattr(area, field, area_update.json[field])
+    for field, value in area_data.items():
+        print(f"Updating: {field}, {value}")
+        setattr(area_db, field, value)
 
-    await session.add(area)
+    session.add(area_db)
     await session.commit()
-    await session.refresh(area)
+    await session.refresh(area_db)
 
-    return area
+    return area_db
 
 
 @router.delete("/{area_id}")
