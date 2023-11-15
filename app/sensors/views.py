@@ -1,14 +1,17 @@
-from fastapi import Depends, APIRouter, Query, Response
+from fastapi import Depends, APIRouter, Query, Response, HTTPException, Body
 from sqlmodel import select
 from app.db import get_session, AsyncSession
 from app.sensors.models import (
     Sensor,
     SensorRead,
     SensorReadWithData,
+    SensorUpdate,
+    SensorCreate,
 )
 from uuid import UUID
 from sqlalchemy import func
 import json
+import base64
 
 router = APIRouter()
 
@@ -19,7 +22,7 @@ async def get_sensor(
     *,
     sensor_id: UUID,
 ) -> SensorRead:
-    """Get an area by id"""
+    """Get an sensor by id"""
     res = await session.execute(select(Sensor).where(Sensor.id == sensor_id))
     sensor = res.scalars().one_or_none()
 
@@ -35,7 +38,7 @@ async def get_sensors(
     sort: str = Query(None),
     range: str = Query(None),
 ):
-    """Get all areas"""
+    """Get all sensors"""
     sort = json.loads(sort) if sort else []
     range = json.loads(range) if range else []
     filter = json.loads(filter) if filter else {}
@@ -88,3 +91,89 @@ async def get_sensors(
     response.headers["Content-Range"] = f"sensors {start}-{end}/{total_count}"
 
     return sensors
+
+
+@router.post("", response_model=SensorRead)
+async def create_sensor(
+    sensor: SensorCreate = Body(...),
+    session: AsyncSession = Depends(get_session),
+) -> SensorRead:
+    """Creates an sensor"""
+    print(sensor)
+    sensor = Sensor.from_orm(sensor)
+    session.add(sensor)
+    await session.commit()
+    await session.refresh(sensor)
+
+    return sensor
+
+
+def decode_base64_to_csv(value: str) -> bytes:
+    """Decode base64 string to csv bytes"""
+    # Split the string using the comma as a delimiter
+    data_parts = value.split(",")
+
+    # Extract the data type and base64-encoded content
+    if "text/csv" not in data_parts[0]:
+        raise HTTPException(
+            status_code=400,
+            detail="Data type not supported, must be text/csv",
+        )
+    base64_content = data_parts[1]
+    rawdata = base64.b64decode(base64_content)
+    import csv
+
+    # Treat the rawdata as a CSV file, read in the rows
+    decoded = []
+    for row in csv.reader(rawdata.decode("utf-8").splitlines()):
+        decoded.append(row)
+
+    return decoded
+
+
+@router.put("/{sensor_id}", response_model=SensorRead)
+async def update_sensor(
+    sensor_id: UUID,
+    sensor_update: SensorUpdate,
+    session: AsyncSession = Depends(get_session),
+) -> SensorRead:
+    res = await session.execute(select(Sensor).where(Sensor.id == sensor_id))
+    sensor_db = res.scalars().one()
+    sensor_data = sensor_update.dict(exclude_unset=True)
+    if not sensor_db:
+        raise HTTPException(status_code=404, detail="Sensor not found")
+
+    # Update the fields from the request
+    for field, value in sensor_data.items():
+        if field in ["latitude", "longitude"]:
+            # Don't process lat/lon, it's converted to geom in model validator
+            continue
+        if field == "instrumentdata":
+            # Convert base64 to bytes, input should be csv, read and add rows
+            # to sensor_data table with sensor_id
+            rows = decode_base64_to_csv(value)
+            print(rows)
+
+        print(f"Updating: {field}, {value}")
+        setattr(sensor_db, field, value)
+
+    session.add(sensor_db)
+    await session.commit()
+    await session.refresh(sensor_db)
+
+    return sensor_db
+
+
+@router.delete("/{sensor_id}")
+async def delete_sensor(
+    sensor_id: UUID,
+    session: AsyncSession = Depends(get_session),
+    filter: dict[str, str] | None = None,
+) -> None:
+    """Delete an sensor by id"""
+    res = await session.execute(select(Sensor).where(Sensor.id == sensor_id))
+    sensor = res.scalars().one_or_none()
+
+    if sensor:
+        await session.delete(sensor)
+        await session.commit()

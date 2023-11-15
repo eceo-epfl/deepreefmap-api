@@ -2,7 +2,7 @@ from sqlmodel import SQLModel, Field, Column, Relationship, UniqueConstraint
 from geoalchemy2 import Geometry, WKBElement
 from uuid import uuid4, UUID
 from typing import Any
-from pydantic import validator
+from pydantic import validator, root_validator
 import shapely
 from typing import TYPE_CHECKING
 import datetime
@@ -112,14 +112,27 @@ class SensorRead(SensorBase):
     id: UUID
     geom: Any
     area_id: UUID
+    latitude: Any | None = None
+    longitude: Any | None = None
 
-    @validator("geom")
-    def convert_wkb_to_json(cls, v: WKBElement) -> Any:
-        """Convert the WKBElement to a shapely mapping"""
-        if isinstance(v, WKBElement):
-            return shapely.geometry.mapping(shapely.wkb.loads(str(v)))
+    @root_validator
+    def convert_wkb_to_lat_lon(cls, values: dict) -> dict:
+        """Form the geometry from the latitude and longitude"""
+        if isinstance(values["geom"], WKBElement):
+            if values["geom"] is not None:
+                shapely_obj = shapely.wkb.loads(str(values["geom"]))
+                if shapely_obj is not None:
+                    mapping = shapely.geometry.mapping(shapely_obj)
+
+                    values["latitude"] = mapping["coordinates"][0]
+                    values["longitude"] = mapping["coordinates"][1]
+                    values["geom"] = mapping
+
         else:
-            return v
+            values["latitude"] = None
+            values["longitude"] = None
+
+        return values
 
 
 class SensorReadWithData(SensorRead):
@@ -127,4 +140,23 @@ class SensorReadWithData(SensorRead):
 
 
 class SensorCreate(SensorBase):
-    pass
+    area_id: UUID
+    latitude: float
+    longitude: float
+
+    geom: Any | None = None
+
+    @root_validator(pre=True)
+    def convert_lat_lon_to_wkt(cls, values: dict) -> dict:
+        """Form the geometry from the latitude and longitude"""
+
+        if "latitude" in values and "longitude" in values:
+            values[
+                "geom"
+            ] = f"POINT({values['latitude']} {values['longitude']})"
+
+        return values
+
+
+class SensorUpdate(SensorCreate):
+    instrumentdata: str
