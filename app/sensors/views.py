@@ -1,21 +1,26 @@
 from fastapi import Depends, APIRouter, Query, Response, HTTPException, Body
 from sqlmodel import select
 from app.db import get_session, AsyncSession
+from app.utils import decode_base64
 from app.sensors.models import (
     Sensor,
     SensorRead,
-    SensorReadWithData,
     SensorUpdate,
     SensorCreate,
+    SensorCreateFromGPX,
     SensorReadWithDataSummary,
+    SensorReadWithDataSummaryAndPlot,
     SensorDataSummary,
     SensorData,
     SensorDataRead,
 )
 from uuid import UUID
 from sqlalchemy import func
+from datetime import timezone
 import json
-import base64
+import gpxpy
+import gpxpy.gpx
+import csv
 
 router = APIRouter()
 
@@ -169,17 +174,50 @@ async def delete_sensordata(
 ## Sensor
 
 
-@router.get("/{sensor_id}", response_model=SensorReadWithData)
+@router.get("/{sensor_id}", response_model=SensorReadWithDataSummaryAndPlot)
 async def get_sensor(
     session: AsyncSession = Depends(get_session),
     *,
     sensor_id: UUID,
 ) -> SensorRead:
     """Get an sensor by id"""
-    res = await session.execute(select(Sensor).where(Sensor.id == sensor_id))
-    sensor = res.scalars().one_or_none()
 
-    return sensor
+    query = (
+        select(
+            Sensor,
+            func.count(SensorData.id).label("qty_records"),
+            func.min(SensorData.time).label("start_date"),
+            func.max(SensorData.time).label("end_date"),
+        )
+        .where(Sensor.id == sensor_id)
+        .outerjoin(SensorData, Sensor.id == SensorData.sensor_id)
+        .group_by(
+            Sensor.id,
+            Sensor.geom,
+            Sensor.name,
+            Sensor.description,
+            Sensor.iterator,
+        )
+    )
+    res = await session.execute(query)
+    sensor = res.one_or_none()
+    sensor_dict = sensor[0].dict() if sensor else {}
+
+    # Do a query on the sensor data, at the moment this is raw, but should
+    # probably be aggregated by day
+    query = select(SensorData).where(SensorData.sensor_id == sensor_id)
+    res = await session.execute(query)
+    sensor_data = res.scalars().all()
+
+    return SensorReadWithDataSummaryAndPlot(
+        **sensor_dict,
+        data=SensorDataSummary(
+            qty_records=sensor[1] if sensor else None,
+            start_date=sensor[2] if sensor else None,
+            end_date=sensor[3] if sensor else None,
+        ),
+        temperature_plot=sensor_data,
+    )
 
 
 @router.get("", response_model=list[SensorReadWithDataSummary])
@@ -220,7 +258,7 @@ async def get_sensors(
             func.min(SensorData.time).label("start_date"),
             func.max(SensorData.time).label("end_date"),
         )
-        .join(SensorData, Sensor.id == SensorData.sensor_id)
+        .outerjoin(SensorData, Sensor.id == SensorData.sensor_id)
         .group_by(
             Sensor.id,
             Sensor.geom,
@@ -279,41 +317,39 @@ async def get_sensors(
 
 
 @router.post("", response_model=SensorRead)
-async def create_sensor(
-    sensor: SensorCreate = Body(...),
+async def create_sensor_from_gpx(
+    sensor: SensorCreateFromGPX = Body(...),
     session: AsyncSession = Depends(get_session),
-) -> SensorRead:
-    """Creates an sensor"""
-    print(sensor)
-    sensor = Sensor.from_orm(sensor)
-    session.add(sensor)
-    await session.commit()
-    await session.refresh(sensor)
+) -> None:
+    """Creates a sensor from one or many GPX files"""
 
-    return sensor
+    for gpx_file in sensor.gpsx_files:
+        # Read GPX file
+        rawdata, dtype = decode_base64(gpx_file["src"])
+        if dtype != "gpx":
+            raise HTTPException(
+                status_code=400,
+                detail="Only GPX files are supported",
+            )
+        gpxdata = gpxpy.parse(rawdata)
 
+        for waypoint in gpxdata.waypoints:
+            # Use Sensorcreate to facilitate the lat/long to geom conversion
+            obj = SensorCreate(
+                name=waypoint.name,
+                description=waypoint.description,
+                comment=waypoint.comment,
+                elevation=waypoint.elevation,
+                latitude=waypoint.latitude,
+                longitude=waypoint.longitude,
+                time_recorded_at_utc=waypoint.time.replace(tzinfo=None),
+                area_id=sensor.area_id,
+            )
 
-def decode_base64_to_csv(value: str) -> bytes:
-    """Decode base64 string to csv bytes"""
-    # Split the string using the comma as a delimiter
-    data_parts = value.split(",")
+            session.add(Sensor.from_orm(obj))
+        await session.commit()
 
-    # Extract the data type and base64-encoded content
-    if "text/csv" not in data_parts[0]:
-        raise HTTPException(
-            status_code=400,
-            detail="Data type not supported, must be text/csv",
-        )
-    base64_content = data_parts[1]
-    rawdata = base64.b64decode(base64_content)
-    import csv
-
-    # Treat the rawdata as a CSV file, read in the rows
-    decoded = []
-    for row in csv.reader(rawdata.decode("utf-8").splitlines()):
-        decoded.append(row)
-
-    return decoded
+    return Sensor.from_orm(obj)  # Just return one as react-admin expects one
 
 
 @router.put("/{sensor_id}", response_model=SensorRead)
@@ -336,7 +372,18 @@ async def update_sensor(
         if field == "instrumentdata":
             # Convert base64 to bytes, input should be csv, read and add rows
             # to sensor_data table with sensor_id
-            rows = decode_base64_to_csv(value)
+            rawdata, dtype = decode_base64(value)
+
+            if dtype != "csv":
+                raise HTTPException(
+                    status_code=400,
+                    detail="Only CSV files are supported",
+                )
+            # Treat the rawdata as a CSV file, read in the rows
+            decoded = []
+            for row in csv.reader(rawdata.decode("utf-8").splitlines()):
+                decoded.append(row)
+
             print(rows)
 
         print(f"Updating: {field}, {value}")

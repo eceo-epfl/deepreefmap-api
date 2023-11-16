@@ -13,7 +13,14 @@ if TYPE_CHECKING:
 
 class SensorBase(SQLModel):
     name: str = Field(default=None, index=True)
-    description: str
+    description: str | None = Field(default=None)
+    comment: str | None = Field(default=None)
+    elevation: float | None = Field(default=None)
+    time_recorded_at_utc: datetime.datetime = Field(
+        default=None,
+        nullable=True,
+        index=True,
+    )
 
 
 class Sensor(SensorBase, table=True):
@@ -28,6 +35,11 @@ class Sensor(SensorBase, table=True):
         default_factory=uuid4,
         index=True,
         nullable=False,
+    )
+    time_ingested_at_utc: datetime.datetime = Field(
+        default_factory=datetime.datetime.now,
+        nullable=False,
+        index=True,
     )
     geom: Any = Field(sa_column=Column(Geometry("POINT", srid=4326)))
 
@@ -112,8 +124,8 @@ class SensorRead(SensorBase):
     id: UUID
     geom: Any
     area_id: UUID
-    latitude: Any | None = None
-    longitude: Any | None = None
+    latitude: Any
+    longitude: Any
 
     @root_validator
     def convert_wkb_to_lat_lon(cls, values: dict) -> dict:
@@ -127,7 +139,11 @@ class SensorRead(SensorBase):
                     values["latitude"] = mapping["coordinates"][0]
                     values["longitude"] = mapping["coordinates"][1]
                     values["geom"] = mapping
-
+        elif isinstance(values["geom"], dict):
+            if values["geom"] is not None:
+                values["latitude"] = values["geom"]["coordinates"][0]
+                values["longitude"] = values["geom"]["coordinates"][1]
+                values["geom"] = values["geom"]
         else:
             values["latitude"] = None
             values["longitude"] = None
@@ -145,8 +161,9 @@ class SensorReadWithDataSummary(SensorRead):
     data: SensorDataSummary
 
 
-class SensorReadWithData(SensorRead):
-    data: list[SensorDataRead] | None
+class SensorReadWithDataSummaryAndPlot(SensorRead):
+    data: SensorDataSummary | None
+    temperature_plot: list[SensorDataRead] | None = None
 
 
 class SensorCreate(SensorBase):
@@ -169,4 +186,10 @@ class SensorCreate(SensorBase):
 
 
 class SensorUpdate(SensorCreate):
-    instrumentdata: str
+    instrumentdata: str | None = None
+
+
+class SensorCreateFromGPX(SQLModel):
+    # Model to accept the data from the GPSX file. Data stored in Base64 of gpx
+    area_id: UUID
+    gpsx_files: list[Any] | None = None
