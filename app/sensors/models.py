@@ -135,6 +135,16 @@ class SensorRead(SensorBase):
         return values
 
 
+class SensorDataSummary(SQLModel):
+    start_date: datetime.datetime | None = None
+    end_date: datetime.datetime | None = None
+    qty_records: int | None = None
+
+
+class SensorReadWithDataSummary(SensorRead):
+    data: SensorDataSummary
+
+
 class SensorReadWithData(SensorRead):
     data: list[SensorDataRead] | None
 
