@@ -1,5 +1,5 @@
-# SOIL API
-The backend API for the SOIL lab
+# RIVER API
+The backend API for the RIVER lab
 
 ### Seed the database with some data
 
@@ -10,7 +10,7 @@ Assuming the credentials for the database are `postgres:psql@localhost:5433/post
 ### Run the server
 Build the docker image:
 
-`docker build -t soil-api .`
+`docker build -t river-api .`
 
 Run a PostGIS server, then run the docker image:
 ```
@@ -21,7 +21,7 @@ docker run \
     -e DB_PASSWORD=<postgis password>
     -e DB_NAME=<postgis dbname>
     -e DB_PREFIX=postgresql+asyncpg
-    docker.io/library/soil-api:latest
+    docker.io/library/river-api:latest
 ```
 
-The [sensormap-ui repository](https://github.com/LabSOIL/sensormap-ui) has a development docker-compose.yaml file to load the API, BFF, PostGIS and UI all together, assuming all repositories are cloned locally.
+The [astroriver-ui repository](https://github.com/LabRIVER/astroriver-ui) has a development docker-compose.yaml file to load the API, BFF, PostGIS and UI all together, assuming all repositories are cloned locally.

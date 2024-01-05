@@ -172,7 +172,7 @@ def convert_sensor_data_to_objects(sample_data: str):
                     temperature_1=values[3],
                     temperature_2=values[4],
                     temperature_3=values[5],
-                    soil_moisture_count=values[6],
+                    river_moisture_count=values[6],
                     shake=int(values[7]) if values[7] is not None else None,
                     error_flat=int(values[8])
                     if values[8] is not None

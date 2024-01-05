@@ -78,7 +78,7 @@ class SensorDataBase(SQLModel):
         index=True,
         nullable=True,
     )
-    soil_moisture_count: float | None = Field(
+    river_moisture_count: float | None = Field(
         index=True,
         nullable=True,
     )

@@ -1,7 +1,7 @@
 [tool.poetry]
-name = "soil-api"
+name = "river-api"
 version = "0.1.0"
-description = "API to manage data for SOIL lab"
+description = "API to manage data for RIVER lab"
 authors = ["Evan Thomas <evan.thomas@epfl.ch>"]
 readme = "README.md"
 
