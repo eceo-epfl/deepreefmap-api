@@ -220,7 +220,7 @@ async def get_sensor(
     )
 
 
-@router.get("", response_model=list[SensorReadWithDataSummary])
+@router.get("", response_model=list[SensorRead])
 async def get_sensors(
     response: Response,
     session: AsyncSession = Depends(get_session),
@@ -228,92 +228,232 @@ async def get_sensors(
     filter: str = Query(None),
     sort: str = Query(None),
     range: str = Query(None),
-):
-    """Get all sensors"""
+) -> list[SensorRead]:
+    """Get all sensors (mock data until we define requirements)"""
+
     sort = json.loads(sort) if sort else []
     range = json.loads(range) if range else []
     filter = json.loads(filter) if filter else {}
 
-    # Do a query to satisfy total count for "Content-Range" header
-    count_query = select(func.count(Sensor.iterator))
-    if len(filter):  # Have to filter twice for some reason? SQLModel state?
-        for field, value in filter.items():
-            if field == "id" or field == "area_id":
-                count_query = count_query.filter(
-                    getattr(Sensor, field) == value
-                )
-            else:
-                count_query = count_query.filter(
-                    getattr(Sensor, field).like(f"%{str(value)}%")
-                )
-    total_count = await session.execute(count_query)
-    total_count = total_count.scalar_one()
+    # Make a fake list of 6 x SensorRead with realistic values
+    data = [
+        SensorRead(
+            id=UUID("00000000-0000-0000-0000-000000000000"),
+            geom={
+                "type": "Point",
+                "coordinates": [0.0, 0.0],
+            },
+            name="Sensor 1",
+            description="Rhône River",
+            latitude=0.0,
+            longitude=0.0,
+            battery_voltage=3.65,
+            healthy=True,
+            temperature_1=3.8,
+            temperature_2=4.3,
+            last_data_utc="2024-01-04T08:33:21+00:00",
+        ),
+        SensorRead(
+            id=UUID("00000000-0000-0000-0000-000000000001"),
+            geom={
+                "type": "Point",
+                "coordinates": [0.0, 0.0],
+            },
+            name="Sensor 2",
+            description="Vispa River",
+            latitude=0.0,
+            longitude=0.0,
+            battery_voltage=3.31,
+            healthy=True,
+            temperature_1=3.8,
+            temperature_2=4.3,
+            last_data_utc="2024-01-04T08:33:21+00:00",
+        ),
+        SensorRead(
+            id=UUID("00000000-0000-0000-0000-000000000002"),
+            geom={
+                "type": "Point",
+                "coordinates": [0.0, 0.0],
+            },
+            name="Sensor 3",
+            description="Lonza River",
+            latitude=0.0,
+            longitude=0.0,
+            battery_voltage=3.41,
+            healthy=True,
+            temperature_1=3.8,
+            temperature_2=4.3,
+            last_data_utc="2024-01-04T08:33:21+00:00",
+        ),
+        SensorRead(
+            id=UUID("00000000-0000-0000-0000-000000000003"),
+            geom={
+                "type": "Point",
+                "coordinates": [0.0, 0.0],
+            },
+            name="Sensor 4",
+            description="Saltina River",
+            latitude=0.0,
+            longitude=0.0,
+            battery_voltage=3.33,
+            healthy=False,
+            temperature_1=3.8,
+            temperature_2=4.3,
+            last_data_utc="2024-01-04T08:33:21+00:00",
+        ),
+        SensorRead(
+            id=UUID("00000000-0000-0000-0000-000000000004"),
+            geom={
+                "type": "Point",
+                "coordinates": [0.0, 0.0],
+            },
+            name="Sensor 5",
+            description="Borgne River",
+            latitude=0.0,
+            longitude=0.0,
+            battery_voltage=3.18,
+            healthy=False,
+            temperature_1=3.8,
+            temperature_2=4.3,
+            last_data_utc="2024-01-04T08:33:21+00:00",
+        ),
+        SensorRead(
+            id=UUID("00000000-0000-0000-0000-000000000005"),
+            geom={
+                "type": "Point",
+                "coordinates": [0.0, 0.0],
+            },
+            name="Sensor 6",
+            description="Navisence River",
+            latitude=0.0,
+            longitude=0.0,
+            battery_voltage=3.62,
+            healthy=True,
+            temperature_1=3.8,
+            temperature_2=4.3,
+            last_data_utc="2024-01-04T08:33:21+00:00",
+        ),
+    ]
 
-    # Query for the quantity of records in SensorData that match the sensor as
-    # well as the min and max of the time column
-    query = (
-        select(
-            Sensor,
-            func.count(SensorData.id).label("qty_records"),
-            func.min(SensorData.time).label("start_date"),
-            func.max(SensorData.time).label("end_date"),
-        )
-        .outerjoin(SensorData, Sensor.id == SensorData.sensor_id)
-        .group_by(
-            Sensor.id,
-            Sensor.geom,
-            Sensor.name,
-            Sensor.description,
-            Sensor.iterator,
-        )
-    )
+    total_count = len(data)
 
     # Order by sort field params ie. ["name","ASC"]
     if len(sort) == 2:
         sort_field, sort_order = sort
         if sort_order == "ASC":
-            query = query.order_by(getattr(Sensor, sort_field))
+            data = sorted(data, key=lambda k: getattr(k, sort_field))
         else:
-            query = query.order_by(getattr(Sensor, sort_field).desc())
+            data = sorted(
+                data, key=lambda k: getattr(k, sort_field), reverse=True
+            )
 
     # Filter by filter field params ie. {"name":"bar"}
-    if len(filter):
-        for field, value in filter.items():
-            if field == "id" or field == "area_id":
-                query = query.filter(getattr(Sensor, field) == value)
-            else:
-                query = query.filter(
-                    getattr(Sensor, field).like(f"%{str(value)}%")
-                )
 
     if len(range) == 2:
         start, end = range
-        query = query.offset(start).limit(end - start + 1)
+        data = data[start:end]
     else:
         start, end = [0, total_count]  # For content-range header
 
-    # Execute query
-    results = await session.execute(query)
-    sensors = results.all()
-    # print(sensors)
-
     response.headers["Content-Range"] = f"sensors {start}-{end}/{total_count}"
 
-    # Add the summary information for the data (instead of the full data)
-    sensors_with_data = []
-    for row in sensors:
-        sensors_with_data.append(
-            SensorReadWithDataSummary(
-                **row[0].dict(),
-                data=SensorDataSummary(
-                    qty_records=row[1],
-                    start_date=row[2],
-                    end_date=row[3],
-                ),
-            )
-        )
+    return data
 
-    return sensors_with_data
+
+# @router.get("", response_model=list[SensorReadWithDataSummary])
+# async def get_sensors(
+#     response: Response,
+#     session: AsyncSession = Depends(get_session),
+#     *,
+#     filter: str = Query(None),
+#     sort: str = Query(None),
+#     range: str = Query(None),
+# ):
+#     """Get all sensors"""
+#     sort = json.loads(sort) if sort else []
+#     range = json.loads(range) if range else []
+#     filter = json.loads(filter) if filter else {}
+
+#     # Do a query to satisfy total count for "Content-Range" header
+#     count_query = select(func.count(Sensor.iterator))
+#     if len(filter):  # Have to filter twice for some reason? SQLModel state?
+#         for field, value in filter.items():
+#             if field == "id" or field == "area_id":
+#                 count_query = count_query.filter(
+#                     getattr(Sensor, field) == value
+#                 )
+#             else:
+#                 count_query = count_query.filter(
+#                     getattr(Sensor, field).like(f"%{str(value)}%")
+#                 )
+#     total_count = await session.execute(count_query)
+#     total_count = total_count.scalar_one()
+
+#     # Query for the quantity of records in SensorData that match the sensor as
+#     # well as the min and max of the time column
+#     query = (
+#         select(
+#             Sensor,
+#             func.count(SensorData.id).label("qty_records"),
+#             func.min(SensorData.time).label("start_date"),
+#             func.max(SensorData.time).label("end_date"),
+#         )
+#         .outerjoin(SensorData, Sensor.id == SensorData.sensor_id)
+#         .group_by(
+#             Sensor.id,
+#             Sensor.geom,
+#             Sensor.name,
+#             Sensor.description,
+#             Sensor.iterator,
+#         )
+#     )
+
+#     # Order by sort field params ie. ["name","ASC"]
+#     if len(sort) == 2:
+#         sort_field, sort_order = sort
+#         if sort_order == "ASC":
+#             query = query.order_by(getattr(Sensor, sort_field))
+#         else:
+#             query = query.order_by(getattr(Sensor, sort_field).desc())
+
+#     # Filter by filter field params ie. {"name":"bar"}
+#     if len(filter):
+#         for field, value in filter.items():
+#             if field == "id" or field == "area_id":
+#                 query = query.filter(getattr(Sensor, field) == value)
+#             else:
+#                 query = query.filter(
+#                     getattr(Sensor, field).like(f"%{str(value)}%")
+#                 )
+
+#     if len(range) == 2:
+#         start, end = range
+#         query = query.offset(start).limit(end - start + 1)
+#     else:
+#         start, end = [0, total_count]  # For content-range header
+
+#     # Execute query
+#     results = await session.execute(query)
+#     sensors = results.all()
+#     # print(sensors)
+
+#     response.headers["Content-Range"] = f"sensors {start}-{end}/{total_count}"
+
+#     # Add the summary information for the data (instead of the full data)
+#     sensors_with_data = []
+#     for row in sensors:
+#         sensors_with_data.append(
+#             SensorReadWithDataSummary(
+#                 **row[0].dict(),
+#                 data=SensorDataSummary(
+#                     qty_records=row[1],
+#                     start_date=row[2],
+#                     end_date=row[3],
+#                 ),
+#             )
+#         )
+
+#     return sensors_with_data
 
 
 @router.post("", response_model=SensorRead)

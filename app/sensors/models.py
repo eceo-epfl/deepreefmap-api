@@ -15,8 +15,8 @@ class SensorBase(SQLModel):
     name: str = Field(default=None, index=True)
     description: str | None = Field(default=None)
     comment: str | None = Field(default=None)
-    elevation: float | None = Field(default=None)
-    time_recorded_at_utc: datetime.datetime = Field(
+    # elevation: float | None = Field(default=None)
+    time_added_utc: datetime.datetime = Field(
         default=None,
         nullable=True,
         index=True,
@@ -123,9 +123,14 @@ class SensorDataRead(SensorDataBase):
 class SensorRead(SensorBase):
     id: UUID
     geom: Any
-    area_id: UUID
+    # area_id: UUID
     latitude: Any
     longitude: Any
+    battery_voltage: float | None = Field(default=None)
+    healthy: bool | None = Field(default=None)
+    temperature_1: float | None = Field(default=None)
+    temperature_2: float | None = Field(default=None)
+    last_data_utc: datetime.datetime | None = Field(default=None)
 
     @root_validator
     def convert_wkb_to_lat_lon(cls, values: dict) -> dict:
