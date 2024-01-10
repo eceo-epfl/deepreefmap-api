@@ -8,7 +8,6 @@ from app.config import config as app_config
 from alembic import context
 from sqlmodel import SQLModel
 from geoalchemy2 import alembic_helpers
-from app.areas.models import Area
 from app.submissions.models import Submission
 
 # this is the Alembic Config object, which provides
