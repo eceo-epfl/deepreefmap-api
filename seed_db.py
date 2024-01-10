@@ -3,91 +3,91 @@ from sqlalchemy.orm import sessionmaker
 from shapely.geometry import Polygon, Point
 from datetime import datetime
 from app.areas.models import Area
-from app.sensors.models import Sensor, SensorData
+from app.submissions.models import Submission, SubmissionData
 
 
-sensors = [
+submissions = [
     {
         "id": "d285bc99-e336-4d05-918d-ac162f7bda98",
-        "name": "Sensor 0",
-        "description": "Description for Sensor 0",
+        "name": "Submission 0",
+        "description": "Description for Submission 0",
         "location": [46.38230786578320419, 8.27814012307909941],
         "area_id": "5cfab11a-eed7-4aab-a1d5-7a922bfd760b",
     },
     {
         "id": "660ad4ec-840b-49d4-b600-570b759c3230",
-        "name": "Sensor 1",
-        "description": "Description for Sensor 1",
+        "name": "Submission 1",
+        "description": "Description for Submission 1",
         "location": [46.38186623337439585, 8.27799151928392263],
         "area_id": "5cfab11a-eed7-4aab-a1d5-7a922bfd760b",
     },
     {
         "id": "35ff4ae0-588f-4a7f-a021-29a872946241",
-        "name": "Sensor 2",
-        "description": "Description for Sensor 2",
+        "name": "Submission 2",
+        "description": "Description for Submission 2",
         "location": [46.3814186891362894, 8.27799497732366341],
         "area_id": "5cfab11a-eed7-4aab-a1d5-7a922bfd760b",
     },
     {
         "id": "5de91495-3b7b-4915-b25c-c947ca5aef78",
-        "name": "Sensor 3",
-        "description": "Description for Sensor 3",
+        "name": "Submission 3",
+        "description": "Description for Submission 3",
         "location": [46.38096931499390507, 8.27792233228177921],
         "area_id": "5cfab11a-eed7-4aab-a1d5-7a922bfd760b",
     },
     {
         "id": "b175386b-9676-4545-9889-b74d45b8cf6d",
-        "name": "Sensor 4",
-        "description": "Description for Sensor 4",
+        "name": "Submission 4",
+        "description": "Description for Submission 4",
         "location": [46.38051451536809111, 8.27793605246943365],
         "area_id": "5cfab11a-eed7-4aab-a1d5-7a922bfd760b",
     },
     {
         "id": "1e88dc29-e47b-4ddd-b73a-5ea96f9219ea",
-        "name": "Sensor 5",
-        "description": "Description for Sensor 5",
+        "name": "Submission 5",
+        "description": "Description for Submission 5",
         "location": [46.38006648492084594, 8.27800520319045852],
         "area_id": "5cfab11a-eed7-4aab-a1d5-7a922bfd760b",
     },
     {
         "id": "0e5f7a3d-5ce6-4369-8f80-a139fdcd8452",
-        "name": "Sensor 6",
-        "description": "Description for Sensor 6",
+        "name": "Submission 6",
+        "description": "Description for Submission 6",
         "location": [46.38246671481461902, 8.27737143569202516],
         "area_id": "5cfab11a-eed7-4aab-a1d5-7a922bfd760b",
     },
     {
         "id": "f9146dc3-57ed-4cdf-bfa0-41394f72b5cd",
-        "name": "Sensor 7",
-        "description": "Description for Sensor 7",
+        "name": "Submission 7",
+        "description": "Description for Submission 7",
         "location": [46.38201420584354651, 8.27739902828637142],
         "area_id": "5cfab11a-eed7-4aab-a1d5-7a922bfd760b",
     },
     {
         "id": "f5ab5b6c-2408-4cb5-b707-70639596433b",
-        "name": "Sensor 8",
-        "description": "Description for Sensor 8",
+        "name": "Submission 8",
+        "description": "Description for Submission 8",
         "location": [46.38156470346784488, 8.27734367531285642],
         "area_id": "5cfab11a-eed7-4aab-a1d5-7a922bfd760b",
     },
     {
         "id": "499561d3-b4c4-4081-af75-6880705f6873",
-        "name": "Sensor 9",
-        "description": "Description for Sensor 9",
+        "name": "Submission 9",
+        "description": "Description for Submission 9",
         "location": [46.38111991010548962, 8.27729876981988433],
         "area_id": "5cfab11a-eed7-4aab-a1d5-7a922bfd760b",
     },
     {
         "id": "6ffb2f2e-d273-4bc9-89e2-14869e93f4d3",
-        "name": "Sensor 10",
-        "description": "Description for Sensor 10",
+        "name": "Submission 10",
+        "description": "Description for Submission 10",
         "location": [46.38066971731334576, 8.27733677186708761],
         "area_id": "5cfab11a-eed7-4aab-a1d5-7a922bfd760b",
     },
     {
         "id": "9d4c46d4-d779-4446-88b0-851710d86311",
-        "name": "Sensor 11",
-        "description": "Description for Sensor 11",
+        "name": "Submission 11",
+        "description": "Description for Submission 11",
         "location": [46.38021723391943141, 8.27736090633433008],
         "area_id": "5cfab11a-eed7-4aab-a1d5-7a922bfd760b",
     },
@@ -150,7 +150,7 @@ sensor_data = """
 """
 
 
-# Function to convert sample data to SensorData objects
+# Function to convert sample data to SubmissionData objects
 def convert_sensor_data_to_objects(sample_data: str):
     sensor_data_objects = []
     rows = sample_data.strip().split("\n")
@@ -161,9 +161,9 @@ def convert_sensor_data_to_objects(sample_data: str):
             float(value.replace(",", ".")) if value and "," in value else None
             for value in values[3:5]
         ]
-        for snsr in sensors:
+        for snsr in submissions:
             sensor_data_objects.append(
-                SensorData(
+                SubmissionData(
                     instrument_seq=int(values[0]),
                     time=values[1],
                     time_zone=int(values[2])
@@ -198,8 +198,8 @@ async def seed_db(postgres_url):
                 geom=Polygon(area["location"]).wkt,
             )
             session.add(record)
-        for sensor in sensors:
-            record = Sensor(
+        for sensor in submissions:
+            record = Submission(
                 id=sensor["id"],
                 name=sensor["name"],
                 description=sensor["description"],

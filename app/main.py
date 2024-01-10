@@ -1,8 +1,7 @@
 from fastapi import FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import config
-from app.areas.views import router as areas_router
-from app.sensors.views import router as sensors_router
+from app.deepreef.submissions.views import router as submissions_router
 from pydantic import BaseModel
 
 app = FastAPI()
@@ -34,19 +33,15 @@ class HealthCheck(BaseModel):
 )
 def get_health() -> HealthCheck:
     """
-    Endpoint to perform a healthcheck on for kubenernetes liveness and
+    Endpoint to perform a healthcheck on for kubernetes liveness and
     readiness probes.
     """
     return HealthCheck(status="OK")
 
 
+# Routes for Deep Reef Map
 app.include_router(
-    areas_router,
-    prefix=f"{config.API_V1_PREFIX}/areas",
-    tags=["areas"],
-)
-app.include_router(
-    sensors_router,
-    prefix=f"{config.API_V1_PREFIX}/sensors",
-    tags=["sensors"],
+    submissions_router,
+    prefix=f"{config.API_V1_PREFIX}/deepreef/submissions",
+    tags=["submissions", "DeepReef"],
 )

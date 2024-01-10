@@ -7,15 +7,11 @@ import shapely
 from typing import TYPE_CHECKING
 import datetime
 
-if TYPE_CHECKING:
-    from app.areas.models import Area
 
-
-class SensorBase(SQLModel):
+class SubmissionBase(SQLModel):
     name: str = Field(default=None, index=True)
     description: str | None = Field(default=None)
     comment: str | None = Field(default=None)
-    # elevation: float | None = Field(default=None)
     time_added_utc: datetime.datetime = Field(
         default=None,
         nullable=True,
@@ -23,7 +19,7 @@ class SensorBase(SQLModel):
     )
 
 
-class Sensor(SensorBase, table=True):
+class Submission(SubmissionBase, table=True):
     __table_args__ = (UniqueConstraint("id"),)
     iterator: int = Field(
         default=None,
@@ -45,15 +41,16 @@ class Sensor(SensorBase, table=True):
 
     area_id: UUID = Field(default=None, foreign_key="area.id")
     area: "Area" = Relationship(
-        back_populates="sensors", sa_relationship_kwargs={"lazy": "selectin"}
+        back_populates="submissions",
+        sa_relationship_kwargs={"lazy": "selectin"},
     )
-    data: list["SensorData"] = Relationship(
+    data: list["SubmissionData"] = Relationship(
         back_populates="sensor",
         sa_relationship_kwargs={"lazy": "selectin"},
     )
 
 
-class SensorDataBase(SQLModel):
+class SubmissionDataBase(SQLModel):
     instrument_seq: int = Field(  # The iterator integer in the instrument
         index=True,
         nullable=False,
@@ -92,7 +89,7 @@ class SensorDataBase(SQLModel):
     )
 
 
-class SensorData(SensorDataBase, table=True):
+class SubmissionData(SubmissionDataBase, table=True):
     __table_args__ = (UniqueConstraint("id"),)
     iterator: int = Field(
         nullable=False,
@@ -109,69 +106,29 @@ class SensorData(SensorDataBase, table=True):
         default=None, foreign_key="sensor.id", nullable=False, index=True
     )
 
-    sensor: Sensor = Relationship(
+    sensor: Submission = Relationship(
         back_populates="data",
         sa_relationship_kwargs={"lazy": "selectin"},
     )
 
 
-class SensorDataRead(SensorDataBase):
+class SubmissionDataRead(SubmissionDataBase):
     id: UUID
     sensor_id: UUID
 
 
-class SensorRead(SensorBase):
+class SubmissionRead(SubmissionBase):
     id: UUID
     geom: Any
-    # area_id: UUID
-    latitude: Any
-    longitude: Any
-    battery_voltage: float | None = Field(default=None)
-    healthy: bool | None = Field(default=None)
-    temperature_1: float | None = Field(default=None)
-    temperature_2: float | None = Field(default=None)
-    last_data_utc: datetime.datetime | None = Field(default=None)
-
-    @root_validator
-    def convert_wkb_to_lat_lon(cls, values: dict) -> dict:
-        """Form the geometry from the latitude and longitude"""
-        if isinstance(values["geom"], WKBElement):
-            if values["geom"] is not None:
-                shapely_obj = shapely.wkb.loads(str(values["geom"]))
-                if shapely_obj is not None:
-                    mapping = shapely.geometry.mapping(shapely_obj)
-
-                    values["latitude"] = mapping["coordinates"][0]
-                    values["longitude"] = mapping["coordinates"][1]
-                    values["geom"] = mapping
-        elif isinstance(values["geom"], dict):
-            if values["geom"] is not None:
-                values["latitude"] = values["geom"]["coordinates"][0]
-                values["longitude"] = values["geom"]["coordinates"][1]
-                values["geom"] = values["geom"]
-        else:
-            values["latitude"] = None
-            values["longitude"] = None
-
-        return values
+    data_size_mb: float | None = Field(default=None)
+    processing_finished: bool | None = Field(default=None)
+    processing_successful: bool | None = Field(default=None)
+    duration_seconds: int | None = Field(default=None)
+    submitted_at_utc: datetime.datetime | None = Field(default=None)
+    submitted_by: str | None = Field(default=None)
 
 
-class SensorDataSummary(SQLModel):
-    start_date: datetime.datetime | None = None
-    end_date: datetime.datetime | None = None
-    qty_records: int | None = None
-
-
-class SensorReadWithDataSummary(SensorRead):
-    data: SensorDataSummary
-
-
-class SensorReadWithDataSummaryAndPlot(SensorRead):
-    data: SensorDataSummary | None
-    temperature_plot: list[SensorDataRead] | None = None
-
-
-class SensorCreate(SensorBase):
+class SubmissionCreate(SubmissionBase):
     area_id: UUID
     latitude: float
     longitude: float
@@ -190,11 +147,5 @@ class SensorCreate(SensorBase):
         return values
 
 
-class SensorUpdate(SensorCreate):
+class SubmissionUpdate(SubmissionCreate):
     instrumentdata: str | None = None
-
-
-class SensorCreateFromGPX(SQLModel):
-    # Model to accept the data from the GPSX file. Data stored in Base64 of gpx
-    area_id: UUID
-    gpsx_files: list[Any] | None = None

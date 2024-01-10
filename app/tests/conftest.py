@@ -14,19 +14,6 @@ from sqlmodel.ext.asyncio.session import (
 from sqlalchemy.orm import sessionmaker
 from app.areas.models import Area, AreaCreate, AreaRead
 
-# @pytest.fixture
-# async def test_client() -> TestClient:
-#     """Provide test client to test api calls
-
-#     Build DB and provide test client as fixture
-#     """
-#     await init_db()
-#     yield AsyncClient(app=app, base_url="http://test")
-#     # yield ac
-#     # client = TestClient(app)
-
-#     # yield client
-
 
 DATABASE_URL = "sqlite+aiosqlite:///"
 

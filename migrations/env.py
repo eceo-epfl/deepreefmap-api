@@ -9,7 +9,7 @@ from alembic import context
 from sqlmodel import SQLModel
 from geoalchemy2 import alembic_helpers
 from app.areas.models import Area
-from app.sensors.models import Sensor
+from app.submissions.models import Submission
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
