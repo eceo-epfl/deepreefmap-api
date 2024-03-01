@@ -12,11 +12,61 @@ from uuid import UUID
 from sqlalchemy import func
 from datetime import timezone
 import json
-import gpxpy
-import gpxpy.gpx
 import csv
+from typing import Any
+import boto3
+from app.s3 import get_s3
+from app.config import config
+from fastapi import File, UploadFile
 
 router = APIRouter()
+
+
+@router.get("/s3", response_model=Any)
+async def list_s3_objects(
+    s3: boto3.client = Depends(get_s3),
+    prefix: str = Query(None),
+) -> Any:
+    """List all objects in the S3 bucket"""
+
+    # Always prefix the S3 bucket with the S3_PREFIX plus extra query prefix,
+    # this is typically going to be inputs or outputs
+    prefix = f"{config.S3_PREFIX}/{prefix if prefix else ''}"
+
+    objects = s3.list_objects(
+        Bucket=config.S3_BUCKET_ID,
+        Prefix=prefix if prefix is not None else "",
+    ).get("Contents", None)
+
+    return objects
+
+
+@router.put("/s3", response_model=Any)
+async def upload_output_object(
+    s3: boto3.client = Depends(get_s3),
+    files: list[UploadFile] = File(...),
+    # job_id: UUID = Query(...),
+) -> Any:
+    """Upload a file to the S3 bucket"""
+
+    # Always prefix the S3 bucket with the S3_PREFIX plus extra query prefix,
+    # this is typically going to be input or output for example:
+    # deepreefmap-dev/<job-uuid>/inputs
+    prefix = f"{config.S3_PREFIX}/generic_upload/output"
+
+    for file_obj in files:
+        print(file_obj.filename, file_obj.size)
+        content = await file_obj.read()
+        print(content)
+
+        # Write bytes to S3 bucket
+        response = s3.put_object(
+            Bucket=config.S3_BUCKET_ID,
+            Key=f"{prefix}/{file_obj.filename}",
+            Body=content,
+        )
+
+        print("Response", response)
 
 
 @router.get("/{submission_id}", response_model=SubmissionRead)
@@ -106,121 +156,69 @@ async def get_submissions(
     else:
         start, end = [0, total_count]  # For content-range header
 
-    response.headers[
-        "Content-Range"
-    ] = f"submissions {start}-{end}/{total_count}"
+    response.headers["Content-Range"] = (
+        f"submissions {start}-{end}/{total_count}"
+    )
 
     return data
 
 
-# @router.get("", response_model=list[SubmissionReadWithDataSummary])
-# async def get_submissions(
-#     response: Response,
-#     session: AsyncSession = Depends(get_session),
-#     *,
-#     filter: str = Query(None),
-#     sort: str = Query(None),
-#     range: str = Query(None),
-# ):
-#     """Get all submissions"""
-#     sort = json.loads(sort) if sort else []
-#     range = json.loads(range) if range else []
-#     filter = json.loads(filter) if filter else {}
-
-#     # Do a query to satisfy total count for "Content-Range" header
-#     count_query = select(func.count(Submission.iterator))
-#     if len(filter):  # Have to filter twice for some reason? SQLModel state?
-#         for field, value in filter.items():
-#             if field == "id" or field == "area_id":
-#                 count_query = count_query.filter(
-#                     getattr(Submission, field) == value
-#                 )
-#             else:
-#                 count_query = count_query.filter(
-#                     getattr(Submission, field).like(f"%{str(value)}%")
-#                 )
-#     total_count = await session.execute(count_query)
-#     total_count = total_count.scalar_one()
-
-#     # Query for the quantity of records in SubmissionData that match the submission as
-#     # well as the min and max of the time column
-#     query = (
-#         select(
-#             Submission,
-#             func.count(SubmissionData.id).label("qty_records"),
-#             func.min(SubmissionData.time).label("start_date"),
-#             func.max(SubmissionData.time).label("end_date"),
-#         )
-#         .outerjoin(SubmissionData, Submission.id == SubmissionData.submission_id)
-#         .group_by(
-#             Submission.id,
-#             Submission.geom,
-#             Submission.name,
-#             Submission.description,
-#             Submission.iterator,
-#         )
-#     )
-
-#     # Order by sort field params ie. ["name","ASC"]
-#     if len(sort) == 2:
-#         sort_field, sort_order = sort
-#         if sort_order == "ASC":
-#             query = query.order_by(getattr(Submission, sort_field))
-#         else:
-#             query = query.order_by(getattr(Submission, sort_field).desc())
-
-#     # Filter by filter field params ie. {"name":"bar"}
-#     if len(filter):
-#         for field, value in filter.items():
-#             if field == "id" or field == "area_id":
-#                 query = query.filter(getattr(Submission, field) == value)
-#             else:
-#                 query = query.filter(
-#                     getattr(Submission, field).like(f"%{str(value)}%")
-#                 )
-
-#     if len(range) == 2:
-#         start, end = range
-#         query = query.offset(start).limit(end - start + 1)
-#     else:
-#         start, end = [0, total_count]  # For content-range header
-
-#     # Execute query
-#     results = await session.execute(query)
-#     submissions = results.all()
-#     # print(submissions)
-
-#     response.headers["Content-Range"] = f"submissions {start}-{end}/{total_count}"
-
-#     # Add the summary information for the data (instead of the full data)
-#     submissions_with_data = []
-#     for row in submissions:
-#         submissions_with_data.append(
-#             SubmissionReadWithDataSummary(
-#                 **row[0].dict(),
-#                 data=SubmissionDataSummary(
-#                     qty_records=row[1],
-#                     start_date=row[2],
-#                     end_date=row[3],
-#                 ),
-#             )
-#         )
-
-#     return submissions_with_data
-
-
 @router.post("", response_model=SubmissionRead)
-async def create_submission_from_gpx(
-    payload: SubmissionCreate = Body(...),
+async def create_submission(
+    # payload: SubmissionCreate = Body(...),
+    files: list[UploadFile] = File(...),
     session: AsyncSession = Depends(get_session),
+    s3: boto3.client = Depends(get_s3),
 ) -> None:
-    """Creates a submission from a video file"""
+    """Creates a submission record from one or more video files"""
 
-    submission = Submission.from_orm(payload)
+    if len(files) == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="At least one file must be provided",
+        )
+    # Check that there are distinct filenames in the list of files
+    filenames = [file.filename for file in files]
+    if len(filenames) != len(set(filenames)):
+        raise HTTPException(
+            status_code=400,
+            detail="All files must have distinct filenames",
+        )
+
+    # Create new submission DB object with no fields
+    submission = Submission()
 
     session.add(submission)
     await session.commit()
     await session.refresh(submission)
+
+    # Use the generated DB submission ID to create a prefix for the S3 bucket
+    prefix = f"{config.S3_PREFIX}/{submission.id}/inputs"
+
+    for file_obj in files:
+        content = await file_obj.read()
+
+        # Write bytes to S3 bucket
+        response = s3.put_object(
+            Bucket=config.S3_BUCKET_ID,
+            Key=f"{prefix}/{file_obj.filename}",
+            Body=content,
+        )
+
+        # Validate that response is 200: OK
+        if response["ResponseMetadata"]["HTTPStatusCode"] != 200:
+            # Delete the submission if the S3 upload fails
+            await session.delete(submission)
+            await session.commit()
+            # Delete any S3 objects with the prefix
+            s3.delete_objects(
+                Bucket=config.S3_BUCKET_ID,
+                Delete={"Objects": [{"Key": f"{prefix}/{file_obj.filename}"}]},
+            )
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to upload file to S3",
+            )
 
     return submission
 

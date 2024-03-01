@@ -7,12 +7,10 @@ WORKDIR /app
 
 COPY poetry.lock pyproject.toml /app/
 RUN poetry config virtualenvs.create false
-RUN apk add --no-cache g++ geos-dev
 RUN poetry install --no-interaction --without dev
 
 COPY alembic.ini prestart.sh /app
 COPY migrations /app/migrations
 COPY app /app/app
 
-#ENTRYPOINT uvicorn --host=0.0.0.0 --timeout-keep-alive=0 app.main:app
 ENTRYPOINT sh prestart.sh
