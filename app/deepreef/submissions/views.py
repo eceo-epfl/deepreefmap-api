@@ -96,71 +96,78 @@ async def get_submissions(
     sort: str = Query(None),
     range: str = Query(None),
 ) -> list[SubmissionRead]:
-    """Get all submissions (mock data until we define requirements)"""
+    """Get all submissions"""
 
     sort = json.loads(sort) if sort else []
     range = json.loads(range) if range else []
     filter = json.loads(filter) if filter else {}
 
-    # Make a fake list of 6 x SubmissionRead with realistic values
-    data = [
-        SubmissionRead(
-            id=UUID("00000000-0000-0000-0000-000000000000"),
-            geom={
-                "type": "Point",
-                "coordinates": [0.0, 0.0],
-            },
-            name="Submission 1",
-            description="Rhône River",
-            processing_finished=True,
-            processing_successful=True,
-            data_size_mb=2150.88,
-            duration_seconds=180,
-            submitted_at_utc="2024-01-04T08:33:21+00:00",
-            submitted_by="ejthomas",
-        ),
-        SubmissionRead(
-            id=UUID("00000000-0000-0000-0000-000000000001"),
-            geom={
-                "type": "Point",
-                "coordinates": [0.0, 0.0],
-            },
-            name="Submission 2",
-            description="Vispa River",
-            processing_finished=True,
-            processing_successful=False,
-            data_size_mb=3800.40,
-            duration_seconds=308,
-            submitted_at_utc="2024-01-06T16:12:09+00:00",
-            submitted_by="ejthomas",
-        ),
-    ]
+    # Do a query to satisfy total count for "Content-Range" header
+    count_query = select(func.count(Submission.iterator))
+    if len(filter):  # Have to filter twice for some reason? SQLModel state?
+        for field, value in filter.items():
+            if field == "id" or field == "station_id" or field == "sensor_id":
+                if isinstance(value, list):
+                    for v in value:
+                        count_query = count_query.filter(
+                            getattr(Submission, field) == v
+                        )
+                else:
+                    count_query = count_query.filter(
+                        getattr(Submission, field) == value
+                    )
+            else:
+                count_query = count_query.filter(
+                    getattr(Submission, field).like(f"%{str(value)}%")
+                )
+    total_count = await session.exec(count_query)
+    total_count = total_count.one()
 
-    total_count = len(data)
+    # Query for the quantity of records in SensorInventoryData that match the
+    # sensor as well as the min and max of the time column
+    query = select(Submission)
 
     # Order by sort field params ie. ["name","ASC"]
     if len(sort) == 2:
         sort_field, sort_order = sort
         if sort_order == "ASC":
-            data = sorted(data, key=lambda k: getattr(k, sort_field))
+            query = query.order_by(getattr(Submission, sort_field))
         else:
-            data = sorted(
-                data, key=lambda k: getattr(k, sort_field), reverse=True
-            )
+            query = query.order_by(getattr(Submission, sort_field).desc())
 
     # Filter by filter field params ie. {"name":"bar"}
+    if len(filter):
+        for field, value in filter.items():
+            if field == "id" or field == "station_id" or field == "sensor_id":
+                if isinstance(value, list):
+                    for v in value:
+                        count_query = count_query.filter(
+                            getattr(Submission, field) == v
+                        )
+                else:
+                    count_query = count_query.filter(
+                        getattr(Submission, field) == value
+                    )
+            else:
+                query = query.filter(
+                    getattr(Submission, field).like(f"%{str(value)}%")
+                )
 
     if len(range) == 2:
         start, end = range
-        data = data[start:end]
+        query = query.offset(start).limit(end - start + 1)
     else:
         start, end = [0, total_count]  # For content-range header
+
+    # Execute query
+    results = await session.exec(query)
+    submissions = results.all()
 
     response.headers["Content-Range"] = (
         f"submissions {start}-{end}/{total_count}"
     )
 
-    return data
+    return submissions
 
 
 @router.post("", response_model=SubmissionRead)
