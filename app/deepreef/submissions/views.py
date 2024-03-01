@@ -15,58 +15,11 @@ import json
 import csv
 from typing import Any
 import boto3
-from app.s3 import get_s3
+from app.s3 import get_s3, get_s3_submission_inputs
 from app.config import config
 from fastapi import File, UploadFile
 
 router = APIRouter()
-
-
-@router.get("/s3", response_model=Any)
-async def list_s3_objects(
-    s3: boto3.client = Depends(get_s3),
-    prefix: str = Query(None),
-) -> Any:
-    """List all objects in the S3 bucket"""
-
-    # Always prefix the S3 bucket with the S3_PREFIX plus extra query prefix,
-    # this is typically going to be inputs or outputs
-    prefix = f"{config.S3_PREFIX}/{prefix if prefix else ''}"
-
-    objects = s3.list_objects(
-        Bucket=config.S3_BUCKET_ID,
-        Prefix=prefix if prefix is not None else "",
-    ).get("Contents", None)
-
-    return objects
-
-
-@router.put("/s3", response_model=Any)
-async def upload_output_object(
-    s3: boto3.client = Depends(get_s3),
-    files: list[UploadFile] = File(...),
-    # job_id: UUID = Query(...),
-) -> Any:
-    """Upload a file to the S3 bucket"""
-
-    # Always prefix the S3 bucket with the S3_PREFIX plus extra query prefix,
-    # this is typically going to be input or output for example:
-    # deepreefmap-dev/<job-uuid>/inputs
-    prefix = f"{config.S3_PREFIX}/generic_upload/output"
-
-    for file_obj in files:
-        print(file_obj.filename, file_obj.size)
-        content = await file_obj.read()
-        print(content)
-
-        # Write bytes to S3 bucket
-        response = s3.put_object(
-            Bucket=config.S3_BUCKET_ID,
-            Key=f"{prefix}/{file_obj.filename}",
-            Body=content,
-        )
-
-        print("Response", response)
 
 
 @router.get("/{submission_id}", response_model=SubmissionRead)
@@ -82,8 +35,10 @@ async def get_submission(
     submission = res.one_or_none()
     submission_dict = submission[0].dict() if submission else {}
 
+    s3_objects = get_s3_submission_inputs(submission_dict.get("id"))
+    submission_dict["inputs"] = s3_objects
+    print(submission_dict)
     res = await session.execute(query)
-
     return SubmissionRead(**submission_dict)
 
 
@@ -106,7 +61,7 @@ async def get_submissions(
     count_query = select(func.count(Submission.iterator))
     if len(filter):  # Have to filter twice for some reason? SQLModel state?
         for field, value in filter.items():
-            if field == "id" or field == "station_id" or field == "sensor_id":
+            if field == "id" or field == "submission_id":
                 if isinstance(value, list):
                     for v in value:
                         count_query = count_query.filter(
@@ -138,7 +93,7 @@ async def get_submissions(
     # Filter by filter field params ie. {"name":"bar"}
     if len(filter):
         for field, value in filter.items():
-            if field == "id" or field == "station_id" or field == "sensor_id":
+            if field == "id" or field == "submission_id":
                 if isinstance(value, list):
                     for v in value:
                         count_query = count_query.filter(

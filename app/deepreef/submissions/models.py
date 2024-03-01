@@ -32,7 +32,8 @@ class Submission(SubmissionBase, table=True):
 
 class SubmissionRead(SubmissionBase):
     id: UUID
-    data_size_mb: float | None = Field(default=None)
+    # data_size_mb: float | None = Field(default=None)
+    inputs: Any | None = Field(default=None)
     processing_finished: bool | None = Field(default=None)
     processing_successful: bool | None = Field(default=None)
     duration_seconds: int | None = Field(default=None)
