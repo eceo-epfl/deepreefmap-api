@@ -23,6 +23,4 @@ def get_s3_submission_inputs(submission_id) -> Any:
         Prefix=prefix,
     ).get("Contents", None)
 
-    # objects = objects.split("/")[-1]
-
     return objects

@@ -16,6 +16,7 @@ class Config(BaseSettings):
 
     DB_URL: str | None = None
 
+    # S3 settings
     S3_URL: str
     S3_BUCKET_ID: str
     S3_ACCESS_KEY: str
@@ -24,6 +25,9 @@ class Config(BaseSettings):
     # Key to prefix to all assets in the S3 bucket. Should be distinct to the
     # deployment as to avoid conflicts
     S3_PREFIX: str | None = "deepreefmap-dev"
+
+    # Kubernetes
+    NAMESPACE: str = "runai-enacit-deepreefmap-dev"
 
     @root_validator(pre=True)
     def form_db_url(cls, values: dict) -> dict:

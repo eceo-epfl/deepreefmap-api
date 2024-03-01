@@ -18,8 +18,28 @@ import boto3
 from app.s3 import get_s3, get_s3_submission_inputs
 from app.config import config
 from fastapi import File, UploadFile
+from kubernetes import client, config as k8s_config
 
 router = APIRouter()
+
+
+@router.get("/kubernetes/jobs")
+async def get_jobs(
+    response: Response,
+    *,
+    filter: str = Query(None),
+    sort: str = Query(None),
+    range: str = Query(None),
+) -> Any:
+    """Get all kubernetes jobs in the namespace"""
+
+    k8s_config.load_kube_config()
+
+    v1 = client.CoreV1Api()
+    # print("Listing pods with their IPs:")
+    ret = v1.list_namespaced_pod(config.NAMESPACE)
+
+    return ret.items
 
 
 @router.get("/{submission_id}", response_model=SubmissionRead)
