@@ -24,7 +24,7 @@ class Config(BaseSettings):
 
     # Key to prefix to all assets in the S3 bucket. Should be distinct to the
     # deployment as to avoid conflicts
-    S3_PREFIX: str | None = "deepreefmap-dev"
+    S3_PREFIX: str
 
     # Kubernetes
     NAMESPACE: str = "runai-enacit-deepreefmap-dev"

@@ -2,6 +2,7 @@ from sqlmodel import SQLModel, Field, Column, Relationship, UniqueConstraint
 from uuid import uuid4, UUID
 from typing import Any
 import datetime
+from fastapi import UploadFile, File
 
 
 class SubmissionBase(SQLModel):
@@ -42,7 +43,7 @@ class SubmissionRead(SubmissionBase):
 
 
 class SubmissionCreate(SubmissionBase):
-    area_id: UUID
+    files: list[UploadFile] = File(...)
 
 
 class SubmissionUpdate(SubmissionCreate):

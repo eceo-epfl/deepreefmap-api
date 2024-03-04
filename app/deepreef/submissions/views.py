@@ -147,7 +147,6 @@ async def get_submissions(
 
 @router.post("", response_model=SubmissionRead)
 async def create_submission(
-    # payload: SubmissionCreate = Body(...),
     files: list[UploadFile] = File(...),
     session: AsyncSession = Depends(get_session),
     s3: boto3.client = Depends(get_s3),
