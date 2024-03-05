@@ -3,10 +3,8 @@ FROM ubuntu:22.04 as rcp-stage
 RUN apt-get update && apt-get install -y wget curl python3-pip python3.11
 
 WORKDIR /root
-
-RUN wget --content-disposition https://rcp-caas-test.rcp.epfl.ch/cli/linux
-RUN chmod +x runai
 RUN mkdir .kube
+
 RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && \
     curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl.sha256" && \
     echo "$(cat kubectl.sha256)  kubectl" | sha256sum --check && \
