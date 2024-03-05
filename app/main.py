@@ -1,8 +1,10 @@
-from fastapi import FastAPI, status
+from fastapi import FastAPI, status, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import config
-from app.deepreef.submissions.views import router as submissions_router
+from app.submissions.views import router as submissions_router
 from pydantic import BaseModel
+from app.db import get_session, AsyncSession
+from sqlalchemy.sql import text
 
 app = FastAPI()
 
@@ -31,17 +33,22 @@ class HealthCheck(BaseModel):
     status_code=status.HTTP_200_OK,
     response_model=HealthCheck,
 )
-def get_health() -> HealthCheck:
+async def get_health(
+    session: AsyncSession = Depends(get_session),
+) -> HealthCheck:
     """
     Endpoint to perform a healthcheck on for kubernetes liveness and
     readiness probes.
     """
+    # Execute DB Query to check DB connection
+    await session.exec(text("SELECT 1"))
+
     return HealthCheck(status="OK")
 
 
 # Routes for Deep Reef Map
 app.include_router(
     submissions_router,
-    prefix=f"{config.API_V1_PREFIX}/deepreef/submissions",
-    tags=["submissions", "DeepReef"],
+    prefix=f"{config.API_V1_PREFIX}/submissions",
+    tags=["submissions"],
 )

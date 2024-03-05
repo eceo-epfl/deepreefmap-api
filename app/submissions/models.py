@@ -3,12 +3,15 @@ from uuid import uuid4, UUID
 from typing import Any
 import datetime
 from fastapi import UploadFile, File
+from app.object_store.models import S3Object
 
 
 class SubmissionBase(SQLModel):
     name: str | None = Field(default=None, index=True)
     description: str | None = Field(default=None)
     comment: str | None = Field(default=None)
+    processing_has_started: bool = Field(default=False)
+    processing_completed_successfully: bool = Field(default=False)
 
 
 class Submission(SubmissionBase, table=True):
@@ -33,18 +36,9 @@ class Submission(SubmissionBase, table=True):
 
 class SubmissionRead(SubmissionBase):
     id: UUID
-    # data_size_mb: float | None = Field(default=None)
-    inputs: Any | None = Field(default=None)
-    processing_finished: bool | None = Field(default=None)
-    processing_successful: bool | None = Field(default=None)
-    duration_seconds: int | None = Field(default=None)
-    submitted_at_utc: datetime.datetime | None = Field(default=None)
-    submitted_by: str | None = Field(default=None)
+    time_added_utc: datetime.datetime
+    inputs: list[S3Object] = []
 
 
-class SubmissionCreate(SubmissionBase):
-    files: list[UploadFile] = File(...)
-
-
-class SubmissionUpdate(SubmissionCreate):
-    instrumentdata: str | None = None
+class SubmissionUpdate(SubmissionBase):
+    pass

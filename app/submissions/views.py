@@ -1,21 +1,17 @@
 from fastapi import Depends, APIRouter, Query, Response, HTTPException, Body
 from sqlmodel import select
 from app.db import get_session, AsyncSession
-from app.utils import decode_base64
-from app.deepreef.submissions.models import (
+from app.submissions.models import (
     Submission,
     SubmissionRead,
     SubmissionUpdate,
-    SubmissionCreate,
 )
 from uuid import UUID
 from sqlalchemy import func
-from datetime import timezone
 import json
-import csv
 from typing import Any
 import boto3
-from app.s3 import get_s3, get_s3_submission_inputs
+from app.object_store.service import get_s3, S3Connection
 from app.config import config
 from fastapi import File, UploadFile
 from kubernetes import client, config as k8s_config
@@ -45,20 +41,21 @@ async def get_jobs(
 @router.get("/{submission_id}", response_model=SubmissionRead)
 async def get_submission(
     session: AsyncSession = Depends(get_session),
+    s3: S3Connection = Depends(get_s3),
     *,
     submission_id: UUID,
 ) -> SubmissionRead:
     """Get an submission by id"""
 
     query = select(Submission).where(Submission.id == submission_id)
-    res = await session.execute(query)
+    res = await session.exec(query)
     submission = res.one_or_none()
-    submission_dict = submission[0].dict() if submission else {}
+    submission_dict = submission.dict() if submission else {}
 
-    s3_objects = get_s3_submission_inputs(submission_dict.get("id"))
+    s3_objects = s3.get_s3_submission_inputs(submission_dict.get("id"))
     submission_dict["inputs"] = s3_objects
     print(submission_dict)
-    res = await session.execute(query)
+    res = await session.exec(query)
     return SubmissionRead(**submission_dict)
 
 
@@ -66,7 +63,9 @@ async def get_submission(
 async def get_submissions(
     response: Response,
     session: AsyncSession = Depends(get_session),
+    s3: S3Connection = Depends(get_s3),
     *,
+    include_inputs: bool = Query(True),
     filter: str = Query(None),
     sort: str = Query(None),
     range: str = Query(None),
@@ -138,11 +137,21 @@ async def get_submissions(
     results = await session.exec(query)
     submissions = results.all()
 
+    submission_objs = [SubmissionRead.model_validate(x) for x in submissions]
+
+    if include_inputs:
+        # Reluctantly doing this for usability in the list, but it has
+        # potential to be slow if the list is large. Want to avoid adding S3
+        # metadata to the DB if possible to avoid sync issues.
+        for submission in submission_objs:
+            s3_objects = s3.get_s3_submission_inputs(submission.id)
+            submission.inputs = s3_objects
+
     response.headers["Content-Range"] = (
         f"submissions {start}-{end}/{total_count}"
     )
 
-    return submissions
+    return submission_objs
 
 
 @router.post("", response_model=SubmissionRead)
@@ -175,31 +184,36 @@ async def create_submission(
 
     # Use the generated DB submission ID to create a prefix for the S3 bucket
     prefix = f"{config.S3_PREFIX}/{submission.id}/inputs"
+    try:
+        for file_obj in files:
+            content = await file_obj.read()
 
-    for file_obj in files:
-        content = await file_obj.read()
-
-        # Write bytes to S3 bucket
-        response = s3.put_object(
-            Bucket=config.S3_BUCKET_ID,
-            Key=f"{prefix}/{file_obj.filename}",
-            Body=content,
-        )
-
-        # Validate that response is 200: OK
-        if response["ResponseMetadata"]["HTTPStatusCode"] != 200:
-            # Delete the submission if the S3 upload fails
-            await session.delete(submission)
-            await session.commit()
-            # Delete any S3 objects with the prefix
-            s3.delete_objects(
+            # Write bytes to S3 bucket
+            response = s3.session.put_object(
                 Bucket=config.S3_BUCKET_ID,
-                Delete={"Objects": [{"Key": f"{prefix}/{file_obj.filename}"}]},
+                Key=f"{prefix}/{file_obj.filename}",
+                Body=content,
             )
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to upload file to S3",
-            )
+
+            # Validate that response is 200: OK
+            if response["ResponseMetadata"]["HTTPStatusCode"] != 200:
+                # Error in uploading, raise exception
+                raise Exception(
+                    "Failed to upload file to S3: "
+                    f"{response['ResponseMetadata']}"
+                )
+
+    except Exception as e:
+        await session.delete(submission)
+        await session.commit()
+        s3.session.delete_objects(
+            Bucket=config.S3_BUCKET_ID,
+            Delete={"Objects": [{"Key": f"{prefix}/{file_obj.filename}"}]},
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to upload file to S3: {e}",
+        )
 
     return submission
 
@@ -214,32 +228,9 @@ async def update_submission(
         select(Submission).where(Submission.id == submission_id)
     )
     submission_db = res.scalars().one()
-    submission_data = submission_update.dict(exclude_unset=True)
+    submission_data = submission_update.model_dump(exclude_unset=True)
     if not submission_db:
         raise HTTPException(status_code=404, detail="Submission not found")
-
-    # Update the fields from the request
-    for field, value in submission_data.items():
-        if field in ["latitude", "longitude"]:
-            # Don't process lat/lon, it's converted to geom in model validator
-            continue
-        if field == "video":
-            # Convert base64 to bytes, input should be csv, read and add rows
-            # to submission_data table with submission_id
-            rawdata, dtype = decode_base64(value)
-
-            if dtype != "csv":
-                raise HTTPException(
-                    status_code=400,
-                    detail="Only CSV files are supported",
-                )
-            # Treat the rawdata as a CSV file, read in the rows
-            decoded = []
-            for row in csv.reader(rawdata.decode("utf-8").splitlines()):
-                decoded.append(row)
-
-        print(f"Updating: {field}, {value}")
-        setattr(submission_db, field, value)
 
     session.add(submission_db)
     await session.commit()

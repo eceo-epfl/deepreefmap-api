@@ -1,9 +1,10 @@
-from pydantic import BaseSettings, root_validator
+from pydantic import root_validator
+from pydantic_settings import BaseSettings
 from functools import lru_cache
 
 
 class Config(BaseSettings):
-    API_V1_PREFIX = "/v1"
+    API_V1_PREFIX: str = "/v1"
 
     # PostGIS settings
     DB_HOST: str
