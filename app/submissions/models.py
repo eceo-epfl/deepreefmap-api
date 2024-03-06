@@ -3,7 +3,8 @@ from uuid import uuid4, UUID
 from typing import Any
 import datetime
 from fastapi import UploadFile, File
-from app.object_store.models import S3Object
+
+# from app.objects.models import S3Object
 
 
 class SubmissionBase(SQLModel):
@@ -37,7 +38,7 @@ class Submission(SubmissionBase, table=True):
 class SubmissionRead(SubmissionBase):
     id: UUID
     time_added_utc: datetime.datetime
-    inputs: list[S3Object] = []
+    # inputs: list[S3Object] = []
 
 
 class SubmissionUpdate(SubmissionBase):

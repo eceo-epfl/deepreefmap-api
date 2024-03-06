@@ -1,7 +1,7 @@
 from app.config import config
 import boto3
 from typing import Any, Generator
-from app.object_store.models import S3Object
+from app.objects.models import S3Object
 
 
 class S3Connection:

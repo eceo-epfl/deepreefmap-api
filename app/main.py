@@ -2,6 +2,7 @@ from fastapi import FastAPI, status, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import config
 from app.submissions.views import router as submissions_router
+from app.objects.views import router as objects_router
 from pydantic import BaseModel
 from app.db import get_session, AsyncSession
 from sqlalchemy.sql import text
@@ -51,4 +52,9 @@ app.include_router(
     submissions_router,
     prefix=f"{config.API_V1_PREFIX}/submissions",
     tags=["submissions"],
+)
+app.include_router(
+    objects_router,
+    prefix=f"{config.API_V1_PREFIX}/objects",
+    tags=["objects"],
 )

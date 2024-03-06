@@ -11,7 +11,7 @@ from sqlalchemy import func
 import json
 from typing import Any
 import boto3
-from app.object_store.service import get_s3, S3Connection
+from app.objects.service import get_s3, S3Connection
 from app.config import config
 from fastapi import File, UploadFile
 from kubernetes import client, config as k8s_config

@@ -12,7 +12,6 @@ from sqlmodel.ext.asyncio.session import (
     AsyncEngine,
 )
 from sqlalchemy.orm import sessionmaker
-from app.areas.models import Area, AreaCreate, AreaRead
 
 
 DATABASE_URL = "sqlite+aiosqlite:///"
