@@ -11,6 +11,8 @@ if TYPE_CHECKING:
 
 class InputObjectBase(SQLModel):
     filename: str | None = Field(default=None, index=True)
+    size_bytes: int | None = Field(default=None)
+    hash_md5sum: str | None = Field(default=None)
 
 
 class InputObject(InputObjectBase, table=True):

@@ -5,7 +5,9 @@ from app.submissions.models import (
     Submission,
     SubmissionRead,
     SubmissionUpdate,
+    SubmissionCreate,
 )
+from app.objects.models import InputObject
 from uuid import UUID
 from sqlalchemy import func
 import json
@@ -20,19 +22,12 @@ router = APIRouter()
 
 
 @router.get("/kubernetes/jobs")
-async def get_jobs(
-    response: Response,
-    *,
-    filter: str = Query(None),
-    sort: str = Query(None),
-    range: str = Query(None),
-) -> Any:
+async def get_jobs() -> Any:
     """Get all kubernetes jobs in the namespace"""
 
-    k8s_config.load_kube_config()
+    k8s_config.load_config()
 
     v1 = client.CoreV1Api()
-    # print("Listing pods with their IPs:")
     ret = v1.list_namespaced_pod(config.NAMESPACE)
 
     return ret.items
@@ -50,13 +45,8 @@ async def get_submission(
     query = select(Submission).where(Submission.id == submission_id)
     res = await session.exec(query)
     submission = res.one_or_none()
-    submission_dict = submission.dict() if submission else {}
 
-    s3_objects = s3.get_s3_submission_inputs(submission_dict.get("id"))
-    submission_dict["inputs"] = s3_objects
-    print(submission_dict)
-    res = await session.exec(query)
-    return SubmissionRead(**submission_dict)
+    return SubmissionRead.model_validate(submission)
 
 
 @router.get("", response_model=list[SubmissionRead])
@@ -65,7 +55,6 @@ async def get_submissions(
     session: AsyncSession = Depends(get_session),
     s3: S3Connection = Depends(get_s3),
     *,
-    include_inputs: bool = Query(True),
     filter: str = Query(None),
     sort: str = Query(None),
     range: str = Query(None),
@@ -137,83 +126,47 @@ async def get_submissions(
     results = await session.exec(query)
     submissions = results.all()
 
-    submission_objs = [SubmissionRead.model_validate(x) for x in submissions]
-
-    if include_inputs:
-        # Reluctantly doing this for usability in the list, but it has
-        # potential to be slow if the list is large. Want to avoid adding S3
-        # metadata to the DB if possible to avoid sync issues.
-        for submission in submission_objs:
-            s3_objects = s3.get_s3_submission_inputs(submission.id)
-            submission.inputs = s3_objects
-
     response.headers["Content-Range"] = (
         f"submissions {start}-{end}/{total_count}"
     )
 
-    return submission_objs
+    return submissions
 
 
 @router.post("", response_model=SubmissionRead)
 async def create_submission(
-    files: list[UploadFile] = File(...),
+    submission: SubmissionCreate,
     session: AsyncSession = Depends(get_session),
     s3: boto3.client = Depends(get_s3),
 ) -> None:
     """Creates a submission record from one or more video files"""
 
-    if len(files) == 0:
+    if len(submission.inputs) == 0:
         raise HTTPException(
             status_code=400,
             detail="At least one file must be provided",
         )
-    # Check that there are distinct filenames in the list of files
-    filenames = [file.filename for file in files]
-    if len(filenames) != len(set(filenames)):
-        raise HTTPException(
-            status_code=400,
-            detail="All files must have distinct filenames",
+    inputs = []
+    # For each file in submission.inputs, query for the object in objects
+    # table with the same ID.
+    for input_file in submission.inputs:
+        res = await session.exec(
+            select(InputObject).where(InputObject.id == input_file)
         )
+        object_db = res.one_or_none()
+        if not object_db:
+            raise HTTPException(
+                status_code=404,
+                detail="Input object not found",
+            )
+        inputs.append(object_db)
 
     # Create new submission DB object with no fields
-    submission = Submission()
+    submission = Submission(inputs=inputs)
 
     session.add(submission)
     await session.commit()
     await session.refresh(submission)
-
-    # Use the generated DB submission ID to create a prefix for the S3 bucket
-    prefix = f"{config.S3_PREFIX}/{submission.id}/inputs"
-    try:
-        for file_obj in files:
-            content = await file_obj.read()
-
-            # Write bytes to S3 bucket
-            response = s3.session.put_object(
-                Bucket=config.S3_BUCKET_ID,
-                Key=f"{prefix}/{file_obj.filename}",
-                Body=content,
-            )
-
-            # Validate that response is 200: OK
-            if response["ResponseMetadata"]["HTTPStatusCode"] != 200:
-                # Error in uploading, raise exception
-                raise Exception(
-                    "Failed to upload file to S3: "
-                    f"{response['ResponseMetadata']}"
-                )
-
-    except Exception as e:
-        await session.delete(submission)
-        await session.commit()
-        s3.session.delete_objects(
-            Bucket=config.S3_BUCKET_ID,
-            Delete={"Objects": [{"Key": f"{prefix}/{file_obj.filename}"}]},
-        )
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to upload file to S3: {e}",
-        )
 
     return submission
 
@@ -224,19 +177,26 @@ async def update_submission(
     submission_update: SubmissionUpdate,
     session: AsyncSession = Depends(get_session),
 ) -> SubmissionRead:
-    res = await session.execute(
+
+    res = await session.exec(
         select(Submission).where(Submission.id == submission_id)
     )
-    submission_db = res.scalars().one()
-    submission_data = submission_update.model_dump(exclude_unset=True)
-    if not submission_db:
+    obj = res.one_or_none()
+    if not obj:
         raise HTTPException(status_code=404, detail="Submission not found")
 
-    session.add(submission_db)
-    await session.commit()
-    await session.refresh(submission_db)
+    submission_data = submission_update.model_dump(exclude_unset=True)
 
-    return submission_db
+    # Update the fields from the request
+    for field, value in submission_data.items():
+        print(f"Updating: {field}, {value}")
+        setattr(obj, field, value)
+
+    session.add(obj)
+    await session.commit()
+    await session.refresh(obj)
+
+    return obj
 
 
 @router.delete("/{submission_id}")

@@ -8,6 +8,7 @@ from app.config import config as app_config
 from alembic import context
 from sqlmodel import SQLModel
 from app.submissions.models import Submission  # noqa: F401
+from app.objects.models import InputObject, InputObjectAssociations
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

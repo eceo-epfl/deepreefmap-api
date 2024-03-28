@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import config
 from app.submissions.views import router as submissions_router
 from app.objects.views import router as objects_router
+from app.status.views import router as status_router
 from pydantic import BaseModel
 from app.db import get_session, AsyncSession
 from sqlalchemy.sql import text
@@ -57,4 +58,9 @@ app.include_router(
     objects_router,
     prefix=f"{config.API_V1_PREFIX}/objects",
     tags=["objects"],
+)
+app.include_router(
+    status_router,
+    prefix=f"{config.API_V1_PREFIX}/status",
+    tags=["status"],
 )

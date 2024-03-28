@@ -45,7 +45,6 @@ class S3Connection:
             )
             for response in responses
         ]
-
         return objs
 
     def session(

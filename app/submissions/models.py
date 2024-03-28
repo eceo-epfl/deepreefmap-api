@@ -1,8 +1,12 @@
 from sqlmodel import SQLModel, Field, Column, Relationship, UniqueConstraint
 from uuid import uuid4, UUID
-from typing import Any
+from typing import Any, TYPE_CHECKING
 import datetime
 from fastapi import UploadFile, File
+from app.objects.models import InputObjectAssociations
+
+# if TYPE_CHECKING:
+from app.objects.models import InputObject
 
 # from app.objects.models import S3Object
 
@@ -33,12 +37,21 @@ class Submission(SubmissionBase, table=True):
         nullable=False,
         index=True,
     )
+    inputs: list[InputObject] = Relationship(
+        back_populates="submissions",
+        link_model=InputObjectAssociations,
+        sa_relationship_kwargs={"lazy": "selectin"},
+    )
+
+
+class SubmissionCreate(SubmissionBase):
+    inputs: list[UUID] = []  # A list of UUIDs corresponding to InputObject IDs
 
 
 class SubmissionRead(SubmissionBase):
     id: UUID
     time_added_utc: datetime.datetime
-    # inputs: list[S3Object] = []
+    inputs: list[InputObject] = []
 
 
 class SubmissionUpdate(SubmissionBase):
