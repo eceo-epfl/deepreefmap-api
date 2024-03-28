@@ -6,6 +6,7 @@ from app.submissions.models import (
     SubmissionRead,
     SubmissionUpdate,
     SubmissionCreate,
+    KubernetesExecutionStatus,
 )
 from app.objects.models import InputObject
 from uuid import UUID
@@ -15,28 +16,30 @@ from typing import Any
 import boto3
 from app.objects.service import get_s3, S3Connection
 from app.config import config
-from fastapi import File, UploadFile
-from kubernetes import client, config as k8s_config
+from kubernetes.client import CoreV1Api, ApiClient
+from app.submissions.k8s import get_k8s_v1, get_k8s_custom_objects
+import random
 
 router = APIRouter()
 
 
 @router.get("/kubernetes/jobs")
-async def get_jobs() -> Any:
+async def get_jobs(
+    k8s: CoreV1Api = Depends(get_k8s_v1),
+) -> Any:
     """Get all kubernetes jobs in the namespace"""
 
-    k8s_config.load_config()
+    ret = k8s.list_namespaced_pod(config.NAMESPACE)
 
-    v1 = client.CoreV1Api()
-    ret = v1.list_namespaced_pod(config.NAMESPACE)
-
-    return ret.items
+    api = ApiClient()
+    return api.sanitize_for_serialization(ret.items)
 
 
 @router.get("/{submission_id}", response_model=SubmissionRead)
 async def get_submission(
     session: AsyncSession = Depends(get_session),
     s3: S3Connection = Depends(get_s3),
+    k8s: CoreV1Api = Depends(get_k8s_v1),
     *,
     submission_id: UUID,
 ) -> SubmissionRead:
@@ -46,7 +49,84 @@ async def get_submission(
     res = await session.exec(query)
     submission = res.one_or_none()
 
-    return SubmissionRead.model_validate(submission)
+    # Get all jobs from k8s then filter out the ones that belong to the
+    # submission_id
+    jobs = k8s.list_namespaced_pod(config.NAMESPACE)
+    jobs = jobs.items
+    jobs = [job for job in jobs if str(submission_id) in job.metadata.name]
+    job_status = []
+    for job in jobs:
+        api = ApiClient()
+        job_data = api.sanitize_for_serialization(job)
+        job_status.append(
+            KubernetesExecutionStatus(
+                submission_id=job_data["metadata"]["name"],
+                status=job_data["status"]["phase"],
+                time_started=job_data["status"]["startTime"],
+            )
+        )
+    model_obj = SubmissionRead.model_validate(submission)
+    model_obj.run_status = job_status
+
+    return model_obj
+
+
+@router.post("/{submission_id}/execute", response_model=Any)
+async def execute_submission(
+    submission_id: UUID,
+    session: AsyncSession = Depends(get_session),
+    s3: S3Connection = Depends(get_s3),
+    k8s: CoreV1Api = Depends(get_k8s_custom_objects),
+) -> Any:
+
+    # Set name to be submission_id + random number five digits long
+    name = f"{submission_id}-{str(random.randint(10000, 99999))}"
+
+    job = {
+        "apiVersion": "run.ai/v1",
+        "kind": "RunaiJob",
+        "metadata": {
+            "name": name,
+            "namespace": config.NAMESPACE,
+            "labels": {"user": "ejthomas", "release": name},
+        },
+        "spec": {
+            "template": {
+                "metadata": {
+                    "labels": {"user": "ejthomas", "release": name},
+                },
+                "spec": {
+                    "schedulerName": "runai-scheduler",
+                    "restartPolicy": "Never",
+                    "securityContext": {
+                        "runAsUser": 266488,
+                        "runAsGroup": 12500,
+                        "fsGroup": 12500,
+                    },
+                    "containers": [
+                        {
+                            "name": "rcp-test-ejthomas",
+                            "image": "registry.rcp.epfl.ch/rcp-test-ejthomas/rcp-test:latest",
+                            "workingDir": "/app",
+                            "resources": {"limits": {"nvidia.com/gpu": 1}},
+                        }
+                    ],
+                },
+            },
+        },
+    }
+
+    # Create the job
+    api_response = k8s.create_namespaced_custom_object(
+        namespace=config.NAMESPACE,
+        plural="runaijobs",
+        body=job,
+        version="v1",
+        group="run.ai",
+    )
+    print("Job issued")
+    print(api_response)
+    return api_response
 
 
 @router.get("", response_model=list[SubmissionRead])

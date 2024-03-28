@@ -48,10 +48,18 @@ class SubmissionCreate(SubmissionBase):
     inputs: list[UUID] = []  # A list of UUIDs corresponding to InputObject IDs
 
 
+class KubernetesExecutionStatus(SQLModel):
+    # Information from RCP about the execution status of the submission
+    submission_id: str
+    status: str
+    time_started: datetime.datetime
+
+
 class SubmissionRead(SubmissionBase):
     id: UUID
     time_added_utc: datetime.datetime
     inputs: list[InputObject] = []
+    run_status: list[KubernetesExecutionStatus] = []
 
 
 class SubmissionUpdate(SubmissionBase):

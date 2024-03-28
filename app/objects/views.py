@@ -3,6 +3,7 @@ from app.db import get_session, AsyncSession
 from app.objects.models import (
     InputObject,
     InputObjectRead,
+    InputObjectUpdate,
 )
 from app.objects.service import get_s3, S3Connection
 from app.config import config
@@ -40,14 +41,14 @@ async def create_object(
     await session.refresh(object)
 
     # Use the generated DB object ID to create a prefix for the S3 bucket
-    prefix = f"{config.S3_PREFIX}/{object.id}/inputs"
+    prefix = f"{config.S3_PREFIX}/inputs"
     try:
         content = await file.read()
 
         # Write bytes to S3 bucket
         response = s3.session.put_object(
             Bucket=config.S3_BUCKET_ID,
-            Key=f"{prefix}/{file.filename}",
+            Key=f"{prefix}/{object.id}",
             Body=content,
         )
         print(response)
@@ -70,7 +71,7 @@ async def create_object(
         await session.commit()
         s3.session.delete_objects(
             Bucket=config.S3_BUCKET_ID,
-            Delete={"Objects": [{"Key": f"{prefix}/{file.filename}"}]},
+            Delete={"Objects": [{"Key": f"{prefix}/{object.id}"}]},
         )
         raise HTTPException(
             status_code=500,
@@ -181,25 +182,32 @@ async def get_objects(
     return object_objs
 
 
-# @router.put("/{object_id}", response_model=InputObjectRead)
-# async def update_object(
-#     object_id: UUID,
-#     object_update: InputObjectUpdate,
-#     session: AsyncSession = Depends(get_session),
-# ) -> InputObjectRead:
-#     res = await session.execute(
-#         select(InputObject).where(InputObject.id == object_id)
-#     )
-#     object_db = res.scalars().one()
-#     object_data = object_update.model_dump(exclude_unset=True)
-#     if not object_db:
-#         raise HTTPException(status_code=404, detail="InputObject not found")
+@router.put("/{input_object_id}", response_model=InputObjectRead)
+async def update_input_object(
+    input_object_id: UUID,
+    input_object_update: InputObjectUpdate,
+    session: AsyncSession = Depends(get_session),
+) -> InputObjectRead:
 
-#     session.add(object_db)
-#     await session.commit()
-#     await session.refresh(object_db)
+    res = await session.exec(
+        select(InputObject).where(InputObject.id == input_object_id)
+    )
+    obj = res.one_or_none()
+    if not obj:
+        raise HTTPException(status_code=404, detail="Input Object not found")
 
-#     return object_db
+    data = input_object_update.model_dump(exclude_unset=True)
+
+    # Update the fields from the request
+    for field, value in data.items():
+        print(f"Updating: {field}, {value}")
+        setattr(obj, field, value)
+
+    session.add(obj)
+    await session.commit()
+    await session.refresh(obj)
+
+    return obj
 
 
 @router.delete("/{object_id}")
@@ -207,13 +215,27 @@ async def delete_object(
     object_id: UUID,
     session: AsyncSession = Depends(get_session),
     filter: dict[str, str] | None = None,
+    s3: S3Connection = Depends(get_s3),
 ) -> None:
     """Delete an object by id"""
-    res = await session.execute(
+    res = await session.exec(
         select(InputObject).where(InputObject.id == object_id)
     )
-    object = res.scalars().one_or_none()
+    object = res.one_or_none()
 
     if object:
+        # Delete object from S3
+        print(f"DELETING OBJECT FROM S3: {object.id}")
+        try:
+            res = s3.session.delete_object(
+                Bucket=config.S3_BUCKET_ID,
+                Key=f"{config.S3_PREFIX}/{object.id}/inputs/{object.filename}",
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to delete object from S3: {e}",
+            )
+
         await session.delete(object)
         await session.commit()
