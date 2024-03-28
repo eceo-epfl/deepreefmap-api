@@ -60,9 +60,9 @@ async def get_submission(
         job_data = api.sanitize_for_serialization(job)
         job_status.append(
             KubernetesExecutionStatus(
-                submission_id=job_data["metadata"]["name"],
-                status=job_data["status"]["phase"],
-                time_started=job_data["status"]["startTime"],
+                submission_id=job_data["metadata"].get("name"),
+                status=job_data["status"].get("phase"),
+                time_started=job_data["status"].get("startTime"),
             )
         )
     model_obj = SubmissionRead.model_validate(submission)
