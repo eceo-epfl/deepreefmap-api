@@ -29,6 +29,7 @@ class Config(BaseSettings):
 
     # Kubernetes
     NAMESPACE: str = "runai-enacit-deepreefmap-dev"
+    CONFIG_FILE: str = "/app/.kube/config.yaml"
 
     @root_validator(pre=True)
     def form_db_url(cls, values: dict) -> dict:
