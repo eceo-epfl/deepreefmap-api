@@ -9,7 +9,24 @@ if TYPE_CHECKING:
     from app.objects.models import InputObject
 
 
-class InputObjectAssociations(SQLModel, table=True):
+class InputObjectAssociationsBase(SQLModel):
+    input_object_id: UUID = Field(
+        foreign_key="inputobject.id",
+        index=True,
+        nullable=False,
+    )
+    submission_id: UUID = Field(
+        foreign_key="submission.id",
+        index=True,
+        nullable=False,
+    )
+    processing_order: int = Field(
+        default=0,
+        nullable=False,
+    )
+
+
+class InputObjectAssociations(InputObjectAssociationsBase, table=True):
     __table_args__ = (
         UniqueConstraint(
             "input_object_id",
@@ -24,22 +41,18 @@ class InputObjectAssociations(SQLModel, table=True):
         primary_key=True,
         index=True,
     )
-    input_object_id: UUID = Field(
-        foreign_key="inputobject.id",
-        index=True,
-        nullable=False,
-    )
-    submission_id: UUID = Field(
-        foreign_key="submission.id",
-        index=True,
-        nullable=False,
+
+    submission: "Submission" = Relationship(
+        back_populates="input_associations",
+        sa_relationship_kwargs={"lazy": "selectin"},
     )
 
-    # input: "InputObject" = Relationship(
-    #     back_populates="submission_links",
-    #     sa_relationship_kwargs={"lazy": "selectin"},
-    # )
-    # submission: "Submission" = Relationship(
-    #     back_populates="input_links",
-    #     sa_relationship_kwargs={"lazy": "selectin"},
-    # )
+    input_object: "InputObject" = Relationship(
+        back_populates="input_associations",
+        sa_relationship_kwargs={"lazy": "selectin"},
+    )
+
+
+class InputObjectAssociationsRead(InputObjectAssociationsBase):
+    input_object: "InputObject"
+    # submission: "Submission" = None

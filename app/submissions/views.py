@@ -6,9 +6,12 @@ from app.submissions.models import (
     SubmissionRead,
     SubmissionUpdate,
     SubmissionCreate,
+    SubmissionJobLogRead,
     KubernetesExecutionStatus,
+    SubmissionFileOutputs,
 )
-from app.objects.models import InputObject
+from fastapi.responses import StreamingResponse
+from app.objects.models import InputObject, InputObjectAssociations
 from uuid import UUID
 from sqlalchemy import func
 import json
@@ -21,6 +24,32 @@ from app.submissions.k8s import get_k8s_v1, get_k8s_custom_objects
 import random
 
 router = APIRouter()
+
+
+@router.get("/logs/{job_id}", response_model=SubmissionJobLogRead)
+async def get_job_log(
+    job_id: str,
+    k8s: CoreV1Api = Depends(get_k8s_v1),
+) -> SubmissionJobLogRead:
+    """Get the log for the given submission job
+
+    Clean out any carriage return lines and only return the last result of
+    each line.
+    """
+
+    # Get the log from the job
+    ret = k8s.read_namespaced_pod_log(
+        name=str(job_id),
+        namespace=config.NAMESPACE,
+    )
+
+    lines = ret.split("\n")
+    cleaned_lines = []
+    for line in lines:
+        progress_lines = line.split("\r")  # Remove carriage returns
+        cleaned_lines.append(progress_lines[-1])  # Only keep the last line
+
+    return SubmissionJobLogRead(id=job_id, message="\n".join(cleaned_lines))
 
 
 @router.get("/kubernetes/jobs")
@@ -65,10 +94,61 @@ async def get_submission(
                 time_started=job_data["status"].get("startTime"),
             )
         )
+
+    # Get the file outputs in the S3 bucket
+
+    response = s3.session.list_objects_v2(
+        Bucket=config.S3_BUCKET_ID,
+        Prefix=f"{config.S3_PREFIX}/outputs/{str(submission_id)}/",
+    )
+    outputs = response.get("Contents", [])
+
+    output_files = []
+    for output in outputs:
+        output_files.append(
+            SubmissionFileOutputs(
+                filename=output["Key"].split("/")[-1],
+                size_bytes=output["Size"],
+                last_modified=output["LastModified"],
+                url=(
+                    f"/api/submissions/{submission_id}/"
+                    f"{output['Key'].split('/')[-1]}"
+                ),
+            )
+        )
+
+    # Sort the job_status by time_started, put any None or empty strings to
+    # beginning of list
+    job_status = sorted(
+        job_status,
+        key=lambda x: (
+            x.time_started if x.time_started else "0000-00-00T00:00:00Z"
+        ),
+        reverse=True,
+    )
+
     model_obj = SubmissionRead.model_validate(submission)
     model_obj.run_status = job_status
+    model_obj.file_outputs = output_files
 
     return model_obj
+
+
+@router.get("/{submission_id}/{filename}", response_class=StreamingResponse)
+async def get_submission_output_file(
+    session: AsyncSession = Depends(get_session),
+    s3: S3Connection = Depends(get_s3),
+    *,
+    submission_id: UUID,
+    filename: str,
+) -> StreamingResponse:
+    """With the given submission ID and filename, returns the file from S3"""
+
+    response = s3.session.get_object(
+        Bucket=config.S3_BUCKET_ID,
+        Key=f"{config.S3_PREFIX}/outputs/{str(submission_id)}/{filename}",
+    )
+    return StreamingResponse(content=response["Body"].iter_chunks())
 
 
 @router.post("/{submission_id}/execute", response_model=Any)
@@ -80,7 +160,18 @@ async def execute_submission(
 ) -> Any:
 
     # Set name to be submission_id + random number five digits long
-    name = f"{submission_id}-{str(random.randint(10000, 99999))}"
+    name = f"deepreef-{submission_id}-{str(random.randint(10000, 99999))}"
+
+    # Get the input object IDs from the submission
+    res = await session.exec(
+        select(InputObjectAssociations)
+        .where(InputObjectAssociations.submission_id == submission_id)
+        .order_by(InputObjectAssociations.processing_order)
+    )
+    input_associations = res.all()
+    input_object_ids = [
+        str(association.input_object_id) for association in input_associations
+    ]
 
     job = {
         "apiVersion": "run.ai/v1",
@@ -93,26 +184,58 @@ async def execute_submission(
         "spec": {
             "template": {
                 "metadata": {
-                    "labels": {"user": "ejthomas", "release": name},
+                    "labels": {
+                        "user": "ejthomas",
+                        "release": name,
+                    }
                 },
                 "spec": {
                     "schedulerName": "runai-scheduler",
                     "restartPolicy": "Never",
                     "securityContext": {
-                        "runAsUser": 266488,
-                        "runAsGroup": 12500,
-                        "fsGroup": 12500,
+                        "runAsUser": 1000,
+                        "runAsGroup": 1000,
+                        "fsGroup": 1000,
                     },
                     "containers": [
                         {
                             "name": "rcp-test-ejthomas",
-                            "image": "registry.rcp.epfl.ch/rcp-test-ejthomas/rcp-test:latest",
-                            "workingDir": "/app",
+                            "image": "registry.rcp.epfl.ch/rcp-test-ejthomas/deepreefmap:latest",
+                            "env": [
+                                {
+                                    "name": "S3_URL",
+                                    "value": config.S3_URL,
+                                },
+                                {
+                                    "name": "S3_BUCKET_ID",
+                                    "value": config.S3_BUCKET_ID,
+                                },
+                                {
+                                    "name": "S3_ACCESS_KEY",
+                                    "value": config.S3_ACCESS_KEY,
+                                },
+                                {
+                                    "name": "S3_SECRET_KEY",
+                                    "value": config.S3_SECRET_KEY,
+                                },
+                                {
+                                    "name": "S3_PREFIX",
+                                    "value": config.S3_PREFIX,
+                                },
+                                {  # This is an env var, so list dumped as str
+                                    "name": "INPUT_OBJECT_IDS",
+                                    "value": json.dumps(input_object_ids),
+                                },
+                                {
+                                    "name": "SUBMISSION_ID",
+                                    "value": str(submission_id),
+                                },
+                            ],
                             "resources": {"limits": {"nvidia.com/gpu": 1}},
                         }
                     ],
                 },
-            },
+            }
         },
     }
 
@@ -269,8 +392,40 @@ async def update_submission(
 
     # Update the fields from the request
     for field, value in submission_data.items():
-        print(f"Updating: {field}, {value}")
-        setattr(obj, field, value)
+        # Handle nested objects in input_associations
+        if field == "input_associations":
+            for input_association in value:
+                print(input_association)
+
+                res_input = await session.exec(
+                    select(InputObjectAssociations)
+                    .where(
+                        InputObjectAssociations.input_object_id
+                        == input_association["input_object_id"]
+                    )
+                    .where(
+                        InputObjectAssociations.submission_id
+                        == input_association["submission_id"]
+                    )
+                )
+                input_obj = res_input.one_or_none()
+                if not input_obj:
+                    raise HTTPException(
+                        status_code=404, detail="Input Object not found"
+                    )
+                for input_field, input_value in input_association.items():
+                    # Only allow processing_order to be updated
+                    if input_field == "processing_order":
+                        setattr(input_obj, input_field, input_value)
+                        print(
+                            f"Updating Field: input_associations.{input_field}"
+                            f" Value: {input_value}"
+                        )
+                session.add(input_obj)
+                await session.commit()
+        else:
+            print(f"Updating: {field}, {value}")
+            setattr(obj, field, value)
 
     session.add(obj)
     await session.commit()

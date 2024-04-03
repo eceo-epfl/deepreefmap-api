@@ -3,7 +3,10 @@ import datetime
 from sqlmodel import SQLModel, Field, UniqueConstraint, Relationship
 from uuid import uuid4, UUID
 from typing import TYPE_CHECKING
-from app.objects.models.links import InputObjectAssociations
+from app.objects.models.links import (
+    InputObjectAssociations,
+    InputObjectAssociationsRead,
+)
 
 if TYPE_CHECKING:
     from app.submissions.models import Submission
@@ -37,6 +40,11 @@ class InputObject(InputObjectBase, table=True):
     submissions: list["Submission"] = Relationship(
         back_populates="inputs",
         link_model=InputObjectAssociations,
+        sa_relationship_kwargs={"lazy": "selectin"},
+    )
+
+    input_associations: list[InputObjectAssociations] = Relationship(
+        back_populates="input_object",
         sa_relationship_kwargs={"lazy": "selectin"},
     )
 
