@@ -162,16 +162,36 @@ async def execute_submission(
     # Set name to be submission_id + random number five digits long
     name = f"deepreef-{submission_id}-{str(random.randint(10000, 99999))}"
 
+    submission_res = await session.exec(
+        select(Submission).where(Submission.id == submission_id)
+    )
+    submission = submission_res.one_or_none()
+
     # Get the input object IDs from the submission
     res = await session.exec(
         select(InputObjectAssociations)
         .where(InputObjectAssociations.submission_id == submission_id)
-        .order_by(InputObjectAssociations.processing_order)
+        .order_by(InputObjectAssociations.processing_order)  # Important!
     )
     input_associations = res.all()
     input_object_ids = [
         str(association.input_object_id) for association in input_associations
-    ]
+    ]  # In order due to query above
+
+    # Timestamp variable should be the combination of time_seconds_start and
+    # time_seconds_end. If there is only 1 file (input_object_ids), then use
+    # the format is `f"{time_seconds_start}-{time_seconds_end}"`. If there are
+    # multiple files, then the format is
+    # `f"{time_seconds_start}-end,begin-{time_seconds_end}"``
+    if len(input_object_ids) == 1:
+        timestamp = (
+            f"{submission.time_seconds_start}-{submission.time_seconds_end}"
+        )
+    else:
+        timestamp = (
+            f"{submission.time_seconds_start}-end,"
+            f"begin-{submission.time_seconds_end}"
+        )
 
     job = {
         "apiVersion": "run.ai/v1",
@@ -229,6 +249,14 @@ async def execute_submission(
                                 {
                                     "name": "SUBMISSION_ID",
                                     "value": str(submission_id),
+                                },
+                                {
+                                    "name": "TIMESTAMP",
+                                    "value": timestamp,
+                                },
+                                {
+                                    "name": "FPS",
+                                    "value": str(submission.fps),
                                 },
                             ],
                             "resources": {"limits": {"nvidia.com/gpu": 1}},
