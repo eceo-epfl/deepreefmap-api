@@ -20,7 +20,7 @@ class SubmissionBase(SQLModel):
     comment: str | None = Field(default=None)
     processing_has_started: bool = Field(default=False)
     processing_completed_successfully: bool = Field(default=False)
-    fps: float | None = Field(default=None)
+    fps: int | None = Field(default=None)
     time_seconds_start: int | None = Field(default=None)
     time_seconds_end: int | None = Field(default=None)
 
