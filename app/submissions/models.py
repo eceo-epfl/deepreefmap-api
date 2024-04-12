@@ -1,8 +1,13 @@
-from sqlmodel import SQLModel, Field, Column, Relationship, UniqueConstraint
+from sqlmodel import (
+    SQLModel,
+    Field,
+    Column,
+    Relationship,
+    UniqueConstraint,
+    JSON,
+)
 from uuid import uuid4, UUID
-from typing import Any, TYPE_CHECKING
 import datetime
-from fastapi import UploadFile, File
 from app.objects.models import (
     InputObjectAssociations,
     InputObjectAssociationsRead,
@@ -44,11 +49,11 @@ class Submission(SubmissionBase, table=True):
         index=True,
     )
 
-    inputs: list[InputObject] = Relationship(
-        back_populates="submissions",
-        link_model=InputObjectAssociations,
-        sa_relationship_kwargs={"lazy": "selectin"},
-    )
+    # inputs: list[InputObject] = Relationship(
+    #     back_populates="submissions",
+    #     link_model=InputObjectAssociations,
+    #     sa_relationship_kwargs={"lazy": "selectin"},
+    # )
 
     input_associations: list[InputObjectAssociations] = Relationship(
         back_populates="submission",

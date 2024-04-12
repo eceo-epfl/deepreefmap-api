@@ -1,35 +1,280 @@
-from fastapi import Depends, APIRouter, HTTPException
+from fastapi import Depends, APIRouter, HTTPException, Request, Query
 from app.db import get_session, AsyncSession
 from app.objects.models import (
     InputObject,
     InputObjectRead,
     InputObjectUpdate,
 )
-from app.objects.service import get_s3, S3Connection
+from app.objects.service import get_s3
 from app.config import config
 from fastapi import File, UploadFile
 from uuid import UUID
 from fastapi import Depends, APIRouter, Query, Response, HTTPException, Body
-from sqlmodel import select
+from sqlmodel import select, update
 from app.db import get_session, AsyncSession
 from uuid import UUID
 from sqlalchemy import func
 import json
 from typing import Any
-import boto3
-from app.objects.service import get_s3, S3Connection
+from aioboto3 import Session as S3Session
 from app.config import config
-from fastapi import File, UploadFile
+from fastapi import File, UploadFile, Header
 from kubernetes import client, config as k8s_config
+import os
+import asyncio
 
 router = APIRouter()
+
+
+@router.post("/upload")
+async def upload_file(
+    upload_length: int = Header(..., alias="Upload-Length"),
+    content_type: str = Header(..., alias="Content-Type"),
+    session: AsyncSession = Depends(get_session),
+    s3: S3Session = Depends(get_s3),
+) -> str:
+    # Handle chunked file upload
+    try:
+        object = InputObject(size_bytes=upload_length)
+        session.add(object)
+
+        await session.commit()
+        await session.refresh(object)
+        print("OBJECT", object)
+
+        key = f"{config.S3_PREFIX}/inputs/{str(object.id)}"
+        # Create multipart upload and add the upload id to the object
+        response = await s3.create_multipart_upload(
+            Bucket=config.S3_BUCKET_ID,
+            Key=key,
+        )
+        print("RESPONSE", response)
+        # Wait for the response to return the upload id
+        # await asyncio.sleep(1)
+        object.upload_id = response["UploadId"]
+        await session.commit()
+    except Exception as e:
+        print(e)
+        await session.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to create object",
+        )
+
+    return str(object.id)
+
+
+@router.patch("/upload")
+async def upload_chunk(
+    request: Request,
+    patch: str = Query(...),
+    s3: S3Session = Depends(get_s3),
+    session: AsyncSession = Depends(get_session),
+    upload_offset: int = Header(..., alias="Upload-Offset"),
+    upload_length: int = Header(..., alias="Upload-Length"),
+    upload_name: str = Header(..., alias="Upload-Name"),
+    content_type: str = Header(..., alias="Content-Type"),
+    content_length: int = Header(..., alias="Content-Length"),
+):
+    """Handle chunked file upload"""
+
+    # Clean " from patch
+    patch = patch.replace('"', "")
+
+    # Get the object prefix from the DB
+    query = select(InputObject).where(InputObject.id == patch)
+    res = await session.exec(query)
+    object = res.one_or_none()
+    if not object:
+        raise HTTPException(
+            status_code=404,
+            detail="Object not found",
+        )
+
+    final_part = False
+    # Get the part number from the offset
+    if upload_length - upload_offset == content_length:
+        # The last object is probably not the same size as the other parts, so
+        # we need to check if the part number is the last part
+        last_part = object.parts[-1]
+        part_number = last_part["PartNumber"] + 1
+    else:
+        # Calculate the part number from the division of the offset by the part
+        # size (content-length) from the upload length
+        part_number = (int(upload_offset) // int(content_length)) + 1
+
+    if upload_offset + content_length == upload_length:
+        final_part = True
+
+    # Upload the chunk to S3
+    key = f"{config.S3_PREFIX}/inputs/{str(object.id)}"
+
+    data = await request.body()
+
+    print(
+        f"Working on part number {part_number}, chunk {upload_offset} "
+        f"{int(upload_offset)+int(content_length)} "
+        f"of {upload_length} bytes ({int(upload_offset)/int(upload_length)*100}%)"
+    )
+    try:
+        part = await s3.upload_part(
+            Bucket=config.S3_BUCKET_ID,
+            Key=key,
+            UploadId=object.upload_id,
+            PartNumber=part_number,
+            Body=data,
+        )
+        if object.parts is None or not object.parts:
+            object.parts = []
+
+        object.parts += [
+            {
+                "PartNumber": part_number,
+                "ETag": part["ETag"],
+                "Size": content_length,
+                "Offset": upload_offset,
+                "Length": content_length,
+            }
+        ]
+        update_query = (
+            update(InputObject)
+            .where(InputObject.id == object.id)
+            .values(parts=object.parts, filename=upload_name)
+        )
+        await session.exec(update_query)
+        await session.commit()
+
+        if final_part:
+            # Complete the multipart upload
+
+            # Simplify the parts list to only include the PartNumber and ETag
+            parts_list = [
+                {"PartNumber": x["PartNumber"], "ETag": x["ETag"]}
+                for x in object.parts
+            ]
+            res = await s3.complete_multipart_upload(
+                Bucket=config.S3_BUCKET_ID,
+                Key=key,
+                UploadId=object.upload_id,
+                MultipartUpload={"Parts": parts_list},
+            )
+
+            update_query = (
+                update(InputObject)
+                .where(InputObject.id == object.id)
+                .values(hash_md5sum=res["ETag"].strip('"'))
+            )
+            await session.exec(update_query)
+            await session.commit()
+
+            print("COMPLETED UPLOAD", res)
+    except Exception as e:
+        print(e)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to upload file to S3: {e}",
+        )
+
+    await session.refresh(object)
+    return object
+
+
+@router.head("/upload")
+async def check_uploaded_chunks(
+    response: Response,
+    patch: str = Query(...),
+    session: AsyncSession = Depends(get_session),
+):
+    """Responds with the offset of the next expected chunk"""
+    # Get the InputObject from the DB
+    # Clean " from patch
+    patch = patch.replace('"', "")
+    query = select(InputObject).where(InputObject.id == patch)
+    res = await session.exec(query)
+    object = res.one_or_none()
+    if not object:
+        raise HTTPException(
+            status_code=404,
+            detail="Object not found",
+        )
+
+    # Calculate the next expected offset
+    next_expected_offset = 0
+    if object.parts:
+        last_part = object.parts[-1]
+        next_expected_offset = last_part["Offset"] + last_part["Length"]
+    print("NEXT OFFSET", next_expected_offset)
+
+    # Return headers with Upload-Offset
+    response.headers["Upload-Offset"] = str(next_expected_offset)
+
+    return
+
+
+@router.delete("/upload")
+async def delete_upload(
+    body: str = Body(...),
+    session: AsyncSession = Depends(get_session),
+    s3: S3Session = Depends(get_s3),
+):
+    """Delete the upload object from S3 and the database"""
+    object_id = body.replace('"', "")
+
+    # Get object from DB
+    query = select(InputObject).where(InputObject.id == object_id)
+    res = await session.exec(query)
+    object = res.one_or_none()
+    if not object:
+        raise HTTPException(
+            status_code=404,
+            detail="Object not found",
+        )
+
+    # Delete chunked object from S3
+    await s3.abort_multipart_upload(
+        Bucket=config.S3_BUCKET_ID,
+        Key=f"{config.S3_PREFIX}/inputs/{object.id}",
+        UploadId=object.upload_id,
+    )
+
+
+# async def delete_object(
+#     object_id: UUID,
+#     session: AsyncSession = Depends(get_session),
+#     filter: dict[str, str] | None = None,
+#     s3: S3Session = Depends(get_s3),
+# ) -> None:
+#     """Delete an object by id"""
+#     res = await session.exec(
+#         select(InputObject).where(InputObject.id == object_id)
+#     )
+#     object = res.one_or_none()
+
+#     if object:
+#         # Delete object from S3
+#         print(f"DELETING OBJECT FROM S3: {object.id}")
+#         try:
+#             res = await s3.delete_object(
+#                 Bucket=config.S3_BUCKET_ID,
+#                 Key=f"{config.S3_PREFIX}/{object.id}/inputs/{object.filename}",
+#             )
+#         except Exception as e:
+#             raise HTTPException(
+#                 status_code=500,
+#                 detail=f"Failed to delete object from S3: {e}",
+#             )
+
+#         await session.delete(object)
+#         await session.commit()
+
+#     return res
 
 
 @router.post("/inputs", response_model=InputObjectRead)
 async def create_object(
     file: UploadFile = File(...),
     session: AsyncSession = Depends(get_session),
-    s3: S3Connection = Depends(get_s3),
+    s3: S3Session = Depends(get_s3),
 ) -> None:
     """Creates an input object record from one or more video files"""
 
@@ -46,7 +291,7 @@ async def create_object(
         content = await file.read()
 
         # Write bytes to S3 bucket
-        response = s3.session.put_object(
+        response = await s3.put_object(
             Bucket=config.S3_BUCKET_ID,
             Key=f"{prefix}/{object.id}",
             Body=content,
@@ -69,7 +314,7 @@ async def create_object(
         print(f"Failed to upload file to S3: {e}")
         await session.delete(object)
         await session.commit()
-        s3.session.delete_objects(
+        await s3.delete_objects(
             Bucket=config.S3_BUCKET_ID,
             Delete={"Objects": [{"Key": f"{prefix}/{object.id}"}]},
         )
@@ -84,7 +329,7 @@ async def create_object(
 @router.get("/{object_id}", response_model=InputObjectRead)
 async def get_object(
     session: AsyncSession = Depends(get_session),
-    s3: S3Connection = Depends(get_s3),
+    s3: S3Session = Depends(get_s3),
     *,
     object_id: UUID,
 ) -> InputObjectRead:
@@ -215,7 +460,7 @@ async def delete_object(
     object_id: UUID,
     session: AsyncSession = Depends(get_session),
     filter: dict[str, str] | None = None,
-    s3: S3Connection = Depends(get_s3),
+    s3: S3Session = Depends(get_s3),
 ) -> None:
     """Delete an object by id"""
     res = await session.exec(
@@ -227,7 +472,7 @@ async def delete_object(
         # Delete object from S3
         print(f"DELETING OBJECT FROM S3: {object.id}")
         try:
-            res = s3.session.delete_object(
+            res = await s3.delete_object(
                 Bucket=config.S3_BUCKET_ID,
                 Key=f"{config.S3_PREFIX}/{object.id}/inputs/{object.filename}",
             )

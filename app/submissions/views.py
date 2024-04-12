@@ -17,10 +17,15 @@ from sqlalchemy import func
 import json
 from typing import Any
 import boto3
-from app.objects.service import get_s3, S3Connection
+from app.objects.service import get_s3
+from aioboto3 import Session as S3Session
 from app.config import config
 from kubernetes.client import CoreV1Api, ApiClient
-from app.submissions.k8s import get_k8s_v1, get_k8s_custom_objects
+from app.submissions.k8s import (
+    get_k8s_v1,
+    get_k8s_custom_objects,
+    get_jobs_for_submission,
+)
 import random
 
 router = APIRouter()
@@ -67,7 +72,7 @@ async def get_jobs(
 @router.get("/{submission_id}", response_model=SubmissionRead)
 async def get_submission(
     session: AsyncSession = Depends(get_session),
-    s3: S3Connection = Depends(get_s3),
+    s3: S3Session = Depends(get_s3),
     k8s: CoreV1Api = Depends(get_k8s_v1),
     *,
     submission_id: UUID,
@@ -80,6 +85,7 @@ async def get_submission(
 
     # Get all jobs from k8s then filter out the ones that belong to the
     # submission_id
+
     jobs = k8s.list_namespaced_pod(config.NAMESPACE)
     jobs = jobs.items
     jobs = [job for job in jobs if str(submission_id) in job.metadata.name]
@@ -97,7 +103,7 @@ async def get_submission(
 
     # Get the file outputs in the S3 bucket
 
-    response = s3.session.list_objects_v2(
+    response = await s3.list_objects_v2(
         Bucket=config.S3_BUCKET_ID,
         Prefix=f"{config.S3_PREFIX}/outputs/{str(submission_id)}/",
     )
@@ -122,7 +128,7 @@ async def get_submission(
     job_status = sorted(
         job_status,
         key=lambda x: (
-            x.time_started if x.time_started else "0000-00-00T00:00:00Z"
+            x.time_started if x.time_started else "9999-00-00T00:00:00Z"
         ),
         reverse=True,
     )
@@ -137,14 +143,14 @@ async def get_submission(
 @router.get("/{submission_id}/{filename}", response_class=StreamingResponse)
 async def get_submission_output_file(
     session: AsyncSession = Depends(get_session),
-    s3: S3Connection = Depends(get_s3),
+    s3: S3Session = Depends(get_s3),
     *,
     submission_id: UUID,
     filename: str,
 ) -> StreamingResponse:
     """With the given submission ID and filename, returns the file from S3"""
 
-    response = s3.session.get_object(
+    response = await s3.get_object(
         Bucket=config.S3_BUCKET_ID,
         Key=f"{config.S3_PREFIX}/outputs/{str(submission_id)}/{filename}",
     )
@@ -155,7 +161,7 @@ async def get_submission_output_file(
 async def execute_submission(
     submission_id: UUID,
     session: AsyncSession = Depends(get_session),
-    s3: S3Connection = Depends(get_s3),
+    s3: S3Session = Depends(get_s3),
     k8s: CoreV1Api = Depends(get_k8s_custom_objects),
 ) -> Any:
 
@@ -284,7 +290,7 @@ async def execute_submission(
 async def get_submissions(
     response: Response,
     session: AsyncSession = Depends(get_session),
-    s3: S3Connection = Depends(get_s3),
+    s3: S3Session = Depends(get_s3),
     *,
     filter: str = Query(None),
     sort: str = Query(None),
