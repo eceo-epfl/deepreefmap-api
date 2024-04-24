@@ -1,7 +1,5 @@
-from pydantic import BaseModel, field_validator
-import datetime
 from sqlmodel import SQLModel, Field, UniqueConstraint, Relationship
-from uuid import uuid4, UUID
+from uuid import UUID
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:

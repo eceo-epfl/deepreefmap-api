@@ -1,4 +1,3 @@
-from pydantic import BaseModel, field_validator
 import datetime
 from sqlmodel import (
     SQLModel,
@@ -10,14 +9,8 @@ from sqlmodel import (
     BigInteger,
 )
 from uuid import uuid4, UUID
-from typing import TYPE_CHECKING, Any
-from app.objects.models.links import (
-    InputObjectAssociations,
-    InputObjectAssociationsRead,
-)
-
-if TYPE_CHECKING:
-    from app.submissions.models import Submission
+from typing import Any
+from app.objects.models.links import InputObjectAssociations
 
 
 class InputObjectBase(SQLModel):
@@ -29,6 +22,14 @@ class InputObjectBase(SQLModel):
     notes: str | None = Field(default=None)
     parts: list[dict[str, Any]] = Field(default=[], sa_column=Column(JSON))
     upload_id: str | None = Field(default=None)
+    fps: float | None = Field(default=None)
+    time_seconds: float | None = Field(default=None)
+    frame_count: int | None = Field(default=None)
+    processing_has_started: bool = Field(default=False)
+    processing_completed_successfully: bool = Field(default=False)
+    processing_message: str | None = Field(default=None)
+    last_part_received_utc: datetime.datetime | None = Field(default=None)
+    all_parts_received: bool = Field(default=False)
 
 
 class InputObject(InputObjectBase, table=True):

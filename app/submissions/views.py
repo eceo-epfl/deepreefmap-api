@@ -1,4 +1,4 @@
-from fastapi import Depends, APIRouter, Query, Response, HTTPException, Body
+from fastapi import Depends, APIRouter, Query, Response, HTTPException
 from sqlmodel import select
 from app.db import get_session, AsyncSession
 from app.submissions.models import (
@@ -24,7 +24,6 @@ from kubernetes.client import CoreV1Api, ApiClient
 from app.submissions.k8s import (
     get_k8s_v1,
     get_k8s_custom_objects,
-    get_jobs_for_submission,
 )
 import random
 
@@ -226,7 +225,7 @@ async def execute_submission(
                     "containers": [
                         {
                             "name": "rcp-test-ejthomas",
-                            "image": "registry.rcp.epfl.ch/rcp-test-ejthomas/deepreefmap:latest",
+                            "image": "registry.rcp.epfl.ch/rcp-test-ejthomas/deepreefmap:latest",  # noqa
                             "env": [
                                 {
                                     "name": "S3_URL",
@@ -291,6 +290,7 @@ async def get_submissions(
     response: Response,
     session: AsyncSession = Depends(get_session),
     s3: S3Session = Depends(get_s3),
+    k8s: CoreV1Api = Depends(get_k8s_v1),
     *,
     filter: str = Query(None),
     sort: str = Query(None),
@@ -363,6 +363,35 @@ async def get_submissions(
     results = await session.exec(query)
     submissions = results.all()
 
+    submissions = [
+        SubmissionRead.model_validate(submission) for submission in submissions
+    ]
+    # Get all jobs from k8s then filter out the ones that belong to the
+    # submission_id
+
+    jobs = k8s.list_namespaced_pod(config.NAMESPACE)
+    jobs = jobs.items
+    for submission in submissions:
+        jobs = [job for job in jobs if str(submission.id) in job.metadata.name]
+        job_status = []
+        for job in jobs:
+            api = ApiClient()
+            job_data = api.sanitize_for_serialization(job)
+            job_status.append(
+                KubernetesExecutionStatus(
+                    submission_id=job_data["metadata"].get("name"),
+                    status=job_data["status"].get("phase"),
+                    time_started=job_data["status"].get("startTime"),
+                )
+            )
+        job_status = sorted(
+            job_status,
+            key=lambda x: (
+                x.time_started if x.time_started else "9999-00-00T00:00:00Z"
+            ),
+            reverse=True,
+        )
+        submission.run_status = job_status
     response.headers["Content-Range"] = (
         f"submissions {start}-{end}/{total_count}"
     )
@@ -383,26 +412,49 @@ async def create_submission(
             status_code=400,
             detail="At least one file must be provided",
         )
-    inputs = []
+
     # For each file in submission.inputs, query for the object in objects
     # table with the same ID.
+    inputs = []
     for input_file in submission.inputs:
+        # Gather all inputs first, to double check they exist before creation
         res = await session.exec(
-            select(InputObject).where(InputObject.id == input_file)
+            select(InputObject).where(InputObject.id == input_file.object_id)
         )
         object_db = res.one_or_none()
         if not object_db:
             raise HTTPException(
                 status_code=404,
-                detail="Input object not found",
+                detail=f"Input object not found ({input_file.object_id})",
             )
-        inputs.append(object_db)
+        inputs.append((object_db, input_file.processing_order))
 
-    # Create new submission DB object with no fields
-    submission = Submission(inputs=inputs)
+    # Create submission object
+    submission = Submission.model_validate(submission)
 
+    # Get the minimum fps out of all input files
+    submission.fps = min([input_file.fps for input_file, _ in inputs])
+    submission.time_seconds_start = 0  # Always 0 as default
+
+    # End time is duration of time of last file ordered by processing_order
+    submission.time_seconds_end = inputs[-1][0].time_seconds
     session.add(submission)
+
     await session.commit()
+    await session.refresh(submission)  # Get ID of submission
+
+    # Create Input Association links
+    for input_file, processing_order in inputs:
+        input_obj = InputObjectAssociations(
+            input_object_id=input_file.id,
+            submission_id=submission.id,
+            processing_order=processing_order,
+        )
+        session.add(input_obj)
+        await session.commit()
+        await session.refresh(input_obj)
+
+    # await session.commit()
     await session.refresh(submission)
 
     return submission
@@ -429,8 +481,6 @@ async def update_submission(
         # Handle nested objects in input_associations
         if field == "input_associations":
             for input_association in value:
-                print(input_association)
-
                 res_input = await session.exec(
                     select(InputObjectAssociations)
                     .where(
@@ -475,11 +525,15 @@ async def delete_submission(
     filter: dict[str, str] | None = None,
 ) -> None:
     """Delete an submission by id"""
-    res = await session.execute(
+    res = await session.exec(
         select(Submission).where(Submission.id == submission_id)
     )
-    submission = res.scalars().one_or_none()
+    submission = res.one_or_none()
 
+    # Delete associations
+    for association in submission.input_associations:
+        await session.delete(association)
+        await session.commit()
     if submission:
         await session.delete(submission)
         await session.commit()

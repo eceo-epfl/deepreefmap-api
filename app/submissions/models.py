@@ -1,22 +1,16 @@
 from sqlmodel import (
     SQLModel,
     Field,
-    Column,
     Relationship,
     UniqueConstraint,
-    JSON,
 )
 from uuid import uuid4, UUID
 import datetime
 from app.objects.models import (
+    InputObject,
     InputObjectAssociations,
     InputObjectAssociationsRead,
 )
-
-# if TYPE_CHECKING:
-from app.objects.models import InputObject
-
-# from app.objects.models import S3Object
 
 
 class SubmissionBase(SQLModel):
@@ -49,20 +43,20 @@ class Submission(SubmissionBase, table=True):
         index=True,
     )
 
-    # inputs: list[InputObject] = Relationship(
-    #     back_populates="submissions",
-    #     link_model=InputObjectAssociations,
-    #     sa_relationship_kwargs={"lazy": "selectin"},
-    # )
-
     input_associations: list[InputObjectAssociations] = Relationship(
         back_populates="submission",
         sa_relationship_kwargs={"lazy": "selectin"},
     )
 
 
+class InputObjectLinks(SQLModel):
+    object_id: UUID
+    processing_order: int
+
+
 class SubmissionCreate(SubmissionBase):
-    inputs: list[UUID] = []  # A list of UUIDs corresponding to InputObject IDs
+    # A list of UUIDs corresponding to InputObject IDs
+    inputs: list[InputObjectLinks] = []
 
 
 class KubernetesExecutionStatus(SQLModel):

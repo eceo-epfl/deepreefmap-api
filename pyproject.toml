@@ -24,6 +24,7 @@ kubernetes = "^29.0.0"
 pydantic-settings = "^2.2.1"
 streaming-form-data = "^1.15.0"
 aioboto3 = "^12.3.0"
+opencv-python-headless = "^4.9.0.80"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.3"

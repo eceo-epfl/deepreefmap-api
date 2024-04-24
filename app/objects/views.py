@@ -1,41 +1,49 @@
-from fastapi import Depends, APIRouter, HTTPException, Request, Query
-from app.db import get_session, AsyncSession
-from app.objects.models import (
-    InputObject,
-    InputObjectRead,
-    InputObjectUpdate,
+from fastapi import (
+    Depends,
+    APIRouter,
+    Request,
+    Query,
+    BackgroundTasks,
+    Header,
+    Response,
+    HTTPException,
 )
+from app.db import get_session, AsyncSession
+from app.objects.models import InputObject, InputObjectRead, InputObjectUpdate
 from app.objects.service import get_s3
 from app.config import config
-from fastapi import File, UploadFile
 from uuid import UUID
-from fastapi import Depends, APIRouter, Query, Response, HTTPException, Body
 from sqlmodel import select, update
-from app.db import get_session, AsyncSession
-from uuid import UUID
 from sqlalchemy import func
-import json
 from typing import Any
 from aioboto3 import Session as S3Session
-from app.config import config
-from fastapi import File, UploadFile, Header
-from kubernetes import client, config as k8s_config
-import os
-import asyncio
+from app.objects.utils import (
+    generate_video_statistics,
+    delete_incomplete_object,
+)
+import datetime
+import json
 
 router = APIRouter()
 
 
-@router.post("/upload")
+@router.post("")
 async def upload_file(
     upload_length: int = Header(..., alias="Upload-Length"),
     content_type: str = Header(..., alias="Content-Type"),
     session: AsyncSession = Depends(get_session),
     s3: S3Session = Depends(get_s3),
+    *,
+    background_tasks: BackgroundTasks,
 ) -> str:
     # Handle chunked file upload
     try:
-        object = InputObject(size_bytes=upload_length)
+        object = InputObject(
+            size_bytes=upload_length,
+            all_parts_received=False,
+            last_part_received_utc=datetime.datetime.now(),
+            processing_message="Upload started",
+        )
         session.add(object)
 
         await session.commit()
@@ -48,11 +56,17 @@ async def upload_file(
             Bucket=config.S3_BUCKET_ID,
             Key=key,
         )
-        print("RESPONSE", response)
+
         # Wait for the response to return the upload id
-        # await asyncio.sleep(1)
         object.upload_id = response["UploadId"]
         await session.commit()
+
+        # Create a worker to monitor stale uploads and delete if outside
+        # of threshold in config
+        background_tasks.add_task(
+            delete_incomplete_object, object.id, s3, session
+        )
+
     except Exception as e:
         print(e)
         await session.rollback()
@@ -64,7 +78,7 @@ async def upload_file(
     return str(object.id)
 
 
-@router.patch("/upload")
+@router.patch("")
 async def upload_chunk(
     request: Request,
     patch: str = Query(...),
@@ -75,6 +89,8 @@ async def upload_chunk(
     upload_name: str = Header(..., alias="Upload-Name"),
     content_type: str = Header(..., alias="Content-Type"),
     content_length: int = Header(..., alias="Content-Length"),
+    *,
+    background_tasks: BackgroundTasks,
 ):
     """Handle chunked file upload"""
 
@@ -114,7 +130,8 @@ async def upload_chunk(
     print(
         f"Working on part number {part_number}, chunk {upload_offset} "
         f"{int(upload_offset)+int(content_length)} "
-        f"of {upload_length} bytes ({int(upload_offset)/int(upload_length)*100}%)"
+        f"of {upload_length} bytes "
+        f"({int(upload_offset)/int(upload_length)*100}%)"
     )
     try:
         part = await s3.upload_part(
@@ -139,7 +156,11 @@ async def upload_chunk(
         update_query = (
             update(InputObject)
             .where(InputObject.id == object.id)
-            .values(parts=object.parts, filename=upload_name)
+            .values(
+                parts=object.parts,
+                filename=upload_name,
+                last_part_received_utc=datetime.datetime.now(),
+            )
         )
         await session.exec(update_query)
         await session.commit()
@@ -162,12 +183,19 @@ async def upload_chunk(
             update_query = (
                 update(InputObject)
                 .where(InputObject.id == object.id)
-                .values(hash_md5sum=res["ETag"].strip('"'))
+                .values(
+                    last_part_received_utc=datetime.datetime.now(),
+                    all_parts_received=True,
+                )
             )
             await session.exec(update_query)
             await session.commit()
 
-            print("COMPLETED UPLOAD", res)
+            # Create background task to generate video statistics
+            background_tasks.add_task(
+                generate_video_statistics, object.id, s3, session
+            )
+
     except Exception as e:
         print(e)
         raise HTTPException(
@@ -179,7 +207,7 @@ async def upload_chunk(
     return object
 
 
-@router.head("/upload")
+@router.head("")
 async def check_uploaded_chunks(
     response: Response,
     patch: str = Query(...),
@@ -203,7 +231,6 @@ async def check_uploaded_chunks(
     if object.parts:
         last_part = object.parts[-1]
         next_expected_offset = last_part["Offset"] + last_part["Length"]
-    print("NEXT OFFSET", next_expected_offset)
 
     # Return headers with Upload-Offset
     response.headers["Upload-Offset"] = str(next_expected_offset)
@@ -211,119 +238,87 @@ async def check_uploaded_chunks(
     return
 
 
-@router.delete("/upload")
-async def delete_upload(
-    body: str = Body(...),
-    session: AsyncSession = Depends(get_session),
-    s3: S3Session = Depends(get_s3),
-):
-    """Delete the upload object from S3 and the database"""
-    object_id = body.replace('"', "")
-
-    # Get object from DB
-    query = select(InputObject).where(InputObject.id == object_id)
-    res = await session.exec(query)
-    object = res.one_or_none()
-    if not object:
-        raise HTTPException(
-            status_code=404,
-            detail="Object not found",
-        )
-
-    # Delete chunked object from S3
-    await s3.abort_multipart_upload(
-        Bucket=config.S3_BUCKET_ID,
-        Key=f"{config.S3_PREFIX}/inputs/{object.id}",
-        UploadId=object.upload_id,
-    )
-
-
-# async def delete_object(
-#     object_id: UUID,
+# @router.delete("")
+# async def delete_upload(
+#     body: str = Body(...),
 #     session: AsyncSession = Depends(get_session),
-#     filter: dict[str, str] | None = None,
+#     s3: S3Session = Depends(get_s3),
+# ):
+#     """Delete the upload object from S3 and the database"""
+#     object_id = body.replace('"', "")
+
+#     # Get object from DB
+#     query = select(InputObject).where(InputObject.id == object_id)
+#     res = await session.exec(query)
+#     object = res.one_or_none()
+#     if not object:
+#         raise HTTPException(
+#             status_code=404,
+#             detail="Object not found",
+#         )
+
+#     # Delete chunked object from S3
+#     await s3.abort_multipart_upload(
+#         Bucket=config.S3_BUCKET_ID,
+#         Key=f"{config.S3_PREFIX}/inputs/{object.id}",
+#         UploadId=object.upload_id,
+#     )
+
+
+# @router.post("", response_model=InputObjectRead)
+# async def create_object(
+#     file: UploadFile = File(...),
+#     session: AsyncSession = Depends(get_session),
 #     s3: S3Session = Depends(get_s3),
 # ) -> None:
-#     """Delete an object by id"""
-#     res = await session.exec(
-#         select(InputObject).where(InputObject.id == object_id)
-#     )
-#     object = res.one_or_none()
+#     """Creates an input object record from one or more video files"""
 
-#     if object:
-#         # Delete object from S3
-#         print(f"DELETING OBJECT FROM S3: {object.id}")
-#         try:
-#             res = await s3.delete_object(
-#                 Bucket=config.S3_BUCKET_ID,
-#                 Key=f"{config.S3_PREFIX}/{object.id}/inputs/{object.filename}",
-#             )
-#         except Exception as e:
-#             raise HTTPException(
-#                 status_code=500,
-#                 detail=f"Failed to delete object from S3: {e}",
-#             )
+#     # Create new object DB object with no fields
+#     object = InputObject(filename=file.filename)
 
-#         await session.delete(object)
+#     session.add(object)
+#     await session.commit()
+#     await session.refresh(object)
+
+#     # Use the generated DB object ID to create a prefix for the S3 bucket
+#     prefix = f"{config.S3_PREFIX}/inputs"
+#     try:
+#         content = await file.read()
+
+#         # Write bytes to S3 bucket
+#         response = await s3.put_object(
+#             Bucket=config.S3_BUCKET_ID,
+#             Key=f"{prefix}/{object.id}",
+#             Body=content,
+#         )
+#         print(response)
+#         for key, val in response.items():
+#             print(f"Key: {key}, Value: {val}")
+#         # Validate that response is 200: OK
+#         if response["ResponseMetadata"]["HTTPStatusCode"] != 200:
+#             # Error in uploading, raise exception
+#             raise Exception(
+#                 "Failed to upload file to S3: "
+#                 f"{response['ResponseMetadata']}"
+#             )
+#         object.hash_md5sum = response["ETag"].strip('"')
+#         object.size_bytes = len(content)
 #         await session.commit()
 
-#     return res
+#     except Exception as e:
+#         print(f"Failed to upload file to S3: {e}")
+#         await session.delete(object)
+#         await session.commit()
+#         await s3.delete_objects(
+#             Bucket=config.S3_BUCKET_ID,
+#             Delete={"Objects": [{"Key": f"{prefix}/{object.id}"}]},
+#         )
+#         raise HTTPException(
+#             status_code=500,
+#             detail=f"Failed to upload file to S3: {e}",
+#         )
 
-
-@router.post("/inputs", response_model=InputObjectRead)
-async def create_object(
-    file: UploadFile = File(...),
-    session: AsyncSession = Depends(get_session),
-    s3: S3Session = Depends(get_s3),
-) -> None:
-    """Creates an input object record from one or more video files"""
-
-    # Create new object DB object with no fields
-    object = InputObject(filename=file.filename)
-
-    session.add(object)
-    await session.commit()
-    await session.refresh(object)
-
-    # Use the generated DB object ID to create a prefix for the S3 bucket
-    prefix = f"{config.S3_PREFIX}/inputs"
-    try:
-        content = await file.read()
-
-        # Write bytes to S3 bucket
-        response = await s3.put_object(
-            Bucket=config.S3_BUCKET_ID,
-            Key=f"{prefix}/{object.id}",
-            Body=content,
-        )
-        print(response)
-        for key, val in response.items():
-            print(f"Key: {key}, Value: {val}")
-        # Validate that response is 200: OK
-        if response["ResponseMetadata"]["HTTPStatusCode"] != 200:
-            # Error in uploading, raise exception
-            raise Exception(
-                "Failed to upload file to S3: "
-                f"{response['ResponseMetadata']}"
-            )
-        object.hash_md5sum = response["ETag"].strip('"')
-        object.size_bytes = len(content)
-        await session.commit()
-
-    except Exception as e:
-        print(f"Failed to upload file to S3: {e}")
-        await session.delete(object)
-        await session.commit()
-        await s3.delete_objects(
-            Bucket=config.S3_BUCKET_ID,
-            Delete={"Objects": [{"Key": f"{prefix}/{object.id}"}]},
-        )
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to upload file to S3: {e}",
-        )
-
-    return object
+#     return object
 
 
 @router.get("/{object_id}", response_model=InputObjectRead)
@@ -337,11 +332,46 @@ async def get_object(
 
     query = select(InputObject).where(InputObject.id == object_id)
     res = await session.exec(query)
-    object = res.one_or_none()
-    object_dict = object.model_dump() if object else {}
+    obj = res.one_or_none()
 
+    return obj
+
+
+@router.post("/{object_id}", response_model=Any)
+async def regenerate_statistics(
+    session: AsyncSession = Depends(get_session),
+    s3: S3Session = Depends(get_s3),
+    *,
+    object_id: UUID,
+    background_tasks: BackgroundTasks,
+) -> InputObjectRead:
+    """Get an object by id"""
+
+    query = select(InputObject).where(InputObject.id == str(object_id))
     res = await session.exec(query)
-    return InputObjectRead(**object_dict)
+    obj = res.one_or_none()
+
+    # Remove fields from vid statistics and set completed to false
+
+    update_query = (
+        update(InputObject)
+        .where(InputObject.id == object_id)
+        .values(
+            fps=None,
+            time_seconds=None,
+            frame_count=None,
+            processing_completed_successfully=False,
+        )
+    )
+    await session.exec(update_query)
+    await session.commit()
+    if not obj:
+        raise HTTPException(status_code=404, detail="Object not found")
+
+    # Create background task to generate video statistics
+    background_tasks.add_task(generate_video_statistics, obj.id, s3, session)
+
+    return True
 
 
 @router.get("", response_model=list[InputObjectRead])
