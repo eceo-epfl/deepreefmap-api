@@ -372,9 +372,11 @@ async def get_submissions(
     jobs = k8s.list_namespaced_pod(config.NAMESPACE)
     jobs = jobs.items
     for submission in submissions:
-        jobs = [job for job in jobs if str(submission.id) in job.metadata.name]
+        submission_jobs = [
+            job for job in jobs if str(submission.id) in job.metadata.name
+        ]
         job_status = []
-        for job in jobs:
+        for job in submission_jobs:
             api = ApiClient()
             job_data = api.sanitize_for_serialization(job)
             job_status.append(
