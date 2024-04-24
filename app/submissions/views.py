@@ -24,6 +24,7 @@ from kubernetes.client import CoreV1Api, ApiClient
 from app.submissions.k8s import (
     get_k8s_v1,
     get_k8s_custom_objects,
+    delete_job,
 )
 import random
 
@@ -66,6 +67,20 @@ async def get_jobs(
 
     api = ApiClient()
     return api.sanitize_for_serialization(ret.items)
+
+
+@router.delete("/kubernetes/jobs/{job_id}")
+async def delete_runai_job(
+    job_id: str,
+) -> Any:
+
+    # Remove the two digits at the end of the job ID to get the submission ID
+    # For example deepreef-463230f2-82c7-439c-831b-ef8c0b201ee1-56966-0-0
+    # should be deepreef-463230f2-82c7-439c-831b-ef8c0b201ee1-56966
+    job_id = "-".join(job_id.split("-")[:-2])
+    print(job_id)
+
+    delete_job(job_id)
 
 
 @router.get("/{submission_id}", response_model=SubmissionRead)

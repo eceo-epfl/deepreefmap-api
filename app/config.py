@@ -31,6 +31,7 @@ class Config(BaseSettings):
 
     # Kubernetes
     NAMESPACE: str = "runai-enacit-deepreefmap-dev"
+    PROJECT: str = "enacit-deepreefmap-dev"  # Differs slightly if using runai
     CONFIG_FILE: str = "/app/.kube/config.yaml"
 
     @root_validator(pre=True)

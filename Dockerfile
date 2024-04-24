@@ -11,6 +11,9 @@ RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/s
     install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl && \
     kubectl version --client --output=yaml
 
+RUN wget --content-disposition https://rcp-caas-test.rcp.epfl.ch/cli/linux && \
+    chmod +x runai && \
+    mv runai /usr/local/bin
 ENV POETRY_VERSION=1.6.1
 RUN pip install "poetry==$POETRY_VERSION"
 ENV PYTHONPATH="$PYTHONPATH:/app"

@@ -6,6 +6,7 @@ from app.submissions.models import (
 )
 from typing import Any
 from kubernetes.client import CoreV1Api, ApiClient
+import subprocess
 
 
 def get_k8s_v1() -> client.CoreV1Api:
@@ -38,3 +39,12 @@ def get_jobs_for_submission(
         )
 
     return job_status
+
+
+def delete_job(job_name: str):
+    """Executes the runai command to delete a job"""
+
+    # Use subprocess to use the runai interface to delete job
+    subprocess.run(["runai", "delete", "job", "-p", config.PROJECT, job_name])
+
+    return
