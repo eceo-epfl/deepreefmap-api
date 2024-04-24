@@ -22,8 +22,8 @@ class Config(BaseSettings):
     S3_BUCKET_ID: str
     S3_ACCESS_KEY: str
     S3_SECRET_KEY: str
-    INCOMPLETE_OBJECT_TIMEOUT_SECONDS: int = 60
-    INCOMPLETE_OBJECT_CHECK_INTERVAL: int = 5
+    INCOMPLETE_OBJECT_TIMEOUT_SECONDS: int = 900  # 15 minutes
+    INCOMPLETE_OBJECT_CHECK_INTERVAL: int = 120  # 2 minutes
 
     # Key to prefix to all assets in the S3 bucket. Should be distinct to the
     # deployment as to avoid conflicts
