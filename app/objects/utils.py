@@ -114,9 +114,6 @@ async def delete_incomplete_object(
         if obj.all_parts_received:
             return
 
-        await asyncio.sleep(config.INCOMPLETE_OBJECT_CHECK_INTERVAL)
-        await db.refresh(obj)
-
         update_query = (
             update(InputObject)
             .where(InputObject.id == input_object_id)
@@ -130,6 +127,10 @@ async def delete_incomplete_object(
         )
         await db.exec(update_query)
         await db.commit()
+
+        # Recheck the object
+        await asyncio.sleep(config.INCOMPLETE_OBJECT_CHECK_INTERVAL)
+        await db.refresh(obj)
 
         time_since_last_part = (
             datetime.datetime.now() - obj.last_part_received_utc
