@@ -10,12 +10,12 @@ import subprocess
 
 
 def get_k8s_v1() -> client.CoreV1Api:
-    k8s_config.load_kube_config(config_file=config.CONFIG_FILE)
+    k8s_config.load_kube_config(config_file=config.K8S_CONFIG_FILE)
     return client.CoreV1Api()
 
 
 def get_k8s_custom_objects() -> client.CoreV1Api:
-    k8s_config.load_kube_config(config_file=config.CONFIG_FILE)
+    k8s_config.load_kube_config(config_file=config.K8S_CONFIG_FILE)
     return client.CustomObjectsApi()
 
 
@@ -45,6 +45,16 @@ def delete_job(job_name: str):
     """Executes the runai command to delete a job"""
 
     # Use subprocess to use the runai interface to delete job
-    subprocess.run(["runai", "delete", "job", "-p", config.PROJECT, job_name])
+    subprocess.run(
+        [
+            f"KUBECONFIG={config.K8S_CONFIG_FILE}",  # State location of kube cfg
+            "runai",
+            "delete",
+            "job",
+            "-p",
+            config.PROJECT,
+            job_name,
+        ]
+    )
 
     return
