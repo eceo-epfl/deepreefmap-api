@@ -5,6 +5,7 @@ from functools import lru_cache
 
 class Config(BaseSettings):
     API_V1_PREFIX: str = "/v1"
+    DEFAULT_SUBMISSION_FPS: int = 15
 
     # PostGIS settings
     DB_HOST: str
