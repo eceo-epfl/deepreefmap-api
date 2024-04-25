@@ -7,15 +7,16 @@ from app.submissions.models import (
 from typing import Any
 from kubernetes.client import CoreV1Api, ApiClient
 import subprocess
+import os
 
 
 def get_k8s_v1() -> client.CoreV1Api:
-    k8s_config.load_kube_config(config_file=config.K8S_CONFIG_FILE)
+    k8s_config.load_kube_config(config_file=config.KUBECONFIG)
     return client.CoreV1Api()
 
 
 def get_k8s_custom_objects() -> client.CoreV1Api:
-    k8s_config.load_kube_config(config_file=config.K8S_CONFIG_FILE)
+    k8s_config.load_kube_config(config_file=config.KUBECONFIG)
     return client.CustomObjectsApi()
 
 
@@ -43,18 +44,21 @@ def get_jobs_for_submission(
 
 def delete_job(job_name: str):
     """Executes the runai command to delete a job"""
+    env = os.environ.copy()
+    env["KUBECONFIG"] = config.KUBECONFIG
 
     # Use subprocess to use the runai interface to delete job
     subprocess.run(
         [
-            f"KUBECONFIG={config.K8S_CONFIG_FILE}",  # State location of kube cfg
             "runai",
             "delete",
             "job",
             "-p",
             config.PROJECT,
             job_name,
-        ]
+        ],
+        env=env,
+        check=True,
     )
 
     return
