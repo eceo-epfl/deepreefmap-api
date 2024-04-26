@@ -31,6 +31,11 @@ class InputObjectAssociations(InputObjectAssociationsBase, table=True):
             "submission_id",
             name="no_same_link_constraint",
         ),
+        UniqueConstraint(
+            "processing_order",
+            "submission_id",
+            name="no_same_order_constraint",
+        ),
     )
 
     iterator: int = Field(
@@ -53,4 +58,7 @@ class InputObjectAssociations(InputObjectAssociationsBase, table=True):
 
 class InputObjectAssociationsRead(InputObjectAssociationsBase):
     input_object: "InputObject"
-    # submission: "Submission" = None
+
+
+class InputObjectAssociationsUpdate(InputObjectAssociationsBase):
+    pass

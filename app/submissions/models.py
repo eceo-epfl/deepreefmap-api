@@ -10,6 +10,7 @@ from app.objects.models import (
     InputObject,
     InputObjectAssociations,
     InputObjectAssociationsRead,
+    InputObjectAssociationsUpdate,
 )
 
 
@@ -43,20 +44,26 @@ class Submission(SubmissionBase, table=True):
         index=True,
     )
 
+    inputs: list[InputObject] = Relationship(
+        back_populates="submissions",
+        sa_relationship_kwargs={"lazy": "selectin"},
+        link_model=InputObjectAssociations,
+    )
+
     input_associations: list[InputObjectAssociations] = Relationship(
         back_populates="submission",
         sa_relationship_kwargs={"lazy": "selectin"},
     )
 
 
-class InputObjectLinks(SQLModel):
-    object_id: UUID
-    processing_order: int
+# class InputObjectLinks(SQLModel):
+#     input_object_id: UUID
+#     processing_order: int
 
 
 class SubmissionCreate(SubmissionBase):
     # A list of UUIDs corresponding to InputObject IDs
-    inputs: list[InputObjectLinks] = []
+    input_associations: list[InputObjectAssociations] = []
 
 
 class KubernetesExecutionStatus(SQLModel):
@@ -83,7 +90,7 @@ class SubmissionRead(SubmissionBase):
 
 
 class SubmissionUpdate(SubmissionBase):
-    input_associations: list[InputObjectAssociationsRead]
+    input_associations: list[InputObjectAssociationsUpdate]
 
 
 class SubmissionJobLogRead(SQLModel):

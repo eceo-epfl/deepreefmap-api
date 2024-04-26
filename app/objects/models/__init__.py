@@ -4,4 +4,8 @@ from .inputs import (  # noqa
     InputObjectUpdate,
 )
 from .s3 import S3Object  # noqa
-from .links import InputObjectAssociations, InputObjectAssociationsRead  # noqa
+from .links import (  # noqa
+    InputObjectAssociations,
+    InputObjectAssociationsRead,
+    InputObjectAssociationsUpdate,
+)

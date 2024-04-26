@@ -1,5 +1,5 @@
 from fastapi import Depends, APIRouter, Query, Response, HTTPException
-from sqlmodel import select
+from sqlmodel import select, update
 from app.db import get_session, AsyncSession
 from app.submissions.models import (
     Submission,
@@ -421,81 +421,77 @@ async def create_submission(
     submission: SubmissionCreate,
     session: AsyncSession = Depends(get_session),
     s3: boto3.client = Depends(get_s3),
-) -> None:
+) -> SubmissionRead:
     """Creates a submission record from one or more video files"""
 
-    if len(submission.inputs) == 0:
+    if len(submission.input_associations) == 0:
         raise HTTPException(
             status_code=400,
             detail="At least one file must be provided",
         )
 
+    # Create submission object to get submission_id to link to input objects
+    obj = Submission(
+        name=submission.name,
+        description=submission.description,
+        fps=config.DEFAULT_SUBMISSION_FPS,
+    )
+
+    session.add(obj)
+    await session.commit()
+    await session.refresh(obj)
+
     # For each file in submission.inputs, query for the object in objects
     # table with the same ID.
-    inputs = []
-    for input_file in submission.inputs:
+    for input_file in submission.input_associations:
         # Gather all inputs first, to double check they exist before creation
         res = await session.exec(
-            select(InputObject).where(InputObject.id == input_file.object_id)
+            select(InputObject).where(
+                InputObject.id == input_file.input_object_id
+            )
         )
-        object_db = res.one_or_none()
-        if not object_db:
+
+        input_object_obj = res.one_or_none()
+        if not input_object_obj:
             raise HTTPException(
                 status_code=404,
-                detail=f"Input object not found ({input_file.object_id})",
+                detail=f"Object not found ({input_file.input_object_id})",
             )
-        inputs.append((object_db, input_file.processing_order))
 
-    # Create submission object
-    submission = Submission.model_validate(submission)
-
-    # Get the minimum fps out of all input files
-    submission.fps = min([input_file.fps for input_file, _ in inputs])
-    submission.time_seconds_start = 0  # Always 0 as default
-
-    # End time is duration of time of last file ordered by processing_order
-    submission.time_seconds_end = inputs[-1][0].time_seconds
-    session.add(submission)
-
-    await session.commit()
-    await session.refresh(submission)  # Get ID of submission
-
-    # Create Input Association links
-    for input_file, processing_order in inputs:
-        input_obj = InputObjectAssociations(
-            input_object_id=input_file.id,
-            submission_id=submission.id,
-            processing_order=processing_order,
+        input_association_obj = InputObjectAssociations(
+            input_object_id=input_object_obj.id,
+            submission_id=obj.id,
+            processing_order=input_file.processing_order,
         )
-        session.add(input_obj)
+        session.add(input_association_obj)
+
         await session.commit()
-        await session.refresh(input_obj)
+        await session.refresh(input_association_obj)
 
-    # await session.commit()
-    await session.refresh(submission)
-
-    return submission
+    return obj
 
 
-@router.put("/{submission_id}", response_model=SubmissionRead)
+@router.put("/{submission_id}", response_model=Any)
 async def update_submission(
     submission_id: UUID,
     submission_update: SubmissionUpdate,
     session: AsyncSession = Depends(get_session),
 ) -> SubmissionRead:
-
+    """Update an submission by id"""
     res = await session.exec(
         select(Submission).where(Submission.id == submission_id)
     )
     obj = res.one_or_none()
+
     if not obj:
         raise HTTPException(status_code=404, detail="Submission not found")
 
+    # res.sqlmodel_update(obj, submission_update)
     submission_data = submission_update.model_dump(exclude_unset=True)
 
     # Update the fields from the request
     for field, value in submission_data.items():
-        # Handle nested objects in input_associations
+        # Handle nested objects in inputs
         if field == "input_associations":
             for input_association in value:
                 res_input = await session.exec(
@@ -505,23 +501,25 @@ async def update_submission(
                         == input_association["input_object_id"]
                     )
                     .where(
-                        InputObjectAssociations.submission_id
-                        == input_association["submission_id"]
+                        InputObjectAssociations.submission_id == submission_id
                     )
                 )
                 input_obj = res_input.one_or_none()
+
                 if not input_obj:
                     raise HTTPException(
                         status_code=404, detail="Input Object not found"
                     )
+
                 for input_field, input_value in input_association.items():
                     # Only allow processing_order to be updated
                     if input_field == "processing_order":
                         setattr(input_obj, input_field, input_value)
                         print(
-                            f"Updating Field: input_associations.{input_field}"
+                            f"Updating Field: inputs.{input_field}"
                             f" Value: {input_value}"
                         )
+
                 session.add(input_obj)
                 await session.commit()
         else:

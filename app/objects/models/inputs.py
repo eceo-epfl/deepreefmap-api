@@ -56,6 +56,12 @@ class InputObject(InputObjectBase, table=True):
         sa_relationship_kwargs={"lazy": "selectin"},
     )
 
+    submissions: list["Submission"] = Relationship(
+        back_populates="inputs",
+        sa_relationship_kwargs={"lazy": "selectin"},
+        link_model=InputObjectAssociations,
+    )
+
     class Config:
         arbitrary_types_allowed = True
 
