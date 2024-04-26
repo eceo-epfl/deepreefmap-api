@@ -240,7 +240,10 @@ async def execute_submission(
                     "containers": [
                         {
                             "name": "rcp-test-ejthomas",
-                            "image": "registry.rcp.epfl.ch/rcp-test-ejthomas/deepreefmap:latest",  # noqa
+                            "image": (
+                                f"{config.DEEPREEFMAP_IMAGE}:"
+                                f"{config.DEEPREEFMAP_IMAGE_TAG}"
+                            ),  # noqa
                             "env": [
                                 {
                                     "name": "S3_URL",

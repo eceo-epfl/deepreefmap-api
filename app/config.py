@@ -34,6 +34,10 @@ class Config(BaseSettings):
     NAMESPACE: str = "runai-enacit-deepreefmap-dev"
     PROJECT: str = "enacit-deepreefmap-dev"  # Differs slightly if using runai
     KUBECONFIG: str = "/app/.kube/config.yaml"
+    DEEPREEFMAP_IMAGE: str = (
+        "registry.rcp.epfl.ch/rcp-test-ejthomas/deepreefmap"
+    )
+    DEEPREEFMAP_IMAGE_TAG: str = "0.1.0"
 
     @root_validator(pre=True)
     def form_db_url(cls, values: dict) -> dict:
