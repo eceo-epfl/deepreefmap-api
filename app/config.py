@@ -9,7 +9,7 @@ class Config(BaseSettings):
 
     # PostGIS settings
     DB_HOST: str
-    DB_PORT: int  # 5432
+    DB_PORT: int
     DB_USER: str
     DB_PASSWORD: str
 
@@ -23,21 +23,19 @@ class Config(BaseSettings):
     S3_BUCKET_ID: str
     S3_ACCESS_KEY: str
     S3_SECRET_KEY: str
-    INCOMPLETE_OBJECT_TIMEOUT_SECONDS: int = 900  # 15 minutes
-    INCOMPLETE_OBJECT_CHECK_INTERVAL: int = 120  # 2 minutes
+    INCOMPLETE_OBJECT_TIMEOUT_SECONDS: int | str
+    INCOMPLETE_OBJECT_CHECK_INTERVAL: int | str
 
     # Key to prefix to all assets in the S3 bucket. Should be distinct to the
     # deployment as to avoid conflicts
     S3_PREFIX: str
 
     # Kubernetes
-    NAMESPACE: str = "runai-enacit-deepreefmap-dev"
-    PROJECT: str = "enacit-deepreefmap-dev"  # Differs slightly if using runai
+    NAMESPACE: str
+    PROJECT: str
     KUBECONFIG: str = "/app/.kube/config.yaml"
-    DEEPREEFMAP_IMAGE: str = (
-        "registry.rcp.epfl.ch/rcp-test-ejthomas/deepreefmap"
-    )
-    DEEPREEFMAP_IMAGE_TAG: str = "0.1.0"
+    DEEPREEFMAP_IMAGE: str
+    DEEPREEFMAP_IMAGE_TAG: str
 
     @root_validator(pre=True)
     def form_db_url(cls, values: dict) -> dict:
