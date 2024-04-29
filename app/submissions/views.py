@@ -10,6 +10,7 @@ from app.submissions.models import (
     KubernetesExecutionStatus,
     SubmissionFileOutputs,
 )
+from app.submissions.utils import populate_percentage_covers
 from fastapi.responses import StreamingResponse
 from app.objects.models import InputObject, InputObjectAssociations
 from uuid import UUID
@@ -146,6 +147,29 @@ async def get_submission(
         ),
         reverse=True,
     )
+
+    # If the latest job status is "Succeeded", and there are two output files
+    # in the S3 bucket, "percentage_covers.json", and "class_to_color.json",
+    # then combine the two JSONS into a single object to generate a Pie Chart
+    # in the frontend
+    if (
+        job_status
+        and (job_status[0].status == "Succeeded")
+        and (len(output_files) > 0)
+        and (
+            config.FILENAME_PERCENTAGE_COVERS
+            in [output.filename for output in output_files]
+        )
+        and (
+            config.FILENAME_CLASS_TO_COLOR
+            in [output.filename for output in output_files]
+        )
+    ):
+        submission = await populate_percentage_covers(
+            submission_id=submission_id,
+            session=session,
+            s3=s3,
+        )
 
     model_obj = SubmissionRead.model_validate(submission)
     model_obj.run_status = job_status
@@ -412,6 +436,33 @@ async def get_submissions(
             reverse=True,
         )
         submission.run_status = job_status
+
+        # If the latest job status is "Succeeded", and there is no data for
+        # percentage_covers in the DB, then populate the percentage_covers
+        # field with the data from the S3 bucket. This is done in case
+        # an export is req'd in the frontend before the processing is
+        # completed (which is mostly done when a single submission is viewed).
+        # This will ensure consistency in the frontend and exports..
+        if (
+            job_status
+            and (job_status[0].status == "Succeeded")
+            and (len(submission.percentage_covers) == 0)
+            and (len(submission.file_outputs) > 0)
+            and (
+                config.FILENAME_PERCENTAGE_COVERS
+                in [output.filename for output in submission.file_outputs]
+            )
+            and (
+                config.FILENAME_CLASS_TO_COLOR
+                in [output.filename for output in submission.file_outputs]
+            )
+        ):
+            submission = await populate_percentage_covers(
+                submission_id=submission.id,
+                session=session,
+                s3=s3,
+            )
+
     response.headers["Content-Range"] = (
         f"submissions {start}-{end}/{total_count}"
     )

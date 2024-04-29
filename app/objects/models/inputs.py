@@ -9,8 +9,11 @@ from sqlmodel import (
     BigInteger,
 )
 from uuid import uuid4, UUID
-from typing import Any
+from typing import Any, TYPE_CHECKING
 from app.objects.models.links import InputObjectAssociations
+
+if TYPE_CHECKING:
+    from app.submissions.models import Submission
 
 
 class InputObjectBase(SQLModel):
@@ -20,7 +23,6 @@ class InputObjectBase(SQLModel):
     )
     hash_md5sum: str | None = Field(default=None)
     notes: str | None = Field(default=None)
-    parts: list[dict[str, Any]] = Field(default=[], sa_column=Column(JSON))
     upload_id: str | None = Field(default=None)
     fps: float | None = Field(default=None)
     time_seconds: float | None = Field(default=None)
@@ -61,6 +63,7 @@ class InputObject(InputObjectBase, table=True):
         sa_relationship_kwargs={"lazy": "selectin"},
         link_model=InputObjectAssociations,
     )
+    parts: list[dict[str, Any]] = Field(default=[], sa_column=Column(JSON))
 
     class Config:
         arbitrary_types_allowed = True
@@ -69,7 +72,7 @@ class InputObject(InputObjectBase, table=True):
 class InputObjectRead(InputObjectBase):
     id: UUID
     time_added_utc: datetime.datetime
-    parts: Any
+    input_associations: list[InputObjectAssociations | None] = []
 
 
 class InputObjectUpdate(InputObjectBase):

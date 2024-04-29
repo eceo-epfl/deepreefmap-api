@@ -2,6 +2,8 @@ from sqlmodel import (
     SQLModel,
     Field,
     Relationship,
+    JSON,
+    Column,
     UniqueConstraint,
 )
 from uuid import uuid4, UUID
@@ -12,6 +14,7 @@ from app.objects.models import (
     InputObjectAssociationsRead,
     InputObjectAssociationsUpdate,
 )
+from typing import Any
 
 
 class SubmissionBase(SQLModel):
@@ -23,6 +26,9 @@ class SubmissionBase(SQLModel):
     fps: int | None = Field(default=None)
     time_seconds_start: int | None = Field(default=None)
     time_seconds_end: int | None = Field(default=None)
+    percentage_covers: list[dict[str, Any]] = Field(
+        default=[], sa_column=Column(JSON)
+    )
 
 
 class Submission(SubmissionBase, table=True):
