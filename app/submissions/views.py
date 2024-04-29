@@ -148,29 +148,6 @@ async def get_submission(
         reverse=True,
     )
 
-    # If the latest job status is "Succeeded", and there are two output files
-    # in the S3 bucket, "percentage_covers.json", and "class_to_color.json",
-    # then combine the two JSONS into a single object to generate a Pie Chart
-    # in the frontend
-    if (
-        job_status
-        and (job_status[0].status == "Succeeded")
-        and (len(output_files) > 0)
-        and (
-            config.FILENAME_PERCENTAGE_COVERS
-            in [output.filename for output in output_files]
-        )
-        and (
-            config.FILENAME_CLASS_TO_COLOR
-            in [output.filename for output in output_files]
-        )
-    ):
-        submission = await populate_percentage_covers(
-            submission_id=submission_id,
-            session=session,
-            s3=s3,
-        )
-
     model_obj = SubmissionRead.model_validate(submission)
     model_obj.run_status = job_status
     model_obj.file_outputs = output_files
@@ -442,21 +419,7 @@ async def get_submissions(
         # field with the data from the S3 bucket. This is done in case
         # an export is req'd in the frontend before the processing is
         # completed (which is mostly done when a single submission is viewed).
-        # This will ensure consistency in the frontend and exports..
-        if (
-            job_status
-            and (job_status[0].status == "Succeeded")
-            and (len(submission.percentage_covers) == 0)
-            and (len(submission.file_outputs) > 0)
-            and (
-                config.FILENAME_PERCENTAGE_COVERS
-                in [output.filename for output in submission.file_outputs]
-            )
-            and (
-                config.FILENAME_CLASS_TO_COLOR
-                in [output.filename for output in submission.file_outputs]
-            )
-        ):
+        if job_status and (job_status[0].status == "Succeeded"):
             submission = await populate_percentage_covers(
                 submission_id=submission.id,
                 session=session,
