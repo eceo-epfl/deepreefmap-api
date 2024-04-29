@@ -320,6 +320,10 @@ async def get_objects(
                     count_query = count_query.filter(
                         getattr(InputObject, field) == value
                     )
+            elif isinstance(value, bool):
+                count_query = count_query.filter(
+                    getattr(InputObject, field) == value
+                )
             else:
                 count_query = count_query.filter(
                     getattr(InputObject, field).like(f"%{str(value)}%")
@@ -345,13 +349,11 @@ async def get_objects(
             if field == "id" or field == "object_id":
                 if isinstance(value, list):
                     for v in value:
-                        count_query = count_query.filter(
-                            getattr(InputObject, field) == v
-                        )
+                        query = query.filter(getattr(InputObject, field) == v)
                 else:
-                    count_query = count_query.filter(
-                        getattr(InputObject, field) == value
-                    )
+                    query = query.filter(getattr(InputObject, field) == value)
+            elif isinstance(value, bool):
+                query = query.filter(getattr(InputObject, field) == value)
             else:
                 query = query.filter(
                     getattr(InputObject, field).like(f"%{str(value)}%")

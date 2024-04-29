@@ -15,6 +15,9 @@ from app.objects.models import (
     InputObjectAssociationsUpdate,
 )
 from typing import Any
+from typing_extensions import Self
+
+from pydantic import model_validator
 
 
 class SubmissionBase(SQLModel):
@@ -29,6 +32,28 @@ class SubmissionBase(SQLModel):
     percentage_covers: list[dict[str, Any]] = Field(
         default=[], sa_column=Column(JSON)
     )
+
+    @model_validator(mode="after")
+    def validate_time_seconds(
+        self: Self,
+    ) -> Self:
+        if self.time_seconds_start and self.time_seconds_end:
+            if self.time_seconds_start > self.time_seconds_end:
+                raise ValueError("Start time must be less than end time")
+        if self.time_seconds_start and self.time_seconds_start < 0:
+            raise ValueError("Start time must be >= 0")
+        if self.time_seconds_end and self.time_seconds_end < 0:
+            raise ValueError("End time must be >= 0")
+        return self
+
+    @model_validator(mode="after")
+    def validate_fps(
+        self: Self,
+    ) -> Self:
+        if self.fps:
+            if self.fps <= 0:
+                raise ValueError("fps must be greater than 0")
+        return self
 
 
 class Submission(SubmissionBase, table=True):
@@ -60,11 +85,6 @@ class Submission(SubmissionBase, table=True):
         back_populates="submission",
         sa_relationship_kwargs={"lazy": "selectin"},
     )
-
-
-# class InputObjectLinks(SQLModel):
-#     input_object_id: UUID
-#     processing_order: int
 
 
 class SubmissionCreate(SubmissionBase):
