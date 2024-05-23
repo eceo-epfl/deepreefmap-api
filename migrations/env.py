@@ -7,8 +7,13 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from app.config import config as app_config
 from alembic import context
 from sqlmodel import SQLModel
+from geoalchemy2 import alembic_helpers
 from app.submissions.models import Submission  # noqa: F401
-from app.objects.models import InputObject, InputObjectAssociations
+from app.objects.models import (  # noqa: F401
+    InputObject,
+    InputObjectAssociations,
+)
+from app.transects.models import Transect  # noqa: F401
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -50,6 +55,9 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        include_object=alembic_helpers.include_object,
+        process_revision_directives=alembic_helpers.writer,
+        render_item=alembic_helpers.render_item,
     )
 
     with context.begin_transaction():
@@ -60,6 +68,9 @@ def do_run_migrations(connection: Connection) -> None:
     context.configure(
         connection=connection,
         target_metadata=target_metadata,
+        include_object=alembic_helpers.include_object,
+        process_revision_directives=alembic_helpers.writer,
+        render_item=alembic_helpers.render_item,
     )
 
     with context.begin_transaction():
