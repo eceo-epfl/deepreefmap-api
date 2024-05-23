@@ -29,6 +29,9 @@ geoalchemy2 = "^0.15.1"
 shapely = "^2.0.4"
 pyproj = "^3.6.1"
 geos = "^0.2.3"
+fiona = "^1.9.6"
+pandas = "^2.2.2"
+scikit-learn = "^1.5.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.3"

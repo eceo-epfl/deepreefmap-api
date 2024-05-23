@@ -14,14 +14,19 @@ from app.objects.models import (
     InputObjectAssociationsRead,
     InputObjectAssociationsUpdate,
 )
-from typing import Any
+from typing import Any, TYPE_CHECKING
 from typing_extensions import Self
-
 from pydantic import model_validator
+from geoalchemy2 import WKBElement
+import shapely
+
+if TYPE_CHECKING:
+    from app.transects.models import Transect
 
 
 class SubmissionBase(SQLModel):
     name: str | None = Field(default=None, index=True)
+    owner: UUID | None = Field(default=None, nullable=True)
     description: str | None = Field(default=None)
     comment: str | None = Field(default=None)
     processing_has_started: bool = Field(default=False)
@@ -32,6 +37,7 @@ class SubmissionBase(SQLModel):
     percentage_covers: list[dict[str, Any]] = Field(
         default=[], sa_column=Column(JSON)
     )
+    transect_id: UUID | None = Field(default=None, foreign_key="transect.id")
 
     @model_validator(mode="after")
     def validate_time_seconds(
@@ -86,6 +92,11 @@ class Submission(SubmissionBase, table=True):
         sa_relationship_kwargs={"lazy": "selectin"},
     )
 
+    transect: "Transect" = Relationship(
+        back_populates="submissions",
+        sa_relationship_kwargs={"lazy": "selectin"},
+    )
+
 
 class SubmissionCreate(SubmissionBase):
     # A list of UUIDs corresponding to InputObject IDs
@@ -107,12 +118,61 @@ class SubmissionFileOutputs(SQLModel):
     url: str
 
 
+class TransectRead(SQLModel):
+    id: UUID
+    name: str
+    description: str | None = None
+    geom: Any | None = None
+
+    latitude_start: float | None = None
+    longitude_start: float | None = None
+
+    latitude_end: float | None = None
+    longitude_end: float | None = None
+
+    @model_validator(mode="after")
+    def convert_wkb_to_lat_long(
+        cls,
+        values: "TransectRead",
+    ) -> dict:
+        """Form the lat/lon geom from the start and end of the line string"""
+
+        if isinstance(values.geom, WKBElement):
+            if values.geom is not None:
+                shapely_obj = shapely.wkb.loads(str(values.geom))
+                if shapely_obj is not None:
+                    mapping = shapely.geometry.mapping(shapely_obj)
+                    values.latitude_start = mapping["coordinates"][0][1]
+                    values.longitude_start = mapping["coordinates"][0][0]
+                    values.latitude_end = mapping["coordinates"][-1][1]
+                    values.longitude_end = mapping["coordinates"][-1][0]
+                    values.geom = mapping
+
+        elif isinstance(values.geom, dict):
+            if values.geom is not None:
+                values.latitude_start = values.geom["coordinates"][0][1]
+                values.longitude_start = values.geom["coordinates"][0][0]
+                values.latitude_end = values.geom["coordinates"][-1][1]
+                values.longitude_end = values.geom["coordinates"][-1][0]
+
+                values.geom = values.geom
+
+        else:
+            values.latitude_start = None
+            values.longitude_start = None
+            values.latitude_end = None
+            values.longitude_end = None
+
+        return values
+
+
 class SubmissionRead(SubmissionBase):
     id: UUID
     time_added_utc: datetime.datetime
     run_status: list[KubernetesExecutionStatus] = []
     input_associations: list[InputObjectAssociationsRead] = []
     file_outputs: list[SubmissionFileOutputs] = []
+    transect: TransectRead | None = None
 
 
 class SubmissionUpdate(SubmissionBase):

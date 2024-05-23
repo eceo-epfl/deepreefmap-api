@@ -5,11 +5,18 @@ from app.transects.models import (
     TransectUpdate,
 )
 from app.db import get_session, AsyncSession
-from fastapi import Depends, APIRouter, Query, Response, HTTPException
-from sqlmodel import select
+from fastapi import (
+    Depends,
+    APIRouter,
+    Query,
+    Response,
+    HTTPException,
+    Request,
+    Header,
+)
 from uuid import UUID
-from typing import Any
 from app.crud import CRUD
+from typing import Annotated
 
 router = APIRouter()
 crud = CRUD(Transect, TransectRead, TransectCreate, TransectUpdate)
@@ -63,9 +70,7 @@ async def get_one(
 
 
 @router.get("/{transect_id}", response_model=TransectRead)
-async def get_Transect(
-    # session: AsyncSession = Depends(get_session),
-    # *,
+async def get_transect(
     obj: CRUD = Depends(get_one),
 ) -> TransectRead:
     """Get a transect by id"""
@@ -74,7 +79,7 @@ async def get_Transect(
 
 
 @router.get("", response_model=list[TransectRead])
-async def get_all_Transects(
+async def get_all_transects(
     response: Response,
     transects: CRUD = Depends(get_data),
     total_count: int = Depends(get_count),
@@ -85,14 +90,16 @@ async def get_all_Transects(
 
 
 @router.post("", response_model=TransectRead)
-async def create_Transect(
+async def create_transect(
+    response: Response,
+    user_id: Annotated[UUID, Header()],
     transect: TransectCreate,
     session: AsyncSession = Depends(get_session),
 ) -> TransectRead:
     """Creates a transect data record"""
 
     obj = Transect.model_validate(transect)
-
+    obj.owner = user_id
     session.add(obj)
 
     await session.commit()
@@ -102,7 +109,7 @@ async def create_Transect(
 
 
 @router.put("/{transect_id}", response_model=TransectRead)
-async def update_Transect(
+async def update_transect(
     transect_update: TransectUpdate,
     *,
     transect: TransectRead = Depends(get_one),
@@ -121,7 +128,7 @@ async def update_Transect(
 
 
 @router.delete("/{transect_id}")
-async def delete_Transect(
+async def delete_transect(
     transect: TransectRead = Depends(get_one),
     session: AsyncSession = Depends(get_session),
 ) -> None:

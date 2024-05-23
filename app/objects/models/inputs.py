@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 
 class InputObjectBase(SQLModel):
     filename: str | None = Field(default=None, index=True)
+    owner: UUID | None = Field(default=None, nullable=True)
     size_bytes: int | None = Field(
         default=None, sa_column=Column(BigInteger())
     )

@@ -1,4 +1,4 @@
-from fastapi import Depends, APIRouter, Query, Response, HTTPException
+from fastapi import Depends, APIRouter, Query, Response, HTTPException, Header
 from sqlmodel import select, update
 from app.db import get_session, AsyncSession
 from app.submissions.models import (
@@ -16,7 +16,7 @@ from app.objects.models import InputObject, InputObjectAssociations
 from uuid import UUID
 from sqlalchemy import func
 import json
-from typing import Any
+from typing import Any, Annotated
 import boto3
 from app.objects.service import get_s3
 from aioboto3 import Session as S3Session
@@ -28,6 +28,7 @@ from app.submissions.k8s import (
     delete_job,
 )
 import random
+
 
 router = APIRouter()
 
@@ -436,8 +437,8 @@ async def get_submissions(
 @router.post("", response_model=SubmissionRead)
 async def create_submission(
     submission: SubmissionCreate,
+    user_id: Annotated[UUID, Header()],
     session: AsyncSession = Depends(get_session),
-    s3: boto3.client = Depends(get_s3),
 ) -> SubmissionRead:
     """Creates a submission record from one or more video files"""
 
@@ -452,6 +453,7 @@ async def create_submission(
         name=submission.name,
         description=submission.description,
         fps=config.DEFAULT_SUBMISSION_FPS,
+        owner=user_id,
     )
 
     session.add(obj)

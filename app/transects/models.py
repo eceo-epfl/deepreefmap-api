@@ -15,10 +15,12 @@ import shapely
 
 if TYPE_CHECKING:
     from app.objects.models.inputs import InputObject
+    from app.submissions.models import Submission
 
 
 class TransectBase(SQLModel):
     name: str
+    owner: UUID | None = Field(default=None, nullable=True)
     description: str | None = None
     length: float | None = None
     depth: float | None = None
@@ -63,6 +65,9 @@ class Transect(TransectBase, table=True):
     inputs: list["InputObject"] = Relationship(
         back_populates="transect", sa_relationship_kwargs={"lazy": "selectin"}
     )
+    submissions: list["Submission"] = Relationship(
+        back_populates="transect", sa_relationship_kwargs={"lazy": "selectin"}
+    )
 
 
 class TransectCreate(TransectBase):
@@ -101,6 +106,7 @@ class TransectRead(TransectBase):
     longitude_end: float | None = None
 
     inputs: list[Any] = []
+    submissions: list[Any] = []
 
     @model_validator(mode="after")
     def convert_wkb_to_lat_long(
