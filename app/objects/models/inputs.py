@@ -130,7 +130,7 @@ class InputObjectRead(InputObjectBase):
     id: UUID
     time_added_utc: datetime.datetime
     input_associations: list[InputObjectAssociations | None] = []
-    transect: TransectRead = None
+    transect: TransectRead | None = None
 
 
 class InputObjectUpdate(InputObjectBase):
