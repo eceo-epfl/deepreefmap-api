@@ -15,7 +15,7 @@ from app.config import config
 from uuid import UUID
 from sqlmodel import select, update
 from sqlalchemy import func
-from typing import Any
+from typing import Any, Annotated
 from aioboto3 import Session as S3Session
 from app.objects.utils import (
     generate_video_statistics,
@@ -29,8 +29,11 @@ router = APIRouter()
 
 @router.post("")
 async def upload_file(
+    request: Request,
+    user_id: Annotated[UUID, Header()],
     upload_length: int = Header(..., alias="Upload-Length"),
     content_type: str = Header(..., alias="Content-Type"),
+    transect_id: str = Header(None, alias="Transect-Id"),
     session: AsyncSession = Depends(get_session),
     s3: S3Session = Depends(get_s3),
     *,
@@ -43,12 +46,13 @@ async def upload_file(
             all_parts_received=False,
             last_part_received_utc=datetime.datetime.now(),
             processing_message="Upload started",
+            transect_id=transect_id,
+            owner=user_id,
         )
         session.add(object)
 
         await session.commit()
         await session.refresh(object)
-        print("OBJECT", object)
 
         key = f"{config.S3_PREFIX}/inputs/{str(object.id)}"
         # Create multipart upload and add the upload id to the object

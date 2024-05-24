@@ -6,7 +6,7 @@ from typing import AsyncGenerator
 
 
 engine = create_async_engine(
-    config.DB_URL, echo=True, future=True, pool_pre_ping=True
+    config.DB_URL, echo=False, future=True, pool_pre_ping=True
 )
 async_session = sessionmaker(
     engine, class_=AsyncSession, expire_on_commit=False

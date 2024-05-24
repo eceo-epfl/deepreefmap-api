@@ -33,7 +33,7 @@ async def populate_percentage_covers(
         response = await s3.get_object(
             Bucket=config.S3_BUCKET_ID,
             Key=f"{config.S3_PREFIX}/outputs/{str(submission_id)}/"
-            "percentage_coverss.json",
+            "percentage_covers.json",
         )
         # Get response body
         percentage_covers = await response["Body"].read()
