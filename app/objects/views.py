@@ -46,7 +46,7 @@ async def upload_file(
             all_parts_received=False,
             last_part_received_utc=datetime.datetime.now(),
             processing_message="Upload started",
-            transect_id=transect_id,
+            transect_id=transect_id if transect_id else None,
             owner=user_id,
         )
         session.add(object)
