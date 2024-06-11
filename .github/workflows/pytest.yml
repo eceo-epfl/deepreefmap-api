@@ -1,25 +1,67 @@
-name: Unit test
+name: CI
 
-on: push
+on: [push, pull_request]
 
 jobs:
   test:
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgis/postgis
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: psql
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
-    - uses: actions/checkout@v3
-    - name: Set up Python 3.11
-      uses: actions/setup-python@v3
-      with:
-        python-version: "3.11"
+      - name: Checkout code
+        uses: actions/checkout@v2
 
-    - name: Install poetry
-      uses: abatilo/actions-poetry@v2
-      with:
-        poetry-version: 1.6.1
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.12'
 
-    - name: Install project dependencies
-      run: poetry install
+      - name: Install dependencies
+        run: |
+          pip install poetry==1.8.2
+          poetry config virtualenvs.create false
+          poetry install --no-interaction
 
-    - name: Run pytest 
-      run: poetry run pytest
+      - name: Wait for PostGIS to be ready
+        run: |
+          for i in {1..30}; do
+            pg_isready -h localhost -p 5432 -U postgres && break || sleep 1
+          done
+
+      - name: Run tests
+        run: pytest --maxfail=1 --disable-warnings -q
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: postgres
+          DB_PASSWORD: psql
+          DB_NAME: postgres
+          DB_PREFIX: postgresql+asyncpg
+          S3_URL: https://s3.example.com
+          S3_BUCKET_ID: 1234
+          S3_ACCESS_KEY: 1234
+          S3_SECRET_KEY: 1234
+          S3_PREFIX: test-only
+          KUBERNETES_SERVICE_HOST: test-only
+          KUBERNETES_SERVICE_PORT: 443
+          KUBECONFIG: /dev/null
+          INCOMPLETE_OBJECT_CHECK_INTERVAL: ${INCOMPLETE_OBJECT_CHECK_INTERVAL}
+          INCOMPLETE_OBJECT_TIMEOUT_SECONDS: ${INCOMPLETE_OBJECT_TIMEOUT_SECONDS}
+          DEEPREEFMAP_IMAGE_TAG: ${DEEPREEFMAP_IMAGE_TAG}
+          DEEPREEFMAP_IMAGE: ${DEEPREEFMAP_IMAGE}
+          NAMESPACE: ${NAMESPACE}
+          PROJECT: ${PROJECT}
