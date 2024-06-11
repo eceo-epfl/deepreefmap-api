@@ -14,4 +14,4 @@ RUN poetry install --no-interaction
 
 COPY app /app/app
 
-ENTRYPOINT ptw --now .
+ENTRYPOINT ptw --now --disable-warnings .

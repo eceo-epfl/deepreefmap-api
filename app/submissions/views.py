@@ -89,14 +89,22 @@ async def get_submission(
     session: AsyncSession = Depends(get_session),
     s3: S3Session = Depends(get_s3),
     k8s: CoreV1Api = Depends(get_k8s_v1),
+    user_id: UUID = Header(...),
+    user_is_admin: bool = Header(...),
     *,
     submission_id: UUID,
 ) -> SubmissionRead:
     """Get an submission by id"""
 
     query = select(Submission).where(Submission.id == submission_id)
+    if not user_is_admin:
+        query = query.where(Submission.owner == user_id)
+
     res = await session.exec(query)
     submission = res.one_or_none()
+
+    if not submission:
+        raise HTTPException(status_code=404, detail="Submission not found")
 
     # Get all jobs from k8s then filter out the ones that belong to the
     # submission_id
@@ -158,12 +166,26 @@ async def get_submission(
 async def get_submission_output_file(
     session: AsyncSession = Depends(get_session),
     s3: S3Session = Depends(get_s3),
+    user_id: UUID = Header(...),
+    user_is_admin: bool = Header(...),
     *,
     submission_id: UUID,
     filename: str,
 ) -> StreamingResponse:
     """With the given submission ID and filename, returns the file from S3"""
 
+    # Make sure the user has access to the submission
+    query = select(Submission).where(Submission.id == submission_id)
+    if not user_is_admin:
+        query = query.where(Submission.owner == user_id)
+
+    res = await session.exec(query)
+    submission = res.one_or_none()
+
+    if not submission:
+        raise HTTPException(status_code=404, detail="Submission not found")
+
+    # Get the file from the S3 bucket
     response = await s3.get_object(
         Bucket=config.S3_BUCKET_ID,
         Key=f"{config.S3_PREFIX}/outputs/{str(submission_id)}/{filename}",
@@ -174,6 +196,8 @@ async def get_submission_output_file(
 @router.post("/{submission_id}/execute", response_model=Any)
 async def execute_submission(
     submission_id: UUID,
+    user_id: UUID = Header(...),
+    user_is_admin: bool = Header(...),
     session: AsyncSession = Depends(get_session),
     s3: S3Session = Depends(get_s3),
     k8s: CoreV1Api = Depends(get_k8s_custom_objects),
@@ -182,10 +206,14 @@ async def execute_submission(
     # Set name to be submission_id + random number five digits long
     name = f"deepreef-{submission_id}-{str(random.randint(10000, 99999))}"
 
-    submission_res = await session.exec(
-        select(Submission).where(Submission.id == submission_id)
-    )
+    query = select(Submission).where(Submission.id == submission_id)
+    if not user_is_admin:
+        query = query.where(Submission.owner == user_id)
+    submission_res = await session.exec(query)
     submission = submission_res.one_or_none()
+
+    if not submission:
+        raise HTTPException(status_code=404, detail="Submission not found")
 
     # Get the input object IDs from the submission
     res = await session.exec(
@@ -325,7 +353,6 @@ async def get_submissions(
     # Do a query to satisfy total count for "Content-Range" header
     count_query = select(func.count(Submission.iterator))
     if not user_is_admin:
-        print(user_id)
         count_query = count_query.where(Submission.owner == user_id.hex)
 
     if len(filter):  # Have to filter twice for some reason? SQLModel state?
@@ -350,6 +377,8 @@ async def get_submissions(
     # Query for the quantity of records in SensorInventoryData that match the
     # sensor as well as the min and max of the time column
     query = select(Submission)
+    if not user_is_admin:
+        query = query.where(Submission.owner == user_id.hex)
 
     # Order by sort field params ie. ["name","ASC"]
     if len(sort) == 2:
@@ -441,7 +470,8 @@ async def get_submissions(
 @router.post("", response_model=SubmissionRead)
 async def create_submission(
     submission: SubmissionCreate,
-    user_id: Annotated[UUID, Header()],
+    user_id: UUID = Header(...),
+    user_is_admin: bool = Header(...),
     session: AsyncSession = Depends(get_session),
 ) -> SubmissionRead:
     """Creates a submission record from one or more video files"""
@@ -469,11 +499,15 @@ async def create_submission(
     # table with the same ID.
     for input_file in submission.input_associations:
         # Gather all inputs first, to double check they exist before creation
-        res = await session.exec(
-            select(InputObject).where(
-                InputObject.id == input_file.input_object_id
-            )
+        query = select(InputObject).where(
+            InputObject.id == input_file.input_object_id
         )
+
+        # Don't allow non-admins to create submissions with other users objects
+        if not user_is_admin:
+            query = query.where(InputObject.owner == user_id)
+
+        res = await session.exec(query)
 
         input_object_obj = res.one_or_none()
         if not input_object_obj:
@@ -499,12 +533,17 @@ async def create_submission(
 async def update_submission(
     submission_id: UUID,
     submission_update: SubmissionUpdate,
+    user_id: UUID = Header(...),
+    user_is_admin: bool = Header(...),
     session: AsyncSession = Depends(get_session),
 ) -> SubmissionRead:
     """Update an submission by id"""
-    res = await session.exec(
-        select(Submission).where(Submission.id == submission_id)
-    )
+
+    query = select(Submission).where(Submission.id == submission_id)
+    if not user_is_admin:
+        query = query.where(Submission.owner == user_id)
+
+    res = await session.exec(query)
     obj = res.one_or_none()
 
     if not obj:
@@ -560,14 +599,22 @@ async def update_submission(
 @router.delete("/{submission_id}")
 async def delete_submission(
     submission_id: UUID,
+    user_id: UUID = Header(...),
+    user_is_admin: bool = Header(...),
     session: AsyncSession = Depends(get_session),
     filter: dict[str, str] | None = None,
 ) -> None:
     """Delete an submission by id"""
-    res = await session.exec(
-        select(Submission).where(Submission.id == submission_id)
-    )
+
+    query = select(Submission).where(Submission.id == submission_id)
+    if not user_is_admin:
+        query = query.where(Submission.owner == user_id)
+
+    res = await session.exec(query)
     submission = res.one_or_none()
+
+    if not submission:
+        raise HTTPException(status_code=404, detail="Submission not found")
 
     # Delete associations
     for association in submission.input_associations:

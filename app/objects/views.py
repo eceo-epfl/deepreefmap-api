@@ -86,6 +86,8 @@ async def upload_file(
 async def upload_chunk(
     request: Request,
     patch: str = Query(...),
+    user_id: UUID | None = Header(...),
+    user_is_admin: bool = Header(...),
     s3: S3Session = Depends(get_s3),
     session: AsyncSession = Depends(get_session),
     upload_offset: int = Header(..., alias="Upload-Offset"),
@@ -103,6 +105,8 @@ async def upload_chunk(
 
     # Get the object prefix from the DB
     query = select(InputObject).where(InputObject.id == patch)
+    if not user_is_admin:
+        query = query.where(InputObject.owner == user_id)
     res = await session.exec(query)
     object = res.one_or_none()
     if not object:
@@ -214,6 +218,8 @@ async def upload_chunk(
 @router.head("")
 async def check_uploaded_chunks(
     response: Response,
+    user_id: UUID | None = Header(...),
+    user_is_admin: bool = Header(...),
     patch: str = Query(...),
     session: AsyncSession = Depends(get_session),
 ):
@@ -222,6 +228,8 @@ async def check_uploaded_chunks(
     # Clean " from patch
     patch = patch.replace('"', "")
     query = select(InputObject).where(InputObject.id == patch)
+    if not user_is_admin:
+        query = query.where(InputObject.owner == user_id)
     res = await session.exec(query)
     object = res.one_or_none()
     if not object:
@@ -244,6 +252,8 @@ async def check_uploaded_chunks(
 
 @router.get("/{object_id}", response_model=InputObjectRead)
 async def get_object(
+    user_id: UUID | None = Header(None),
+    user_is_admin: bool = Header(None),
     session: AsyncSession = Depends(get_session),
     s3: S3Session = Depends(get_s3),
     *,
@@ -252,14 +262,21 @@ async def get_object(
     """Get an object by id"""
 
     query = select(InputObject).where(InputObject.id == object_id)
+    if not user_is_admin:
+        query = query.where(InputObject.owner == user_id)
     res = await session.exec(query)
     obj = res.one_or_none()
+
+    if not obj:
+        raise HTTPException(status_code=404, detail="Object not found")
 
     return obj
 
 
 @router.post("/{object_id}", response_model=Any)
 async def regenerate_statistics(
+    user_id: UUID | None = Header(None),
+    user_is_admin: bool = Header(None),
     session: AsyncSession = Depends(get_session),
     s3: S3Session = Depends(get_s3),
     *,
@@ -269,6 +286,8 @@ async def regenerate_statistics(
     """Get an object by id"""
 
     query = select(InputObject).where(InputObject.id == str(object_id))
+    if not user_is_admin:
+        query = query.where(InputObject.owner == user_id)
     res = await session.exec(query)
     obj = res.one_or_none()
 
@@ -298,6 +317,8 @@ async def regenerate_statistics(
 @router.get("", response_model=list[InputObjectRead])
 async def get_objects(
     response: Response,
+    user_id: UUID | None = Header(None),
+    user_is_admin: bool = Header(None),
     session: AsyncSession = Depends(get_session),
     *,
     filter: str = Query(None),
@@ -312,6 +333,9 @@ async def get_objects(
 
     # Do a query to satisfy total count for "Content-Range" header
     count_query = select(func.count(InputObject.iterator))
+    if not user_is_admin:
+        count_query = count_query.where(InputObject.owner == user_id)
+
     if len(filter):  # Have to filter twice for some reason? SQLModel state?
         for field, value in filter.items():
             if field == "id" or field == "object_id":
@@ -338,6 +362,8 @@ async def get_objects(
     # Query for the quantity of records in SensorInventoryData that match the
     # sensor as well as the min and max of the time column
     query = select(InputObject)
+    if not user_is_admin:
+        query = query.where(InputObject.owner == user_id)
 
     # Order by sort field params ie. ["name","ASC"]
     if len(sort) == 2:
@@ -384,12 +410,16 @@ async def get_objects(
 async def update_input_object(
     input_object_id: UUID,
     input_object_update: InputObjectUpdate,
+    user_id: UUID | None = Header(None),
+    user_is_admin: bool = Header(None),
     session: AsyncSession = Depends(get_session),
 ) -> InputObjectRead:
 
-    res = await session.exec(
-        select(InputObject).where(InputObject.id == input_object_id)
-    )
+    query = select(InputObject).where(InputObject.id == input_object_id)
+    if not user_is_admin:
+        query = query.where(InputObject.owner == user_id)
+
+    res = await session.exec(query)
     obj = res.one_or_none()
     if not obj:
         raise HTTPException(status_code=404, detail="Input Object not found")
@@ -411,19 +441,27 @@ async def update_input_object(
 @router.delete("/{object_id}")
 async def delete_object(
     object_id: UUID,
+    user_id: UUID | None = Header(None),
+    user_is_admin: bool = Header(None),
     session: AsyncSession = Depends(get_session),
     filter: dict[str, str] | None = None,
     s3: S3Session = Depends(get_s3),
 ) -> None:
     """Delete an object by id"""
-    res = await session.exec(
-        select(InputObject).where(InputObject.id == object_id)
-    )
+
+    query = select(InputObject).where(InputObject.id == object_id)
+    if not user_is_admin:
+        query = query.where(InputObject.owner == user_id)
+    res = await session.exec(query)
     object = res.one_or_none()
 
+    if not object:
+        raise HTTPException(
+            status_code=404,
+            detail="Object not found",
+        )
     if object:
         # Delete object from S3
-        print(f"DELETING OBJECT FROM S3: {object.id}")
         try:
             res = await s3.delete_object(
                 Bucket=config.S3_BUCKET_ID,

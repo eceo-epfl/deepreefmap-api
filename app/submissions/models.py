@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 
 class SubmissionBase(SQLModel):
     name: str | None = Field(default=None, index=True)
-    owner: UUID | None = Field(default=None, nullable=True)
+    owner: UUID = Field(default=None, nullable=True, index=True)
     description: str | None = Field(default=None)
     comment: str | None = Field(default=None)
     processing_has_started: bool = Field(default=False)

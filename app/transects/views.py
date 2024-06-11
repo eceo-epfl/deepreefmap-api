@@ -109,8 +109,8 @@ async def get_all_transects(
 @router.post("", response_model=TransectRead)
 async def create_transect(
     response: Response,
-    user_id: Annotated[UUID, Header()],
     transect: TransectCreate,
+    user_id: UUID = Header(...),
     session: AsyncSession = Depends(get_session),
 ) -> TransectRead:
     """Creates a transect data record"""
