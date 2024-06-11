@@ -27,6 +27,8 @@ async def get_count(
     filter: str = Query(None),
     range: str = Query(None),
     sort: str = Query(None),
+    user_id: UUID = Header(...),
+    user_is_admin: bool = Header(...),
     session: AsyncSession = Depends(get_session),
 ):
     count = await crud.get_total_count(
@@ -35,6 +37,8 @@ async def get_count(
         range=range,
         filter=filter,
         session=session,
+        user_id=user_id,
+        user_is_admin=user_is_admin,
     )
 
     return count
@@ -44,13 +48,18 @@ async def get_data(
     filter: str = Query(None),
     sort: str = Query(None),
     range: str = Query(None),
+    user_id: UUID = Header(...),
+    user_is_admin: bool = Header(...),
     session: AsyncSession = Depends(get_session),
 ):
+
     res = await crud.get_model_data(
         sort=sort,
         range=range,
         filter=filter,
         session=session,
+        user_id=user_id,
+        user_is_admin=user_is_admin,
     )
 
     return res
@@ -58,9 +67,16 @@ async def get_data(
 
 async def get_one(
     transect_id: UUID,
+    user_id: UUID = Header(...),
+    user_is_admin: bool = Header(...),
     session: AsyncSession = Depends(get_session),
 ):
-    res = await crud.get_model_by_id(model_id=transect_id, session=session)
+    res = await crud.get_model_by_id(
+        model_id=transect_id,
+        session=session,
+        user_id=user_id,
+        user_is_admin=user_is_admin,
+    )
 
     if not res:
         raise HTTPException(
@@ -80,6 +96,7 @@ async def get_transect(
 
 @router.get("", response_model=list[TransectRead])
 async def get_all_transects(
+    request: Request,
     response: Response,
     transects: CRUD = Depends(get_data),
     total_count: int = Depends(get_count),

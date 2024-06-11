@@ -1,5 +1,5 @@
 from fastapi import Depends, APIRouter, Query, Response, HTTPException, Header
-from sqlmodel import select, update
+from sqlmodel import select
 from app.db import get_session, AsyncSession
 from app.submissions.models import (
     Submission,
@@ -17,7 +17,6 @@ from uuid import UUID
 from sqlalchemy import func
 import json
 from typing import Any, Annotated
-import boto3
 from app.objects.service import get_s3
 from aioboto3 import Session as S3Session
 from app.config import config
@@ -118,7 +117,6 @@ async def get_submission(
         )
 
     # Get the file outputs in the S3 bucket
-
     response = await s3.list_objects_v2(
         Bucket=config.S3_BUCKET_ID,
         Prefix=f"{config.S3_PREFIX}/outputs/{str(submission_id)}/",
@@ -195,6 +193,7 @@ async def execute_submission(
         .where(InputObjectAssociations.submission_id == submission_id)
         .order_by(InputObjectAssociations.processing_order)  # Important!
     )
+
     input_associations = res.all()
     input_object_ids = [
         str(association.input_object_id) for association in input_associations
@@ -300,14 +299,15 @@ async def execute_submission(
         version="v1",
         group="run.ai",
     )
-    print("Job issued")
-    print(api_response)
+
     return api_response
 
 
 @router.get("", response_model=list[SubmissionRead])
 async def get_submissions(
     response: Response,
+    user_id: UUID = Header(...),
+    user_is_admin: bool = Header(...),
     session: AsyncSession = Depends(get_session),
     s3: S3Session = Depends(get_s3),
     k8s: CoreV1Api = Depends(get_k8s_v1),
@@ -324,6 +324,10 @@ async def get_submissions(
 
     # Do a query to satisfy total count for "Content-Range" header
     count_query = select(func.count(Submission.iterator))
+    if not user_is_admin:
+        print(user_id)
+        count_query = count_query.where(Submission.owner == user_id.hex)
+
     if len(filter):  # Have to filter twice for some reason? SQLModel state?
         for field, value in filter.items():
             if field == "id" or field == "submission_id":

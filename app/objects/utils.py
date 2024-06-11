@@ -104,8 +104,6 @@ async def delete_incomplete_object(
     res = await db.exec(query)
     obj = res.one_or_none()
 
-    print("Checking object", obj.id, obj)
-
     time_since_last_part = (
         datetime.datetime.now() - obj.last_part_received_utc
     ).total_seconds()
@@ -119,9 +117,9 @@ async def delete_incomplete_object(
             .where(InputObject.id == input_object_id)
             .values(
                 processing_message=(
-                    "Object has not been updated for "
-                    f"{math.ceil(time_since_last_part)} seconds. "
                     "Waiting for parts..."
+                    "Last part transferred "
+                    f"{math.ceil(time_since_last_part)} seconds ago. "
                 ),
             )
         )

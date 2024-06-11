@@ -1,0 +1,17 @@
+FROM python:3.12.3
+ENV POETRY_VERSION=1.8.2
+RUN pip install "poetry==$POETRY_VERSION"
+ENV PYTHONPATH="$PYTHONPATH:/app"
+
+WORKDIR /app
+
+# geos-dev is required for shapely, proj for pyproj
+RUN apt-get update && apt-get install -y g++ libgeos-dev proj-bin proj-data libproj-dev
+
+COPY poetry.lock pyproject.toml /app/
+RUN poetry config virtualenvs.create false
+RUN poetry install --no-interaction
+
+COPY app /app/app
+
+ENTRYPOINT ptw --now .

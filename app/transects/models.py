@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
 class TransectBase(SQLModel):
     name: str
-    owner: UUID | None = Field(default=None, nullable=True)
+    owner: UUID = Field(nullable=False, index=True)
     description: str | None = None
     length: float | None = None
     depth: float | None = None

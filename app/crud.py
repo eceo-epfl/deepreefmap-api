@@ -65,6 +65,8 @@ class CRUD:
         filter: str,
         sort: str,
         range: str,
+        user_id: UUID | None,
+        user_is_admin: bool,
         session: AsyncSession = Depends(get_session),
     ) -> list:
         """Returns the data of a model with a filter applied
@@ -77,6 +79,9 @@ class CRUD:
         filter = json.loads(filter) if filter else {}
 
         query = select(self.db_model)
+
+        if not user_is_admin:
+            query = query.where(self.db_model.owner == user_id)
 
         if len(filter):
             for field, value in filter.items():
@@ -150,6 +155,8 @@ class CRUD:
         sort: str,
         range: str,
         filter: str,
+        user_id: UUID | None,
+        user_is_admin: bool,
         session: AsyncSession = Depends(get_session),
     ) -> int:
         """Returns the count of a model with a filter applied"""
@@ -158,6 +165,9 @@ class CRUD:
         range = json.loads(range) if range else []
 
         query = select(func.count(self.db_model.iterator))
+        if not user_is_admin:
+            query = query.where(self.db_model.owner == user_id)
+
         if len(filter):
             for field, value in filter.items():
                 if field in self.exact_match_fields:
@@ -221,14 +231,19 @@ class CRUD:
     async def get_model_by_id(
         self,
         session: AsyncSession,
+        user_id: UUID | None,
+        user_is_admin: bool,
         *,
         model_id: UUID,
     ) -> Any:
         """Get a model by id"""
 
-        res = await session.exec(
-            select(self.db_model).where(self.db_model.id == model_id)
-        )
+        query = select(self.db_model).where(self.db_model.id == model_id)
+
+        if not user_is_admin:
+            query = query.filter(self.db_model.owner == user_id)
+
+        res = await session.exec(query)
         obj = res.one_or_none()
 
         return obj
