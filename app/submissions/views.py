@@ -166,8 +166,6 @@ async def get_submission(
 async def get_submission_output_file(
     session: AsyncSession = Depends(get_session),
     s3: S3Session = Depends(get_s3),
-    user_id: UUID = Header(...),
-    user_is_admin: bool = Header(...),
     *,
     submission_id: UUID,
     filename: str,
@@ -176,9 +174,6 @@ async def get_submission_output_file(
 
     # Make sure the user has access to the submission
     query = select(Submission).where(Submission.id == submission_id)
-    if not user_is_admin:
-        query = query.where(Submission.owner == user_id)
-
     res = await session.exec(query)
     submission = res.one_or_none()
 

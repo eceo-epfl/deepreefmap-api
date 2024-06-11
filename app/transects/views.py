@@ -115,6 +115,9 @@ async def create_transect(
 ) -> TransectRead:
     """Creates a transect data record"""
 
+    transect = transect.model_dump()
+    transect["owner"] = user_id
+
     obj = Transect.model_validate(transect)
     obj.owner = user_id
     session.add(obj)

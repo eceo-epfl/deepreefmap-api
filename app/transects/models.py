@@ -20,7 +20,6 @@ if TYPE_CHECKING:
 
 class TransectBase(SQLModel):
     name: str
-    owner: UUID = Field(nullable=False, index=True)
     description: str | None = None
     length: float | None = None
     depth: float | None = None
@@ -60,13 +59,23 @@ class Transect(TransectBase, table=True):
         nullable=False,
     )
     geom: Any = Field(
-        default=None, sa_column=Column(Geometry("LINESTRING", srid=4326))
+        default=None,
+        sa_column=Column(
+            Geometry("LINESTRING", srid=4326),
+        ),
     )
+    owner: UUID = Field(
+        nullable=False,
+        index=True,
+    )
+
     inputs: list["InputObject"] = Relationship(
-        back_populates="transect", sa_relationship_kwargs={"lazy": "selectin"}
+        back_populates="transect",
+        sa_relationship_kwargs={"lazy": "selectin"},
     )
     submissions: list["Submission"] = Relationship(
-        back_populates="transect", sa_relationship_kwargs={"lazy": "selectin"}
+        back_populates="transect",
+        sa_relationship_kwargs={"lazy": "selectin"},
     )
 
 
@@ -98,7 +107,7 @@ class TransectCreate(TransectBase):
 class TransectRead(TransectBase):
     id: UUID
     geom: Any | None = None
-
+    owner: UUID
     latitude_start: float | None = None
     longitude_start: float | None = None
 

@@ -26,7 +26,6 @@ if TYPE_CHECKING:
 
 class SubmissionBase(SQLModel):
     name: str | None = Field(default=None, index=True)
-    owner: UUID = Field(nullable=False, index=True)
     description: str | None = Field(default=None)
     comment: str | None = Field(default=None)
     processing_has_started: bool = Field(default=False)
@@ -80,6 +79,7 @@ class Submission(SubmissionBase, table=True):
         nullable=False,
         index=True,
     )
+    owner: UUID = Field(nullable=False, index=True)
 
     inputs: list[InputObject] = Relationship(
         back_populates="submissions",
@@ -123,6 +123,7 @@ class TransectRead(SQLModel):
     name: str
     description: str | None = None
     geom: Any | None = None
+    owner: UUID
 
     latitude_start: float | None = None
     longitude_start: float | None = None
@@ -173,6 +174,7 @@ class SubmissionRead(SubmissionBase):
     input_associations: list[InputObjectAssociationsRead] = []
     file_outputs: list[SubmissionFileOutputs] = []
     transect: TransectRead | None = None
+    owner: UUID
 
 
 class SubmissionUpdate(SubmissionBase):
