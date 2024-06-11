@@ -43,7 +43,7 @@ jobs:
           done
 
       - name: Run tests
-        run: pytest --maxfail=1 --disable-warnings -q
+        run: pytest --maxfail=1 --disable-warnings
         env:
           DB_HOST: localhost
           DB_PORT: 5432
