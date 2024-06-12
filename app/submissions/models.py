@@ -42,9 +42,7 @@ class SubmissionBase(SQLModel):
     def validate_time_seconds(
         self: Self,
     ) -> Self:
-        if self.time_seconds_start and self.time_seconds_end:
-            if self.time_seconds_start > self.time_seconds_end:
-                raise ValueError("Start time must be less than end time")
+
         if self.time_seconds_start and self.time_seconds_start < 0:
             raise ValueError("Start time must be >= 0")
         if self.time_seconds_end and self.time_seconds_end < 0:
