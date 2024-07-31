@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "deepreefmap-api"
-version = "0.2.3"
+version = "0.2.4"
 description = "API to manage data for deepreefmap project in ECEO lab"
 authors = ["Evan Thomas <evan.thomas@epfl.ch>"]
 readme = "README.md"

@@ -11,6 +11,7 @@ import os
 
 
 def get_k8s_v1() -> client.CoreV1Api:
+    list_jobs_runai()
     k8s_config.load_kube_config(config_file=config.KUBECONFIG)
     return client.CoreV1Api()
 
@@ -62,3 +63,29 @@ def delete_job(job_name: str):
     )
 
     return
+
+
+def list_jobs_runai():
+    """Executes a runai list jobs command
+
+    This function will list all jobs in the current project.. BUT! It will
+    also refresh the oidc token in the kubeconfig which expires faster than
+    the key itself. So we should run this with the healthz
+    """
+
+    env = os.environ.copy()
+    env["KUBECONFIG"] = config.KUBECONFIG
+
+    # Use subprocess to use the runai interface to delete job
+    result = subprocess.run(
+        [
+            "runai",
+            "list",
+            "jobs",
+        ],
+        env=env,
+        check=True,
+        capture_output=True,
+    )
+
+    return result.stdout.decode("utf-8")
