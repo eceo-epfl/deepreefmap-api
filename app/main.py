@@ -8,6 +8,8 @@ from app.transects.views import router as transects_router
 from pydantic import BaseModel
 from app.db import get_session, AsyncSession
 from sqlalchemy.sql import text
+from app.submissions.k8s import get_k8s_v1
+from kubernetes.client import CoreV1Api
 
 app = FastAPI()
 
@@ -38,6 +40,7 @@ class HealthCheck(BaseModel):
 )
 async def get_health(
     session: AsyncSession = Depends(get_session),
+    k8s: CoreV1Api = Depends(get_k8s_v1),
 ) -> HealthCheck:
     """
     Endpoint to perform a healthcheck on for kubernetes liveness and
@@ -45,6 +48,9 @@ async def get_health(
     """
     # Execute DB Query to check DB connection
     await session.exec(text("SELECT 1"))
+
+    # Query kubernetes API to check RCP:RunAI connection
+    k8s.list_namespaced_pod(config.NAMESPACE)
 
     return HealthCheck(status="OK")
 

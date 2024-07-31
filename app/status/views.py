@@ -26,12 +26,6 @@ async def get_jobs(
     api = ApiClient()
     k8s_jobs = api.sanitize_for_serialization(ret.items)
 
-    #     response = await s3.list_objects_v2(
-    #     Bucket=config.S3_BUCKET_ID,
-    #     Prefix=f"{config.S3_PREFIX}/outputs/{str(submission_id)}/",
-    # )
-    # outputs = response.get("Contents", [])
-
     # Get total usage (items, size) for inputs, outputs
     s3_local = S3Status()
     response = await s3.list_objects_v2(
