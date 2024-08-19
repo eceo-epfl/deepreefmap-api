@@ -81,7 +81,7 @@ def list_jobs_runai():
         [
             "runai",
             "list",
-            "jobs",
+            "projects",
         ],
         env=env,
         check=True,
