@@ -21,38 +21,64 @@ async def get_jobs(
 ) -> Any:
     """Get all kubernetes jobs in the namespace"""
 
-    # Get k8s jobs
-    ret = k8s.list_namespaced_pod(config.NAMESPACE)
-    api = ApiClient()
-    k8s_jobs = api.sanitize_for_serialization(ret.items)
+    kubernetes_status = False
+    s3_status = False
+
+    try:
+        # Get k8s jobs
+        ret = k8s.list_namespaced_pod(config.NAMESPACE)
+        api = ApiClient()
+        k8s_jobs = api.sanitize_for_serialization(ret.items)
+        kubernetes_status = True
+    except Exception:
+        k8s_jobs = []
 
     # Get total usage (items, size) for inputs, outputs
     s3_local = S3Status()
-    response = await s3.list_objects_v2(
-        Bucket=config.S3_BUCKET_ID,
-        Prefix=f"{config.S3_PREFIX}/inputs/",
+
+    try:
+        # Get input usage (items, size) for all input objects
+        response = await s3.list_objects_v2(
+            Bucket=config.S3_BUCKET_ID,
+            Prefix=f"{config.S3_PREFIX}/inputs/",
+        )
+
+        if response.get("Contents"):
+            s3_local.input_object_count = len(response.get("Contents"))
+            for obj in response.get("Contents"):
+                s3_local.input_size += obj.get("Size")
+
+        # Get total usage (items, size) for outputs
+        response = await s3.list_objects_v2(
+            Bucket=config.S3_BUCKET_ID,
+            Prefix=f"{config.S3_PREFIX}/outputs/",
+        )
+        if response.get("Contents"):
+            s3_local.output_object_count = len(response.get("Contents"))
+            for obj in response.get("Contents"):
+                s3_local.output_size += obj.get("Size")
+
+        # Get total usage (items, size) for all objects
+        response = await s3.list_objects_v2(
+            Bucket=config.S3_BUCKET_ID,
+            Prefix=f"{config.S3_PREFIX}/",
+        )
+        if response.get("Contents"):
+            s3_local.total_object_count = len(response.get("Contents"))
+            for obj in response.get("Contents"):
+                s3_local.total_size += obj.get("Size")
+        s3_status = True
+
+    except Exception as e:
+        print("Exception S3", e)
+        print(s3_local)
+        s3_local = None
+
+    obj = StatusRead(
+        kubernetes=k8s_jobs,
+        s3_local=s3_local,
+        s3_status=s3_status,
+        kubernetes_status=kubernetes_status,
     )
-
-    s3_local.input_object_count = len(response.get("Contents"))
-    for obj in response.get("Contents"):
-        s3_local.input_size += obj.get("Size")
-
-    response = await s3.list_objects_v2(
-        Bucket=config.S3_BUCKET_ID,
-        Prefix=f"{config.S3_PREFIX}/outputs/",
-    )
-    s3_local.output_object_count = len(response.get("Contents"))
-    for obj in response.get("Contents"):
-        s3_local.output_size += obj.get("Size")
-
-    response = await s3.list_objects_v2(
-        Bucket=config.S3_BUCKET_ID,
-        Prefix=f"{config.S3_PREFIX}/",
-    )
-    s3_local.total_object_count = len(response.get("Contents"))
-    for obj in response.get("Contents"):
-        s3_local.total_size += obj.get("Size")
-
-    obj = StatusRead(kubernetes=k8s_jobs, s3_local=s3_local)
 
     return obj

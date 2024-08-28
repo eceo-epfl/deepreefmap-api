@@ -15,3 +15,6 @@ class StatusRead(SQLModel):
     kubernetes: list[Any]
     s3_local: S3Status | None = None
     s3_global: S3Status | None = None
+
+    s3_status: bool = False
+    kubernetes_status: bool = False

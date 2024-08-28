@@ -63,11 +63,15 @@ async def get_jobs(
     k8s: CoreV1Api = Depends(get_k8s_v1),
 ) -> Any:
     """Get all kubernetes jobs in the namespace"""
+    items = []
+    try:
+        ret = k8s.list_namespaced_pod(config.NAMESPACE)
+        api = ApiClient()
+        items = api.sanitize_for_serialization(ret.items)
+    except Exception as e:
+        print(e)
 
-    ret = k8s.list_namespaced_pod(config.NAMESPACE)
-
-    api = ApiClient()
-    return api.sanitize_for_serialization(ret.items)
+    return items
 
 
 @router.delete("/kubernetes/jobs/{job_id}")
