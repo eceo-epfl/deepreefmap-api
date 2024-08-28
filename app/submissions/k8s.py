@@ -10,9 +10,14 @@ import subprocess
 import os
 
 
-def get_k8s_v1() -> client.CoreV1Api:
-    list_jobs_runai()
-    k8s_config.load_kube_config(config_file=config.KUBECONFIG)
+def get_k8s_v1() -> client.CoreV1Api | None:
+    try:
+        list_jobs_runai()
+        k8s_config.load_kube_config(config_file=config.KUBECONFIG)
+    except Exception as e:
+        print(f"Error loading kubeconfig: {e}")
+        return None
+
     return client.CoreV1Api()
 
 
