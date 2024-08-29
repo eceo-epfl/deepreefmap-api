@@ -65,3 +65,9 @@ jobs:
           DEEPREEFMAP_IMAGE: imagename-test
           NAMESPACE: namespace-test
           PROJECT: project-test
+          KEYCLOAK_CLIENT_ID: test
+          KEYCLOAK_API_ID: test
+          KEYCLOAK_API_SECRET: test
+          KEYCLOAK_REALM: test
+          KEYCLOAK_URL: test
+          SERIALIZER_SECRET_KEY: test
