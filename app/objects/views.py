@@ -23,14 +23,15 @@ from app.objects.utils import (
 )
 import datetime
 import json
+from app.users.models import User
+from app.auth.services import get_user_info
 
 router = APIRouter()
 
 
 @router.post("")
 async def upload_file(
-    request: Request,
-    user_id: Annotated[UUID, Header()],
+    user: User = Depends(get_user_info),
     upload_length: int = Header(..., alias="Upload-Length"),
     content_type: str = Header(..., alias="Content-Type"),
     transect_id: str = Header(None, alias="Transect-Id"),
@@ -47,7 +48,7 @@ async def upload_file(
             last_part_received_utc=datetime.datetime.now(),
             processing_message="Upload started",
             transect_id=transect_id if transect_id else None,
-            owner=user_id,
+            owner=user.id,
         )
         session.add(object)
 
@@ -71,8 +72,7 @@ async def upload_file(
             delete_incomplete_object, object.id, s3, session
         )
 
-    except Exception as e:
-        print(e)
+    except Exception:
         await session.rollback()
         raise HTTPException(
             status_code=500,
@@ -86,8 +86,7 @@ async def upload_file(
 async def upload_chunk(
     request: Request,
     patch: str = Query(...),
-    user_id: UUID | None = Header(...),
-    user_is_admin: bool = Header(...),
+    user: User = Depends(get_user_info),
     s3: S3Session = Depends(get_s3),
     session: AsyncSession = Depends(get_session),
     upload_offset: int = Header(..., alias="Upload-Offset"),
@@ -105,8 +104,8 @@ async def upload_chunk(
 
     # Get the object prefix from the DB
     query = select(InputObject).where(InputObject.id == patch)
-    if not user_is_admin:
-        query = query.where(InputObject.owner == user_id)
+    if not user.is_admin:
+        query = query.where(InputObject.owner == user.id)
     res = await session.exec(query)
     object = res.one_or_none()
     if not object:
@@ -205,7 +204,6 @@ async def upload_chunk(
             )
 
     except Exception as e:
-        print(e)
         raise HTTPException(
             status_code=500,
             detail=f"Failed to upload file to S3: {e}",
@@ -218,8 +216,7 @@ async def upload_chunk(
 @router.head("")
 async def check_uploaded_chunks(
     response: Response,
-    user_id: UUID | None = Header(...),
-    user_is_admin: bool = Header(...),
+    user: User = Depends(get_user_info),
     patch: str = Query(...),
     session: AsyncSession = Depends(get_session),
 ):
@@ -228,8 +225,8 @@ async def check_uploaded_chunks(
     # Clean " from patch
     patch = patch.replace('"', "")
     query = select(InputObject).where(InputObject.id == patch)
-    if not user_is_admin:
-        query = query.where(InputObject.owner == user_id)
+    if not user.is_admin:
+        query = query.where(InputObject.owner == user.id)
     res = await session.exec(query)
     object = res.one_or_none()
     if not object:
@@ -252,8 +249,7 @@ async def check_uploaded_chunks(
 
 @router.get("/{object_id}", response_model=InputObjectRead)
 async def get_object(
-    user_id: UUID | None = Header(None),
-    user_is_admin: bool = Header(None),
+    user: User = Depends(get_user_info),
     session: AsyncSession = Depends(get_session),
     s3: S3Session = Depends(get_s3),
     *,
@@ -262,8 +258,8 @@ async def get_object(
     """Get an object by id"""
 
     query = select(InputObject).where(InputObject.id == object_id)
-    if not user_is_admin:
-        query = query.where(InputObject.owner == user_id)
+    if not user.is_admin:
+        query = query.where(InputObject.owner == user.id)
     res = await session.exec(query)
     obj = res.one_or_none()
 
@@ -275,8 +271,7 @@ async def get_object(
 
 @router.post("/{object_id}", response_model=Any)
 async def regenerate_statistics(
-    user_id: UUID | None = Header(None),
-    user_is_admin: bool = Header(None),
+    user: User = Depends(get_user_info),
     session: AsyncSession = Depends(get_session),
     s3: S3Session = Depends(get_s3),
     *,
@@ -286,8 +281,8 @@ async def regenerate_statistics(
     """Get an object by id"""
 
     query = select(InputObject).where(InputObject.id == str(object_id))
-    if not user_is_admin:
-        query = query.where(InputObject.owner == user_id)
+    if not user.is_admin:
+        query = query.where(InputObject.owner == user.id)
     res = await session.exec(query)
     obj = res.one_or_none()
 
@@ -317,8 +312,7 @@ async def regenerate_statistics(
 @router.get("", response_model=list[InputObjectRead])
 async def get_objects(
     response: Response,
-    user_id: UUID | None = Header(None),
-    user_is_admin: bool = Header(None),
+    user: User = Depends(get_user_info),
     session: AsyncSession = Depends(get_session),
     *,
     filter: str = Query(None),
@@ -333,8 +327,8 @@ async def get_objects(
 
     # Do a query to satisfy total count for "Content-Range" header
     count_query = select(func.count(InputObject.iterator))
-    if not user_is_admin:
-        count_query = count_query.where(InputObject.owner == user_id)
+    if not user.is_admin:
+        count_query = count_query.where(InputObject.owner == user.id)
 
     if len(filter):  # Have to filter twice for some reason? SQLModel state?
         for field, value in filter.items():
@@ -362,8 +356,8 @@ async def get_objects(
     # Query for the quantity of records in SensorInventoryData that match the
     # sensor as well as the min and max of the time column
     query = select(InputObject)
-    if not user_is_admin:
-        query = query.where(InputObject.owner == user_id)
+    if not user.is_admin:
+        query = query.where(InputObject.owner == user.id)
 
     # Order by sort field params ie. ["name","ASC"]
     if len(sort) == 2:
@@ -410,14 +404,13 @@ async def get_objects(
 async def update_input_object(
     input_object_id: UUID,
     input_object_update: InputObjectUpdate,
-    user_id: UUID | None = Header(None),
-    user_is_admin: bool = Header(None),
+    user: User = Depends(get_user_info),
     session: AsyncSession = Depends(get_session),
 ) -> InputObjectRead:
 
     query = select(InputObject).where(InputObject.id == input_object_id)
-    if not user_is_admin:
-        query = query.where(InputObject.owner == user_id)
+    if not user.is_admin:
+        query = query.where(InputObject.owner == user.id)
 
     res = await session.exec(query)
     obj = res.one_or_none()
@@ -441,8 +434,7 @@ async def update_input_object(
 @router.delete("/{object_id}")
 async def delete_object(
     object_id: UUID,
-    user_id: UUID | None = Header(None),
-    user_is_admin: bool = Header(None),
+    user: User = Depends(get_user_info),
     session: AsyncSession = Depends(get_session),
     filter: dict[str, str] | None = None,
     s3: S3Session = Depends(get_s3),
@@ -450,8 +442,8 @@ async def delete_object(
     """Delete an object by id"""
 
     query = select(InputObject).where(InputObject.id == object_id)
-    if not user_is_admin:
-        query = query.where(InputObject.owner == user_id)
+    if not user.is_admin:
+        query = query.where(InputObject.owner == user.id)
     res = await session.exec(query)
     object = res.one_or_none()
 

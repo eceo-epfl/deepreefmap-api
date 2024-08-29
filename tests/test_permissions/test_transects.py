@@ -7,7 +7,7 @@ from app.config import config
 async def test_get_transect(client):
     user_id = uuid4().hex
     res_created = await client.post(
-        f"{config.API_V1_PREFIX}/transects",
+        f"{config.API_PREFIX}/transects",
         json={
             "owner": user_id,
             "name": "Test Transect",
@@ -22,7 +22,7 @@ async def test_get_transect(client):
     assert res_created.status_code == 200  # or the expected status code
 
     res_retrieved = await client.get(
-        f"{config.API_V1_PREFIX}/transects/{res_created.json()['id']}",
+        f"{config.API_PREFIX}/transects/{res_created.json()['id']}",
         headers={"User-Id": user_id, "User-Is-Admin": "false"},
     )
 
@@ -30,7 +30,7 @@ async def test_get_transect(client):
     assert res_retrieved.json()["id"] == res_created.json()["id"]
 
     res_retrieved_different_user = await client.get(
-        f"{config.API_V1_PREFIX}/transects/{res_created.json()['id']}",
+        f"{config.API_PREFIX}/transects/{res_created.json()['id']}",
         headers={"User-Id": uuid4().hex, "User-Is-Admin": "false"},
     )
 
@@ -42,7 +42,7 @@ async def test_get_transect(client):
 
     # Get transect as an admin
     res_retrieved_admin = await client.get(
-        f"{config.API_V1_PREFIX}/transects/{res_created.json()['id']}",
+        f"{config.API_PREFIX}/transects/{res_created.json()['id']}",
         headers={"User-Id": user_id, "User-Is-Admin": "true"},
     )
 

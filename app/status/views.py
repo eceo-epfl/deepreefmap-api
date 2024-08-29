@@ -10,6 +10,8 @@ from fastapi import Depends
 from app.status.models import StatusRead, S3Status
 from app.objects.service import get_s3
 from aioboto3 import Session as S3Session
+from app.users.models import User
+from app.auth.services import get_user_info
 
 router = APIRouter()
 
@@ -18,6 +20,7 @@ router = APIRouter()
 async def get_jobs(
     k8s: CoreV1Api = Depends(get_k8s_v1),
     s3: S3Session = Depends(get_s3),
+    user: User = Depends(get_user_info),
 ) -> Any:
     """Get all kubernetes jobs in the namespace"""
 
@@ -75,8 +78,8 @@ async def get_jobs(
         s3_local = None
 
     obj = StatusRead(
-        kubernetes=k8s_jobs,
-        s3_local=s3_local,
+        kubernetes=k8s_jobs if user.is_admin else [],
+        s3_local=s3_local if user.is_admin else S3Status(),
         s3_status=s3_status,
         kubernetes_status=kubernetes_status,
     )

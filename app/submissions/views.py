@@ -1,4 +1,4 @@
-from fastapi import Depends, APIRouter, Query, Response, HTTPException, Header
+from fastapi import Depends, APIRouter, Query, Response, HTTPException
 from sqlmodel import select
 from app.db import get_session, AsyncSession
 from app.submissions.models import (
@@ -16,7 +16,7 @@ from app.objects.models import InputObject, InputObjectAssociations
 from uuid import UUID
 from sqlalchemy import func
 import json
-from typing import Any, Annotated
+from typing import Any
 from app.objects.service import get_s3
 from aioboto3 import Session as S3Session
 from app.config import config
@@ -27,6 +27,11 @@ from app.submissions.k8s import (
     delete_job,
 )
 import random
+from app.users.models import User
+from app.auth.services import get_user_info
+import datetime
+import jwt
+from app.auth.models import DownloadToken
 
 
 router = APIRouter()
@@ -35,7 +40,8 @@ router = APIRouter()
 @router.get("/logs/{job_id}", response_model=SubmissionJobLogRead)
 async def get_job_log(
     job_id: str,
-    k8s: CoreV1Api = Depends(get_k8s_v1),
+    k8s: CoreV1Api | None = Depends(get_k8s_v1),
+    user: User = Depends(get_user_info),
 ) -> SubmissionJobLogRead:
     """Get the log for the given submission job
 
@@ -44,32 +50,39 @@ async def get_job_log(
     """
 
     # Get the log from the job
-    ret = k8s.read_namespaced_pod_log(
-        name=str(job_id),
-        namespace=config.NAMESPACE,
-    )
+    if k8s:
+        ret = k8s.read_namespaced_pod_log(
+            name=str(job_id),
+            namespace=config.NAMESPACE,
+        )
 
-    lines = ret.split("\n")
-    cleaned_lines = []
-    for line in lines:
-        progress_lines = line.split("\r")  # Remove carriage returns
-        cleaned_lines.append(progress_lines[-1])  # Only keep the last line
+        lines = ret.split("\n")
+        cleaned_lines = []
+        for line in lines:
+            progress_lines = line.split("\r")  # Remove carriage returns
+            cleaned_lines.append(progress_lines[-1])  # Only keep the last line
 
-    return SubmissionJobLogRead(id=job_id, message="\n".join(cleaned_lines))
+        return SubmissionJobLogRead(
+            id=job_id, message="\n".join(cleaned_lines)
+        )
+    else:
+        return SubmissionJobLogRead(id=job_id, message="No logs available")
 
 
 @router.get("/kubernetes/jobs")
 async def get_jobs(
-    k8s: CoreV1Api = Depends(get_k8s_v1),
+    k8s: CoreV1Api | None = Depends(get_k8s_v1),
+    user: User = Depends(get_user_info),
 ) -> Any:
     """Get all kubernetes jobs in the namespace"""
     items = []
-    try:
-        ret = k8s.list_namespaced_pod(config.NAMESPACE)
-        api = ApiClient()
-        items = api.sanitize_for_serialization(ret.items)
-    except Exception as e:
-        print(e)
+    if k8s:
+        try:
+            ret = k8s.list_namespaced_pod(config.NAMESPACE)
+            api = ApiClient()
+            items = api.sanitize_for_serialization(ret.items)
+        except Exception:
+            items = []
 
     return items
 
@@ -77,13 +90,13 @@ async def get_jobs(
 @router.delete("/kubernetes/jobs/{job_id}")
 async def delete_runai_job(
     job_id: str,
+    user: User = Depends(get_user_info),
 ) -> Any:
 
     # Remove the two digits at the end of the job ID to get the submission ID
     # For example deepreef-463230f2-82c7-439c-831b-ef8c0b201ee1-56966-0-0
     # should be deepreef-463230f2-82c7-439c-831b-ef8c0b201ee1-56966
     job_id = "-".join(job_id.split("-")[:-2])
-    print(job_id)
 
     delete_job(job_id)
 
@@ -92,17 +105,16 @@ async def delete_runai_job(
 async def get_submission(
     session: AsyncSession = Depends(get_session),
     s3: S3Session = Depends(get_s3),
-    k8s: CoreV1Api = Depends(get_k8s_v1),
-    user_id: UUID = Header(...),
-    user_is_admin: bool = Header(...),
+    k8s: CoreV1Api | None = Depends(get_k8s_v1),
+    user: User = Depends(get_user_info),
     *,
     submission_id: UUID,
 ) -> SubmissionRead:
     """Get an submission by id"""
 
     query = select(Submission).where(Submission.id == submission_id)
-    if not user_is_admin:
-        query = query.where(Submission.owner == user_id)
+    if not user.is_admin:
+        query = query.where(Submission.owner == user.id)
 
     res = await session.exec(query)
     submission = res.one_or_none()
@@ -113,20 +125,25 @@ async def get_submission(
     # Get all jobs from k8s then filter out the ones that belong to the
     # submission_id
 
-    jobs = k8s.list_namespaced_pod(config.NAMESPACE)
-    jobs = jobs.items
-    jobs = [job for job in jobs if str(submission_id) in job.metadata.name]
+    try:
+        jobs = k8s.list_namespaced_pod(config.NAMESPACE)
+    except Exception:
+        jobs = []
+
     job_status = []
-    for job in jobs:
-        api = ApiClient()
-        job_data = api.sanitize_for_serialization(job)
-        job_status.append(
-            KubernetesExecutionStatus(
-                submission_id=job_data["metadata"].get("name"),
-                status=job_data["status"].get("phase"),
-                time_started=job_data["status"].get("startTime"),
+    if jobs:
+        jobs = jobs.items
+        jobs = [job for job in jobs if str(submission_id) in job.metadata.name]
+        for job in jobs:
+            api = ApiClient()
+            job_data = api.sanitize_for_serialization(job)
+            job_status.append(
+                KubernetesExecutionStatus(
+                    submission_id=job_data["metadata"].get("name"),
+                    status=job_data["status"].get("phase"),
+                    time_started=job_data["status"].get("startTime"),
+                )
             )
-        )
 
     # Get the file outputs in the S3 bucket
     response = await s3.list_objects_v2(
@@ -166,15 +183,28 @@ async def get_submission(
     return model_obj
 
 
-@router.get("/{submission_id}/{filename}", response_class=StreamingResponse)
+@router.get("/download/{token}", response_class=StreamingResponse)
 async def get_submission_output_file(
+    token: str,
     session: AsyncSession = Depends(get_session),
     s3: S3Session = Depends(get_s3),
-    *,
-    submission_id: UUID,
-    filename: str,
 ) -> StreamingResponse:
     """With the given submission ID and filename, returns the file from S3"""
+
+    # Decode the token from the user
+    decoded = jwt.decode(
+        token, config.SERIALIZER_SECRET_KEY, algorithms=["HS256"]
+    )
+
+    submission_id, filename, exp = decoded.values()
+
+    if datetime.datetime.fromtimestamp(
+        exp, tz=datetime.timezone.utc
+    ) < datetime.datetime.now(datetime.UTC):
+        raise HTTPException(
+            status_code=401,
+            detail="Token has expired",
+        )
 
     # Make sure the user has access to the submission
     query = select(Submission).where(Submission.id == submission_id)
@@ -189,25 +219,66 @@ async def get_submission_output_file(
         Bucket=config.S3_BUCKET_ID,
         Key=f"{config.S3_PREFIX}/outputs/{str(submission_id)}/{filename}",
     )
-    return StreamingResponse(content=response["Body"].iter_chunks())
+
+    return StreamingResponse(
+        content=response["Body"].iter_chunks(),
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/{submission_id}/{filename}", response_model=DownloadToken)
+async def get_submission_output_file_token(
+    submission_id: UUID,
+    user: User = Depends(get_user_info),
+    session: AsyncSession = Depends(get_session),
+    *,
+    filename: str,
+) -> DownloadToken:
+    """With the given ID and filename, returns a token to download the file
+
+    Necessary endpoint to allow the user to download the file but also
+    providing some security by forcing authentication first.
+
+    Token expires at a set time defined by config.SERIALIZER_EXPIRY_HOURS
+    """
+
+    query = select(Submission).where(Submission.id == submission_id)
+    if not user.is_admin:
+        query = query.where(Submission.owner == user.id)
+    res = await session.exec(query)
+    submission = res.one_or_none()
+
+    if submission is None:
+        raise HTTPException(status_code=404, detail="Submission not found")
+
+    payload = {
+        "submission_id": str(submission_id),
+        "filename": filename,
+        "exp": datetime.datetime.now(datetime.UTC)
+        + datetime.timedelta(hours=config.SERIALIZER_EXPIRY_HOURS),
+    }
+    token = jwt.encode(
+        payload, config.SERIALIZER_SECRET_KEY, algorithm="HS256"
+    )
+
+    return DownloadToken(token=token)
 
 
 @router.post("/{submission_id}/execute", response_model=Any)
 async def execute_submission(
     submission_id: UUID,
-    user_id: UUID = Header(...),
-    user_is_admin: bool = Header(...),
+    user: User = Depends(get_user_info),
     session: AsyncSession = Depends(get_session),
-    s3: S3Session = Depends(get_s3),
-    k8s: CoreV1Api = Depends(get_k8s_custom_objects),
+    k8s: CoreV1Api | None = Depends(get_k8s_custom_objects),
 ) -> Any:
 
     # Set name to be submission_id + random number five digits long
     name = f"deepreef-{submission_id}-{str(random.randint(10000, 99999))}"
 
     query = select(Submission).where(Submission.id == submission_id)
-    if not user_is_admin:
-        query = query.where(Submission.owner == user_id)
+    if not user.is_admin:
+        query = query.where(Submission.owner == user.id)
     submission_res = await session.exec(query)
     submission = submission_res.one_or_none()
 
@@ -319,13 +390,19 @@ async def execute_submission(
     }
 
     # Create the job
-    api_response = k8s.create_namespaced_custom_object(
-        namespace=config.NAMESPACE,
-        plural="runaijobs",
-        body=job,
-        version="v1",
-        group="run.ai",
-    )
+    if k8s:
+        api_response = k8s.create_namespaced_custom_object(
+            namespace=config.NAMESPACE,
+            plural="runaijobs",
+            body=job,
+            version="v1",
+            group="run.ai",
+        )
+    else:
+        return HTTPException(
+            status_code=500,
+            detail="Kubernetes API not available",
+        )
 
     return api_response
 
@@ -333,11 +410,10 @@ async def execute_submission(
 @router.get("", response_model=list[SubmissionRead])
 async def get_submissions(
     response: Response,
-    user_id: UUID = Header(...),
-    user_is_admin: bool = Header(...),
+    user: User = Depends(get_user_info),
     session: AsyncSession = Depends(get_session),
     s3: S3Session = Depends(get_s3),
-    k8s: CoreV1Api = Depends(get_k8s_v1),
+    k8s: CoreV1Api | None = Depends(get_k8s_v1),
     *,
     filter: str = Query(None),
     sort: str = Query(None),
@@ -351,8 +427,8 @@ async def get_submissions(
 
     # Do a query to satisfy total count for "Content-Range" header
     count_query = select(func.count(Submission.iterator))
-    if not user_is_admin:
-        count_query = count_query.where(Submission.owner == user_id.hex)
+    if not user.is_admin:
+        count_query = count_query.where(Submission.owner == user.id.hex)
 
     if len(filter):  # Have to filter twice for some reason? SQLModel state?
         for field, value in filter.items():
@@ -376,8 +452,8 @@ async def get_submissions(
     # Query for the quantity of records in SensorInventoryData that match the
     # sensor as well as the min and max of the time column
     query = select(Submission)
-    if not user_is_admin:
-        query = query.where(Submission.owner == user_id.hex)
+    if not user.is_admin:
+        query = query.where(Submission.owner == user.id.hex)
 
     # Order by sort field params ie. ["name","ASC"]
     if len(sort) == 2:
@@ -420,44 +496,51 @@ async def get_submissions(
     ]
     # Get all jobs from k8s then filter out the ones that belong to the
     # submission_id
+    try:
+        jobs = k8s.list_namespaced_pod(config.NAMESPACE)
+    except Exception:
+        jobs = []
 
-    jobs = k8s.list_namespaced_pod(config.NAMESPACE)
-    jobs = jobs.items
-    for submission in submissions:
-        submission_jobs = [
-            job for job in jobs if str(submission.id) in job.metadata.name
-        ]
-        job_status = []
-        for job in submission_jobs:
-            api = ApiClient()
-            job_data = api.sanitize_for_serialization(job)
-            job_status.append(
-                KubernetesExecutionStatus(
-                    submission_id=job_data["metadata"].get("name"),
-                    status=job_data["status"].get("phase"),
-                    time_started=job_data["status"].get("startTime"),
+    if jobs:
+        jobs = jobs.items
+        for submission in submissions:
+            submission_jobs = [
+                job for job in jobs if str(submission.id) in job.metadata.name
+            ]
+            job_status = []
+            for job in submission_jobs:
+                api = ApiClient()
+                job_data = api.sanitize_for_serialization(job)
+                job_status.append(
+                    KubernetesExecutionStatus(
+                        submission_id=job_data["metadata"].get("name"),
+                        status=job_data["status"].get("phase"),
+                        time_started=job_data["status"].get("startTime"),
+                    )
                 )
+            job_status = sorted(
+                job_status,
+                key=lambda x: (
+                    x.time_started
+                    if x.time_started
+                    else "9999-00-00T00:00:00Z"  # noqa
+                ),
+                reverse=True,
             )
-        job_status = sorted(
-            job_status,
-            key=lambda x: (
-                x.time_started if x.time_started else "9999-00-00T00:00:00Z"
-            ),
-            reverse=True,
-        )
-        submission.run_status = job_status
+            submission.run_status = job_status
 
-        # If the latest job status is "Succeeded", and there is no data for
-        # percentage_covers in the DB, then populate the percentage_covers
-        # field with the data from the S3 bucket. This is done in case
-        # an export is req'd in the frontend before the processing is
-        # completed (which is mostly done when a single submission is viewed).
-        if job_status and (job_status[0].status == "Succeeded"):
-            submission = await populate_percentage_covers(
-                submission_id=submission.id,
-                session=session,
-                s3=s3,
-            )
+            # If the latest job status is "Succeeded", and there is no data for
+            # percentage_covers in the DB, then populate the percentage_covers
+            # field with the data from the S3 bucket. This is done in case
+            # an export is req'd in the frontend before the processing is
+            # completed (which is mostly done when a single submission is
+            # viewed).
+            if job_status and (job_status[0].status == "Succeeded"):
+                submission = await populate_percentage_covers(
+                    submission_id=submission.id,
+                    session=session,
+                    s3=s3,
+                )
 
     response.headers["Content-Range"] = (
         f"submissions {start}-{end}/{total_count}"
@@ -469,8 +552,7 @@ async def get_submissions(
 @router.post("", response_model=SubmissionRead)
 async def create_submission(
     submission: SubmissionCreate,
-    user_id: UUID = Header(...),
-    user_is_admin: bool = Header(...),
+    user: User = Depends(get_user_info),
     session: AsyncSession = Depends(get_session),
 ) -> SubmissionRead:
     """Creates a submission record from one or more video files"""
@@ -487,7 +569,7 @@ async def create_submission(
         description=submission.description,
         transect_id=submission.transect_id,
         fps=config.DEFAULT_SUBMISSION_FPS,
-        owner=user_id,
+        owner=user.id,
     )
 
     session.add(obj)
@@ -503,8 +585,8 @@ async def create_submission(
         )
 
         # Don't allow non-admins to create submissions with other users objects
-        if not user_is_admin:
-            query = query.where(InputObject.owner == user_id)
+        if not user.is_admin:
+            query = query.where(InputObject.owner == user.id)
 
         res = await session.exec(query)
 
@@ -532,15 +614,14 @@ async def create_submission(
 async def update_submission(
     submission_id: UUID,
     submission_update: SubmissionUpdate,
-    user_id: UUID = Header(...),
-    user_is_admin: bool = Header(...),
+    user: User = Depends(get_user_info),
     session: AsyncSession = Depends(get_session),
 ) -> SubmissionRead:
     """Update an submission by id"""
 
     query = select(Submission).where(Submission.id == submission_id)
-    if not user_is_admin:
-        query = query.where(Submission.owner == user_id)
+    if not user.is_admin:
+        query = query.where(Submission.owner == user.id)
 
     res = await session.exec(query)
     obj = res.one_or_none()
@@ -598,16 +679,15 @@ async def update_submission(
 @router.delete("/{submission_id}")
 async def delete_submission(
     submission_id: UUID,
-    user_id: UUID = Header(...),
-    user_is_admin: bool = Header(...),
+    user: User = Depends(get_user_info),
     session: AsyncSession = Depends(get_session),
     filter: dict[str, str] | None = None,
 ) -> None:
     """Delete an submission by id"""
 
     query = select(Submission).where(Submission.id == submission_id)
-    if not user_is_admin:
-        query = query.where(Submission.owner == user_id)
+    if not user.is_admin:
+        query = query.where(Submission.owner == user.id)
 
     res = await session.exec(query)
     submission = res.one_or_none()

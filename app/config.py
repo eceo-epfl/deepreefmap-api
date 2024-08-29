@@ -2,10 +2,11 @@ from pydantic import model_validator
 from pydantic_settings import BaseSettings
 from functools import lru_cache
 import sys
+import httpx
 
 
 class Config(BaseSettings):
-    API_V1_PREFIX: str = "/v1"
+    API_PREFIX: str = "/api"
     DEFAULT_SUBMISSION_FPS: int = 15
     FILENAME_CLASS_TO_COLOR: str = "class_to_color.json"
     FILENAME_PERCENTAGE_COVERS: str = "percentage_covers.json"
@@ -39,6 +40,27 @@ class Config(BaseSettings):
     KUBECONFIG: str = "/app/.kube/config.yaml"
     DEEPREEFMAP_IMAGE: str
     DEEPREEFMAP_IMAGE_TAG: str
+
+    # Keycloak
+    KEYCLOAK_REALM: str
+    KEYCLOAK_URL: str
+    KEYCLOAK_API_ID: str
+    KEYCLOAK_API_SECRET: str
+    KEYCLOAK_CLIENT_ID: str  # The UI client ID that gets req'd for frontend
+
+    # Used for serializing and deserializing tokens for downloading files
+    SERIALIZER_SECRET_KEY: str
+    SERIALIZER_EXPIRY_HOURS: int = 6
+
+    TIMEOUT: httpx.Timeout = httpx.Timeout(
+        5.0,
+        connect=2.0,
+    )
+    LIMITS: httpx.Limits = httpx.Limits(
+        max_connections=500, max_keepalive_connections=50
+    )
+
+    VALID_ROLES: list[str] = ["admin", "user"]
 
     @model_validator(mode="after")
     @classmethod

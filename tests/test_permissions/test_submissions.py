@@ -3,7 +3,7 @@ from uuid import uuid4
 from app.config import config
 from app.objects.models import InputObject
 
-ROUTE = f"{config.API_V1_PREFIX}/submissions"
+ROUTE = f"{config.API_PREFIX}/submissions"
 
 
 @pytest.mark.asyncio

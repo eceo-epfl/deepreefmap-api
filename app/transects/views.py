@@ -17,6 +17,9 @@ from fastapi import (
 from uuid import UUID
 from app.crud import CRUD
 from typing import Annotated
+from app.users.models import User
+from app.auth.services import get_user_info
+
 
 router = APIRouter()
 crud = CRUD(Transect, TransectRead, TransectCreate, TransectUpdate)
@@ -27,8 +30,7 @@ async def get_count(
     filter: str = Query(None),
     range: str = Query(None),
     sort: str = Query(None),
-    user_id: UUID = Header(...),
-    user_is_admin: bool = Header(...),
+    user: User = Depends(get_user_info),
     session: AsyncSession = Depends(get_session),
 ):
     count = await crud.get_total_count(
@@ -37,8 +39,7 @@ async def get_count(
         range=range,
         filter=filter,
         session=session,
-        user_id=user_id,
-        user_is_admin=user_is_admin,
+        user=user,
     )
 
     return count
@@ -48,18 +49,15 @@ async def get_data(
     filter: str = Query(None),
     sort: str = Query(None),
     range: str = Query(None),
-    user_id: UUID = Header(...),
-    user_is_admin: bool = Header(...),
+    user: User = Depends(get_user_info),
     session: AsyncSession = Depends(get_session),
 ):
-
     res = await crud.get_model_data(
         sort=sort,
         range=range,
         filter=filter,
         session=session,
-        user_id=user_id,
-        user_is_admin=user_is_admin,
+        user=user,
     )
 
     return res
@@ -67,15 +65,13 @@ async def get_data(
 
 async def get_one(
     transect_id: UUID,
-    user_id: UUID = Header(...),
-    user_is_admin: bool = Header(...),
+    user: User = Depends(get_user_info),
     session: AsyncSession = Depends(get_session),
 ):
     res = await crud.get_model_by_id(
         model_id=transect_id,
         session=session,
-        user_id=user_id,
-        user_is_admin=user_is_admin,
+        user=user,
     )
 
     if not res:

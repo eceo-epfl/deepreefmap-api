@@ -1,15 +1,18 @@
 from fastapi import FastAPI, status, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import config
-from app.submissions.views import router as submissions_router
-from app.objects.views import router as objects_router
-from app.status.views import router as status_router
-from app.transects.views import router as transects_router
 from pydantic import BaseModel
 from app.db import get_session, AsyncSession
 from sqlalchemy.sql import text
 from app.submissions.k8s import get_k8s_v1
 from kubernetes.client import CoreV1Api
+from app.auth.models import KeycloakConfig
+
+from app.submissions.views import router as submissions_router
+from app.objects.views import router as objects_router
+from app.status.views import router as status_router
+from app.transects.views import router as transects_router
+from app.users.views import router as users_router
 
 app = FastAPI()
 
@@ -28,6 +31,15 @@ class HealthCheck(BaseModel):
     """Response model to validate and return when performing a health check."""
 
     status: str = "OK"
+
+
+@app.get(f"{config.API_PREFIX}/config/keycloak")
+async def get_keycloak_config() -> KeycloakConfig:
+    return KeycloakConfig(
+        clientId=config.KEYCLOAK_CLIENT_ID,
+        realm=config.KEYCLOAK_REALM,
+        url=config.KEYCLOAK_URL,
+    )
 
 
 @app.get(
@@ -58,21 +70,26 @@ async def get_health(
 # Routes for Deep Reef Map
 app.include_router(
     submissions_router,
-    prefix=f"{config.API_V1_PREFIX}/submissions",
+    prefix=f"{config.API_PREFIX}/submissions",
     tags=["submissions"],
 )
 app.include_router(
     objects_router,
-    prefix=f"{config.API_V1_PREFIX}/objects",
+    prefix=f"{config.API_PREFIX}/objects",
     tags=["objects"],
 )
 app.include_router(
     status_router,
-    prefix=f"{config.API_V1_PREFIX}/status",
+    prefix=f"{config.API_PREFIX}/status",
     tags=["status"],
 )
 app.include_router(
     transects_router,
-    prefix=f"{config.API_V1_PREFIX}/transects",
+    prefix=f"{config.API_PREFIX}/transects",
     tags=["transects"],
+)
+app.include_router(
+    users_router,
+    prefix=f"{config.API_PREFIX}/users",
+    tags=["users"],
 )
