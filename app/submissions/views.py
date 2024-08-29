@@ -33,11 +33,12 @@ import datetime
 import jwt
 from app.auth.models import DownloadToken
 
+job_log_router = APIRouter()
 
 router = APIRouter()
 
 
-@router.get("/logs/{job_id}", response_model=SubmissionJobLogRead)
+@job_log_router.get("/{job_id}", response_model=SubmissionJobLogRead)
 async def get_job_log(
     job_id: str,
     k8s: CoreV1Api | None = Depends(get_k8s_v1),

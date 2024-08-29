@@ -8,7 +8,10 @@ from app.submissions.k8s import get_k8s_v1
 from kubernetes.client import CoreV1Api
 from app.auth.models import KeycloakConfig
 
-from app.submissions.views import router as submissions_router
+from app.submissions.views import (
+    router as submissions_router,
+    job_log_router as submission_job_logs_router,
+)
 from app.objects.views import router as objects_router
 from app.status.views import router as status_router
 from app.transects.views import router as transects_router
@@ -92,4 +95,9 @@ app.include_router(
     users_router,
     prefix=f"{config.API_PREFIX}/users",
     tags=["users"],
+)
+app.include_router(
+    submission_job_logs_router,
+    prefix=f"{config.API_PREFIX}/submission_job_logs",
+    tags=["submissions", "logs"],
 )
