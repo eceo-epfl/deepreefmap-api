@@ -2,17 +2,20 @@ import pytest
 from uuid import uuid4
 from app.config import config
 from app.objects.models import InputObject
+from app.users.models import User
 
 ROUTE = f"{config.API_PREFIX}/objects"
 
 
 @pytest.mark.asyncio
 async def test_get_submission(client, modified_async_session):
+
     user_id = uuid4().hex
+    user = User(id=user_id, is_admin=False)
 
     # Create video object straight into DB to avoid checks on a real video
     input_object = InputObject(
-        owner=user_id,
+        owner=user.id,
         name="Test Video",
         description="Test Video Description",
         status="completed",
@@ -25,7 +28,6 @@ async def test_get_submission(client, modified_async_session):
 
     res_retrieved = await client.get(
         f"{ROUTE}/{input_object.id.hex}",
-        headers={"User-Id": user_id, "User-Is-Admin": "false"},
     )
 
     assert res_retrieved.status_code == 200  # or the expected status code

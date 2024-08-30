@@ -34,7 +34,6 @@ import jwt
 from app.auth.models import DownloadToken
 
 job_log_router = APIRouter()
-
 router = APIRouter()
 
 

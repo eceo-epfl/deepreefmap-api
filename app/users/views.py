@@ -121,9 +121,21 @@ async def get_users(
 
     if "users_only" in filter and filter["users_only"] is True:
         users = list(user_dict.values())
+    elif "id" in filter and isinstance(filter["id"], list):
+        print("ID!!!", filter["id"])
+        users = []
+        for i, id in enumerate(filter["id"]):
+            user = get_user(id, keycloak)
+            if user:
+                users.append(user)
+
+        return users
+
     else:
         # Return all users and match them with the current user list
-        query = {"first": range[0], "max": range[1] - range[0] + 1}
+        query = {}
+        if range:
+            query = {"first": range[0], "max": range[1] - range[0] + 1}
 
         if "username" in filter:
             query["username"] = filter["username"]

@@ -11,6 +11,9 @@ from app.main import app
 from app.config import config
 from app.submissions.k8s import get_k8s_v1
 from app.objects.service import get_s3
+from app.users.models import User
+from app.auth.services import get_user_info
+import uuid
 
 
 @pytest_asyncio.fixture
@@ -49,17 +52,6 @@ def override_get_k8s_v1():
     return MockCoreV1Api()
 
 
-# async def get_s3() -> AsyncGenerator[aioboto3.Session, None]:
-#     session = aioboto3.Session()
-#     async with session.client(
-#         "s3",
-#         aws_access_key_id=config.S3_ACCESS_KEY,
-#         aws_secret_access_key=config.S3_SECRET_KEY,
-#         endpoint_url=f"https://{config.S3_URL}",
-#     ) as client:
-#         yield client
-
-
 def override_get_s3():
     class MockListObjectsV2:
         async def __call__(self, Bucket, Prefix):
@@ -83,6 +75,18 @@ def override_get_s3():
     return MockS3()
 
 
+def override_get_user_info():
+    return User(
+        id=uuid.uuid4(),
+        username="test_user",
+        email="test_user@example.org",
+        first_name="Test",
+        last_name="User",
+        realm_roles=["user"],
+        client_roles={"deep-reef-map-api": ["user"]},
+    )
+
+
 @pytest_asyncio.fixture
 async def client(
     modified_async_session: AsyncSession,
@@ -93,6 +97,7 @@ async def client(
     app.dependency_overrides[get_session] = override_get_session
     app.dependency_overrides[get_k8s_v1] = override_get_k8s_v1
     app.dependency_overrides[get_s3] = override_get_s3
+    app.dependency_overrides[get_user_info] = override_get_user_info
     async with AsyncClient(app=app, base_url="http://test") as client:
         yield client
 
