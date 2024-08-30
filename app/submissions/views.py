@@ -428,7 +428,7 @@ async def get_submissions(
     # Do a query to satisfy total count for "Content-Range" header
     count_query = select(func.count(Submission.iterator))
     if not user.is_admin:
-        count_query = count_query.where(Submission.owner == user.id.hex)
+        count_query = count_query.where(Submission.owner == user.id)
 
     if len(filter):  # Have to filter twice for some reason? SQLModel state?
         for field, value in filter.items():
@@ -453,7 +453,7 @@ async def get_submissions(
     # sensor as well as the min and max of the time column
     query = select(Submission)
     if not user.is_admin:
-        query = query.where(Submission.owner == user.id.hex)
+        query = query.where(Submission.owner == user.id)
 
     # Order by sort field params ie. ["name","ASC"]
     if len(sort) == 2:
