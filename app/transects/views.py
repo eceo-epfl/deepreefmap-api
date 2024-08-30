@@ -106,16 +106,16 @@ async def get_all_transects(
 async def create_transect(
     response: Response,
     transect: TransectCreate,
-    user_id: UUID = Header(...),
+    user: User = Depends(get_user_info),
     session: AsyncSession = Depends(get_session),
 ) -> TransectRead:
     """Creates a transect data record"""
 
     transect = transect.model_dump()
-    transect["owner"] = user_id
+    transect["owner"] = user.id
 
     obj = Transect.model_validate(transect)
-    obj.owner = user_id
+    obj.owner = user.id
     session.add(obj)
 
     await session.commit()
