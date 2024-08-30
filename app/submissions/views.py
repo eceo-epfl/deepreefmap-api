@@ -658,15 +658,10 @@ async def update_submission(
                     # Only allow processing_order to be updated
                     if input_field == "processing_order":
                         setattr(input_obj, input_field, input_value)
-                        print(
-                            f"Updating Field: inputs.{input_field}"
-                            f" Value: {input_value}"
-                        )
 
                 session.add(input_obj)
                 await session.commit()
         else:
-            print(f"Updating: {field}, {value}")
             setattr(obj, field, value)
 
     session.add(obj)

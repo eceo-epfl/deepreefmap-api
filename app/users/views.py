@@ -122,7 +122,6 @@ async def get_users(
     if "users_only" in filter and filter["users_only"] is True:
         users = list(user_dict.values())
     elif "id" in filter and isinstance(filter["id"], list):
-        print("ID!!!", filter["id"])
         users = []
         for i, id in enumerate(filter["id"]):
             user = get_user(id, keycloak)

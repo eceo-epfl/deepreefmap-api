@@ -134,12 +134,6 @@ async def upload_chunk(
 
     data = await request.body()
 
-    print(
-        f"Working on part number {part_number}, chunk {upload_offset} "
-        f"{int(upload_offset)+int(content_length)} "
-        f"of {upload_length} bytes "
-        f"({int(upload_offset)/int(upload_length)*100}%)"
-    )
     try:
         part = await s3.upload_part(
             Bucket=config.S3_BUCKET_ID,
@@ -421,7 +415,6 @@ async def update_input_object(
 
     # Update the fields from the request
     for field, value in data.items():
-        print(f"Updating: {field}, {value}")
         setattr(obj, field, value)
 
     session.add(obj)

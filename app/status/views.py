@@ -73,8 +73,6 @@ async def get_jobs(
         s3_status = True
 
     except Exception as e:
-        print("Exception S3", e)
-        print(s3_local)
         s3_local = None
 
     obj = StatusRead(

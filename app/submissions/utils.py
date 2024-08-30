@@ -19,7 +19,6 @@ async def populate_percentage_covers(
     data from the S3 bucket. This function is called after the processing
     of the submission is completed.
     """
-    print(f"Populating percentage covers on submission {submission_id}")
 
     # Get Submission object
     query = select(Submission).where(Submission.id == submission_id)
@@ -67,11 +66,10 @@ async def populate_percentage_covers(
         )
         await session.exec(update_query)
         await session.commit()
-    except ClientError as e:
-        print(f"Error getting object from S3: {e}")
+    except ClientError:
         return submission
-    except ValueError as e:
-        print(f"Error getting submission from DB: {e}")
+
+    except ValueError:
         return submission
 
     await session.refresh(submission)
