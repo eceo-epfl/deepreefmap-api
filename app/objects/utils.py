@@ -112,16 +112,18 @@ async def delete_incomplete_object(
         if obj.all_parts_received:
             return
 
+        if time_since_last_part < config.OBJECT_CONSIDER_ABANDONED:
+            message = "Upload in progress"
+        else:
+            message = (
+                "Abandoned upload, waiting for parts. Last part received "
+                f"{math.ceil(time_since_last_part/60)} minutes ago. "
+            )
+
         update_query = (
             update(InputObject)
             .where(InputObject.id == input_object_id)
-            .values(
-                processing_message=(
-                    "Waiting for parts..."
-                    "Last part transferred "
-                    f"{math.ceil(time_since_last_part)} seconds ago. "
-                ),
-            )
+            .values(processing_message=message)
         )
         await db.exec(update_query)
         await db.commit()

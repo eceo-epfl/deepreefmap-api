@@ -29,6 +29,7 @@ class Config(BaseSettings):
     S3_SECRET_KEY: str
     INCOMPLETE_OBJECT_TIMEOUT_SECONDS: int
     INCOMPLETE_OBJECT_CHECK_INTERVAL: int
+    OBJECT_CONSIDER_ABANDONED: int = 90
 
     # Key to prefix to all assets in the S3 bucket. Should be distinct to the
     # deployment as to avoid conflicts
