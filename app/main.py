@@ -36,12 +36,13 @@ class HealthCheck(BaseModel):
     status: str = "OK"
 
 
-@app.get(f"{config.API_PREFIX}/config/keycloak")
+@app.get(f"{config.API_PREFIX}/config")
 async def get_keycloak_config() -> KeycloakConfig:
     return KeycloakConfig(
         clientId=config.KEYCLOAK_CLIENT_ID,
         realm=config.KEYCLOAK_REALM,
         url=config.KEYCLOAK_URL,
+        deployment=config.DEPLOYMENT,
     )
 
 

@@ -26,3 +26,4 @@ class KeycloakConfig(BaseModel):
     clientId: str
     realm: str
     url: str
+    deployment: str

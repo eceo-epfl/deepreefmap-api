@@ -3,6 +3,14 @@ from pydantic_settings import BaseSettings
 from functools import lru_cache
 import sys
 import httpx
+from enum import Enum
+
+
+class DeploymentType(str, Enum):
+    LOCAL = "local"
+    DEV = "dev"
+    STAGE = "stage"
+    PROD = "prod"
 
 
 class Config(BaseSettings):
@@ -10,6 +18,7 @@ class Config(BaseSettings):
     DEFAULT_SUBMISSION_FPS: int = 15
     FILENAME_CLASS_TO_COLOR: str = "class_to_color.json"
     FILENAME_PERCENTAGE_COVERS: str = "percentage_covers.json"
+    DEPLOYMENT: DeploymentType
 
     # PostGIS settings
     DB_HOST: str | None = None
