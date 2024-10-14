@@ -19,6 +19,41 @@ def get_k8s_v1() -> client.CoreV1Api | None:
     return client.CoreV1Api()
 
 
+def fetch_jobs_for_submission(submission_id: UUID) -> list[dict[str, Any]]:
+    """Fetch Kubernetes jobs for a specific submission."""
+    try:
+        k8s = get_k8s_v1()
+        if not k8s:
+            raise Exception("Kubernetes client initialization failed")
+        jobs = k8s.list_namespaced_pod(config.NAMESPACE).items
+        filtered_jobs = [
+            job for job in jobs if str(submission_id) in job.metadata.name
+        ]
+        job_status = []
+        api = ApiClient()
+        for job in filtered_jobs:
+            job_data = api.sanitize_for_serialization(job)
+            job_status.append(
+                KubernetesExecutionStatus(
+                    submission_id=job_data["metadata"].get("name"),
+                    status=job_data["status"].get("phase"),
+                    time_started=job_data["status"].get("startTime"),
+                )
+            )
+        return job_status
+    except Exception as e:
+        print(f"Error fetching jobs for submission {submission_id}: {e}")
+        return []
+
+
+@cache.early(ttl="5m", early_ttl="1m", key="submission:{submission_id}:jobs")
+async def get_cached_submission_jobs(
+    submission_id: UUID,
+) -> list[dict[str, Any]]:
+    """Fetch cached jobs for submission asynchronously."""
+    return await run_in_threadpool(fetch_jobs_for_submission, submission_id)
+
+
 def get_k8s_custom_objects() -> client.CoreV1Api:
     k8s_config.load_kube_config(config_file=config.KUBECONFIG)
     return client.CustomObjectsApi()
@@ -74,14 +109,7 @@ def delete_job(job_name: str):
     env = os.environ.copy()
     env["KUBECONFIG"] = config.KUBECONFIG
     subprocess.run(
-        [
-            "runai",
-            "delete",
-            "job",
-            "-p",
-            config.PROJECT,
-            job_name,
-        ],
+        ["runai", "delete", "job", "-p", config.PROJECT, job_name],
         env=env,
         check=True,
     )
@@ -97,3 +125,39 @@ def list_jobs_runai():
         capture_output=True,
     )
     return result.stdout.decode("utf-8")
+
+
+def fetch_job_log(job_id: str) -> str:
+    """Fetch Kubernetes job logs."""
+    k8s = get_k8s_v1()
+    if k8s:
+        log = k8s.read_namespaced_pod_log(
+            name=str(job_id), namespace=config.NAMESPACE
+        )
+        return "\n".join([line.split("\r")[-1] for line in log.split("\n")])
+    return "No logs available"
+
+
+@cache.early(ttl="30m", early_ttl="10s", key="job:{job_id}:log")
+async def get_cached_job_log(job_id: str) -> str:
+    print(f"Fetching job log for {job_id}")
+    return await run_in_threadpool(fetch_job_log, job_id)
+
+
+def fetch_jobs():
+    jobs = []
+    try:
+        k8s = get_k8s_v1()
+        if not k8s:
+            return []
+        jobs = k8s.list_namespaced_pod(config.NAMESPACE)
+    except Exception as e:
+        print(f"Error fetching jobs: {e}")
+        jobs = []
+    return jobs
+
+
+@cache.early(ttl="30m", early_ttl="10s", key="jobs:all")
+async def fetch_cached_jobs():
+    print("Fetching all k8s jobs")
+    return await run_in_threadpool(fetch_jobs)

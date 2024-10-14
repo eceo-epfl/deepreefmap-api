@@ -25,6 +25,9 @@ from app.submissions.k8s import (
     get_k8s_v1,
     get_k8s_custom_objects,
     delete_job,
+    get_cached_submission_jobs,
+    get_cached_job_log,
+    fetch_cached_jobs,
 )
 import random
 from app.users.models import User
@@ -40,33 +43,12 @@ router = APIRouter()
 @job_log_router.get("/{job_id}", response_model=SubmissionJobLogRead)
 async def get_job_log(
     job_id: str,
-    k8s: CoreV1Api | None = Depends(get_k8s_v1),
     user: User = Depends(get_user_info),
 ) -> SubmissionJobLogRead:
-    """Get the log for the given submission job
+    """Get the log for the given submission job"""
 
-    Clean out any carriage return lines and only return the last result of
-    each line.
-    """
-
-    # Get the log from the job
-    if k8s:
-        ret = k8s.read_namespaced_pod_log(
-            name=str(job_id),
-            namespace=config.NAMESPACE,
-        )
-
-        lines = ret.split("\n")
-        cleaned_lines = []
-        for line in lines:
-            progress_lines = line.split("\r")  # Remove carriage returns
-            cleaned_lines.append(progress_lines[-1])  # Only keep the last line
-
-        return SubmissionJobLogRead(
-            id=job_id, message="\n".join(cleaned_lines)
-        )
-    else:
-        return SubmissionJobLogRead(id=job_id, message="No logs available")
+    log_content = await get_cached_job_log(job_id)
+    return SubmissionJobLogRead(id=job_id, message=log_content)
 
 
 @router.get("/kubernetes/jobs")
@@ -110,8 +92,9 @@ async def get_submission(
     *,
     submission_id: UUID,
 ) -> SubmissionRead:
-    """Get an submission by id"""
+    """Get a submission by id"""
 
+    # Fetch submission from database
     query = select(Submission).where(Submission.id == submission_id)
     if not user.is_admin:
         query = query.where(Submission.owner == user.id)
@@ -122,52 +105,27 @@ async def get_submission(
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
 
-    # Get all jobs from k8s then filter out the ones that belong to the
-    # submission_id
+    # Fetch job statuses using cached async function
+    job_status = await get_cached_submission_jobs(submission_id)
 
-    try:
-        jobs = k8s.list_namespaced_pod(config.NAMESPACE)
-    except Exception:
-        jobs = []
-
-    job_status = []
-    if jobs:
-        jobs = jobs.items
-        jobs = [job for job in jobs if str(submission_id) in job.metadata.name]
-        for job in jobs:
-            api = ApiClient()
-            job_data = api.sanitize_for_serialization(job)
-            job_status.append(
-                KubernetesExecutionStatus(
-                    submission_id=job_data["metadata"].get("name"),
-                    status=job_data["status"].get("phase"),
-                    time_started=job_data["status"].get("startTime"),
-                )
-            )
-
-    # Get the file outputs in the S3 bucket
+    # Fetch the file outputs in the S3 bucket
     response = await s3.list_objects_v2(
         Bucket=config.S3_BUCKET_ID,
         Prefix=f"{config.S3_PREFIX}/outputs/{str(submission_id)}/",
     )
     outputs = response.get("Contents", [])
 
-    output_files = []
-    for output in outputs:
-        output_files.append(
-            SubmissionFileOutputs(
-                filename=output["Key"].split("/")[-1],
-                size_bytes=output["Size"],
-                last_modified=output["LastModified"],
-                url=(
-                    f"/api/submissions/{submission_id}/"
-                    f"{output['Key'].split('/')[-1]}"
-                ),
-            )
+    output_files = [
+        SubmissionFileOutputs(
+            filename=output["Key"].split("/")[-1],
+            size_bytes=output["Size"],
+            last_modified=output["LastModified"],
+            url=f"/api/submissions/{submission_id}/{output['Key'].split('/')[-1]}",
         )
+        for output in outputs
+    ]
 
-    # Sort the job_status by time_started, put any None or empty strings to
-    # beginning of list
+    # Sort the job_status by time_started
     job_status = sorted(
         job_status,
         key=lambda x: (
@@ -467,10 +425,8 @@ async def get_submissions(
     ]
     # Get all jobs from k8s then filter out the ones that belong to the
     # submission_id
-    try:
-        jobs = k8s.list_namespaced_pod(config.NAMESPACE)
-    except Exception:
-        jobs = []
+
+    jobs: list[str] = await fetch_cached_jobs()
 
     if jobs:
         jobs = jobs.items
