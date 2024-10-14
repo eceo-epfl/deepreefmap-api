@@ -295,13 +295,9 @@ async def execute_submission(
     input_associations = res.all()
     input_object_ids = [
         str(association.input_object_id) for association in input_associations
-    ]  # In order due to query above
+    ]
 
-    # Timestamp variable should be the combination of time_seconds_start and
-    # time_seconds_end. If there is only 1 file (input_object_ids), then use
-    # the format is `f"{time_seconds_start}-{time_seconds_end}"`. If there are
-    # multiple files, then the format is
-    # `f"{time_seconds_start}-end,begin-{time_seconds_end}"``
+    # Timestamp logic remains the same
     if len(input_object_ids) == 1:
         timestamp = (
             f"{submission.time_seconds_start}-{submission.time_seconds_end}"
@@ -312,80 +308,55 @@ async def execute_submission(
             f"begin-{submission.time_seconds_end}"
         )
 
+    # Updated job definition for TrainingWorkload
     job = {
-        "apiVersion": "run.ai/v1",
-        "kind": "RunaiJob",
+        "apiVersion": "run.ai/v2alpha1",
+        "kind": "TrainingWorkload",
         "metadata": {
             "name": name,
             "namespace": config.NAMESPACE,
-            "labels": {"user": "ejthomas", "release": name},
+            "labels": {"project": config.PROJECT},
         },
         "spec": {
-            "template": {
-                "metadata": {
-                    "labels": {
-                        "user": "ejthomas",
-                        "release": name,
-                    }
-                },
-                "spec": {
-                    "schedulerName": "runai-scheduler",
-                    "restartPolicy": "Never",
-                    "securityContext": {
-                        "runAsUser": 1000,
-                        "runAsGroup": 1000,
-                        "fsGroup": 1000,
+            "environment": {
+                "items": {
+                    "FPS": {"value": str(submission.fps)},
+                    "INPUT_OBJECT_IDS": {
+                        "value": json.dumps(input_object_ids)
                     },
-                    "containers": [
-                        {
-                            "name": "rcp-test-ejthomas",
-                            "image": (
-                                f"{config.DEEPREEFMAP_IMAGE}:"
-                                f"{config.DEEPREEFMAP_IMAGE_TAG}"
-                            ),  # noqa
-                            "env": [
-                                {
-                                    "name": "S3_URL",
-                                    "value": config.S3_URL,
-                                },
-                                {
-                                    "name": "S3_BUCKET_ID",
-                                    "value": config.S3_BUCKET_ID,
-                                },
-                                {
-                                    "name": "S3_ACCESS_KEY",
-                                    "value": config.S3_ACCESS_KEY,
-                                },
-                                {
-                                    "name": "S3_SECRET_KEY",
-                                    "value": config.S3_SECRET_KEY,
-                                },
-                                {
-                                    "name": "S3_PREFIX",
-                                    "value": config.S3_PREFIX,
-                                },
-                                {  # This is an env var, so list dumped as str
-                                    "name": "INPUT_OBJECT_IDS",
-                                    "value": json.dumps(input_object_ids),
-                                },
-                                {
-                                    "name": "SUBMISSION_ID",
-                                    "value": str(submission_id),
-                                },
-                                {
-                                    "name": "TIMESTAMP",
-                                    "value": timestamp,
-                                },
-                                {
-                                    "name": "FPS",
-                                    "value": str(submission.fps),
-                                },
-                            ],
-                            "resources": {"limits": {"nvidia.com/gpu": 1}},
-                        }
-                    ],
-                },
-            }
+                    "S3_ACCESS_KEY": {"value": config.S3_ACCESS_KEY},
+                    "S3_BUCKET_ID": {"value": config.S3_BUCKET_ID},
+                    "S3_PREFIX": {"value": config.S3_PREFIX},
+                    "S3_SECRET_KEY": {"value": config.S3_SECRET_KEY},
+                    "S3_URL": {"value": config.S3_URL},
+                    "SUBMISSION_ID": {"value": str(submission_id)},
+                    "TIMESTAMP": {"value": timestamp},
+                }
+            },
+            "gpu": {
+                "value": "1",
+            },
+            "image": {
+                "value": (
+                    f"{config.DEEPREEFMAP_IMAGE}:"
+                    f"{config.DEEPREEFMAP_IMAGE_TAG}"
+                ),
+            },
+            "imagePullPolicy": {
+                "value": "Always",
+            },
+            "name": {
+                "value": name,
+            },
+            "runAsGid": {
+                "value": 1000,
+            },
+            "runAsUid": {
+                "value": 1000,
+            },
+            "runAsUser": {
+                "value": True,
+            },
         },
     }
 
@@ -393,9 +364,9 @@ async def execute_submission(
     if k8s:
         api_response = k8s.create_namespaced_custom_object(
             namespace=config.NAMESPACE,
-            plural="runaijobs",
+            plural="trainingworkloads",
             body=job,
-            version="v1",
+            version="v2alpha1",
             group="run.ai",
         )
     else:

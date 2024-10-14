@@ -1,5 +1,5 @@
 # Get RunAI executable (only possible on EPFL network)
-wget --content-disposition https://rcp-caas-test.rcp.epfl.ch/cli/linux
+wget --content-disposition https://rcp-caas-prod.rcp.epfl.ch/cli/linux
 chmod +x runai
 mv runai /usr/local/bin
 
