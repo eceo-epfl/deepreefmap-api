@@ -8,6 +8,7 @@ from typing import Any
 from kubernetes.client import CoreV1Api, ApiClient
 import subprocess
 import os
+from cashews import cache
 
 
 def get_k8s_v1() -> client.CoreV1Api | None:
@@ -93,3 +94,18 @@ def list_jobs_runai():
     )
 
     return result.stdout.decode("utf-8")
+
+
+@cache.early(ttl="30s", early_ttl="10s", key="k8s:status")
+async def get_kubernetes_status():
+    print("Fetching Kubernetes status")
+    try:
+        k8s = get_k8s_v1()
+        ret = k8s.list_namespaced_pod(config.NAMESPACE)
+        api = ApiClient()
+        k8s_jobs = api.sanitize_for_serialization(ret.items)
+        kubernetes_status = True
+    except Exception:
+        k8s_jobs = []
+
+    return k8s_jobs, kubernetes_status

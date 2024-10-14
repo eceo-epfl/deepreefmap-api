@@ -70,6 +70,13 @@ class Config(BaseSettings):
         max_connections=500, max_keepalive_connections=50
     )
 
+    # Redis cache
+    CACHE_ENABLED: bool = True
+    CACHE_URL: str
+    CACHE_PORT: int
+    CACHE_TTL: int = 3600
+    CACHE_DB: int = 0
+
     VALID_ROLES: list[str] = ["admin", "user"]
 
     @model_validator(mode="after")

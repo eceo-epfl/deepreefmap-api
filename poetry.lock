@@ -594,6 +594,28 @@ files = [
 ]
 
 [[package]]
+name = "cashews"
+version = "7.3.2"
+description = "cache tools with async power"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "cashews-7.3.2-py3-none-any.whl", hash = "sha256:05005d3383957c9df5433fff9977d88022444184fd7834ad6664d00487dc1b38"},
+    {file = "cashews-7.3.2.tar.gz", hash = "sha256:08e2ea1525a9d3a264cfa2448189ec44f0253c357a7d40d54d9039108b7f868c"},
+]
+
+[package.dependencies]
+redis = {version = ">=4.3.1,<5.0.1 || >5.0.1", optional = true, markers = "extra == \"redis\""}
+
+[package.extras]
+dill = ["dill"]
+diskcache = ["diskcache (>=5.0.0)"]
+lint = ["mypy (>=1.5.0)", "types-redis"]
+redis = ["redis (>=4.3.1,!=5.0.1)"]
+speedup = ["bitarray (<3.0.0)", "hiredis", "xxhash (<4.0.0)"]
+tests = ["hypothesis (==6.112.2)", "pytest (==8.3.3)", "pytest-asyncio (==0.24.0)", "pytest-cov (==5.0.0)", "pytest-rerunfailures (==14.0)"]
+
+[[package]]
 name = "certifi"
 version = "2024.7.4"
 description = "Python package for providing Mozilla's CA Bundle."
@@ -3438,6 +3460,24 @@ files = [
 cffi = {version = "*", markers = "implementation_name == \"pypy\""}
 
 [[package]]
+name = "redis"
+version = "5.1.1"
+description = "Python client for Redis database and key-value store"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "redis-5.1.1-py3-none-any.whl", hash = "sha256:f8ea06b7482a668c6475ae202ed8d9bcaa409f6e87fb77ed1043d912afd62e24"},
+    {file = "redis-5.1.1.tar.gz", hash = "sha256:f6c997521fedbae53387307c5d0bf784d9acc28d9f1d058abeac566ec4dbed72"},
+]
+
+[package.dependencies]
+async-timeout = {version = ">=4.0.3", markers = "python_full_version < \"3.11.3\""}
+
+[package.extras]
+hiredis = ["hiredis (>=3.0.0)"]
+ocsp = ["cryptography (>=36.0.1)", "pyopenssl (==23.2.1)", "requests (>=2.31.0)"]
+
+[[package]]
 name = "referencing"
 version = "0.35.1"
 description = "JSON Referencing + Python"
@@ -4612,4 +4652,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.11,<3.13"
-content-hash = "8485156b267ef5bd9ec83b2328f3828dd998d48d92eba896acd93a95fe2ed1fd"
+content-hash = "cfb4a89ec49f0d45deb43e0866269d3b61db54e62b1a2162663765dd02d93ce8"
