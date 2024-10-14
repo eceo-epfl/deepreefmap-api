@@ -46,7 +46,7 @@ def fetch_jobs_for_submission(submission_id: UUID) -> list[dict[str, Any]]:
         return []
 
 
-@cache.early(ttl="5m", early_ttl="1m", key="submission:{submission_id}:jobs")
+@cache.early(ttl="5m", early_ttl="5s", key="submission:{submission_id}:jobs")
 async def get_cached_submission_jobs(
     submission_id: UUID,
 ) -> list[dict[str, Any]]:
