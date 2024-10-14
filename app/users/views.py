@@ -8,7 +8,9 @@ from keycloak import KeycloakAdmin, KeycloakOpenIDConnection
 from pydantic import BaseModel
 from enum import Enum
 import json
-
+from fastapi.concurrency import run_in_threadpool
+from cashews import cache
+from typing import Any, List
 
 router = APIRouter()
 
@@ -69,6 +71,103 @@ def get_user(
     )
 
 
+async def fetch_all_users(
+    keycloak: KeycloakAdmin,
+    filter: dict,
+    sort: list,
+    range: list,
+) -> List[KeycloakUser]:
+    """Fetch all users from Keycloak with filtering, sorting, and range logic."""
+    admin_users = await run_in_threadpool(
+        keycloak.get_realm_role_members, "admin"
+    )
+    general_users = await run_in_threadpool(
+        keycloak.get_realm_role_members, "user"
+    )
+
+    user_dict = {}
+
+    for user in general_users:
+        user_dict[user["id"]] = user
+        user_dict[user["id"]]["admin"] = False
+        user_dict[user["id"]]["approved_user"] = True
+
+    for user in admin_users:
+        user_dict[user["id"]] = user
+        user_dict[user["id"]]["admin"] = True
+        user_dict[user["id"]]["approved_user"] = True
+
+    # Filtering by users only or by specific user IDs
+    if "users_only" in filter and filter["users_only"]:
+        users = list(user_dict.values())
+        users = [
+            KeycloakUser(
+                email=user.get("email"),
+                username=user.get("username"),
+                id=user.get("id"),
+                firstName=user.get("firstName"),
+                lastName=user.get("lastName"),
+                admin=user.get("admin"),
+                approved_user=user.get("approved_user"),
+                loginMethod=(
+                    user.get("attributes", {})
+                    .get("login-method", ["EPFL"])[0]
+                    .upper()
+                ),
+            )
+            for user in users
+        ]
+    elif "id" in filter and isinstance(filter["id"], list):
+        users = []
+        for user_id in filter["id"]:
+            user = await run_in_threadpool(get_user, user_id, keycloak)
+            if user:
+                users.append(user)
+    else:
+        # Return all users with the query params for pagination (range)
+        query = {}
+        if range:
+            query = {"first": range[0], "max": range[1] - range[0] + 1}
+        if "username" in filter:
+            query["username"] = filter["username"]
+        users = await run_in_threadpool(keycloak.get_users, query=query)
+
+        users = [
+            KeycloakUser(
+                email=user.get("email"),
+                username=user.get("username"),
+                id=user.get("id"),
+                firstName=user.get("firstName"),
+                lastName=user.get("lastName"),
+                admin=user.get("admin"),
+                approved_user=user.get("approved_user"),
+                loginMethod=(
+                    user.get("attributes", {})
+                    .get("login-method", ["EPFL"])[0]
+                    .upper()
+                ),
+            )
+            for user in users
+        ]
+
+    return users
+
+
+# Apply caching to the new fetch_all_users function
+@cache.early(
+    ttl="10s", early_ttl="2s", key="keycloak:users:{filter}:{sort}:{range}"
+)
+async def cached_fetch_all_users(
+    keycloak: KeycloakAdmin,
+    filter: dict,
+    sort: list,
+    range: list,
+) -> List[KeycloakUser]:
+
+    print("Fetching users from Keycloak")
+    return await fetch_all_users(keycloak, filter, sort, range)
+
+
 @router.get("/{user_id}", response_model=KeycloakUser)
 async def get_one_user(
     user_id: str,
@@ -84,63 +183,24 @@ async def get_one_user(
 async def get_users(
     response: Response,
     user: User = Depends(require_admin),
-    keycloak: KeycloakAdmin = Depends(get_keycloak_admin),
     *,
     filter: str = Query(None),
     sort: str = Query(None),
     range: str = Query(None),
 ) -> list[KeycloakUser]:
-    """Get a list of users
+    """Get a list of users from Keycloak"""
 
-    This endpoint is used to get a list of users from Keycloak. It is used
-    to populate the list of users in the admin UI.
+    keycloak = get_keycloak_admin()
 
-    Filtering by username is only supported when the admin filter is set to
-    False.
-    """
-
+    # Parse filter, sort, and range from JSON strings
     sort = json.loads(sort) if sort else []
     range = json.loads(range) if range else []
     filter = json.loads(filter) if filter else {}
 
-    # Return only current users, to reduce load on Keycloak
-    admin_users = keycloak.get_realm_role_members("admin")
-    general_users = keycloak.get_realm_role_members("user")
+    # Call the cached version of fetch_all_users
+    users = await cached_fetch_all_users(keycloak, filter, sort, range)
 
-    user_dict = {}
-
-    for user in general_users:
-        user_dict[user["id"]] = user
-        user_dict[user["id"]]["admin"] = False
-        user_dict[user["id"]]["approved_user"] = True
-
-    for user in admin_users:
-        user_dict[user["id"]] = user
-        user_dict[user["id"]]["admin"] = True
-        user_dict[user["id"]]["approved_user"] = True
-
-    if "users_only" in filter and filter["users_only"] is True:
-        users = list(user_dict.values())
-    elif "id" in filter and isinstance(filter["id"], list):
-        users = []
-        for i, id in enumerate(filter["id"]):
-            user = get_user(id, keycloak)
-            if user:
-                users.append(user)
-
-        return users
-
-    else:
-        # Return all users and match them with the current user list
-        query = {}
-        if range:
-            query = {"first": range[0], "max": range[1] - range[0] + 1}
-
-        if "username" in filter:
-            query["username"] = filter["username"]
-
-        users = keycloak.get_users(query=query)
-
+    # Pagination logic and setting response headers
     if len(range) == 2:
         start, end = range
     else:
@@ -148,29 +208,32 @@ async def get_users(
 
     response.headers["Content-Range"] = f"users {start}-{end}/{len(users)}"
 
-    user_objs = []
-    for user in users[start : end + 1]:
-        approved = False
-        admin = False
-        if user.get("id") in user_dict:
-            approved = user_dict[user["id"]].get("approved_user", False)
-            admin = user_dict[user["id"]].get("admin", False)
-        user_objs.append(
-            KeycloakUser(
-                email=user.get("email"),
-                username=user.get("username"),
-                id=user.get("id"),
-                firstName=user.get("firstName"),
-                lastName=user.get("lastName"),
-                admin=admin,
-                approved_user=approved,
-                loginMethod=user.get("attributes", {})
-                .get("login-method", ["EPFL"])[0]
-                .upper(),
-            )
-        )
+    users = users[start : end + 1]
 
-    return user_objs
+    # users = [
+    #     KeycloakUser(
+    #         email=user.get("email"),
+    #         username=user.get("username"),
+    #         id=user.get("id"),
+    #         firstName=user.get("firstName"),
+    #         lastName=user.get("lastName"),
+    #         admin=user.get("admin"),
+    #         approved_user=user.get("approved_user"),
+    #         loginMethod=(
+    #             user.get("attributes", {})
+    #             .get("login-method", ["EPFL"])[0]
+    #             .upper()
+    #         ),
+    #     )
+    #     for user in users
+    # ]
+    # for user in users:
+    #     loginmethod = "EPFL"
+    #     if user.get("attributes", {}).get("login-method"):
+    #         loginmethod = user["attributes"]["login-method"][0].upper()
+    #     user["loginMethod"] = loginmethod
+
+    return users
 
 
 @router.put("/{user_id}")
