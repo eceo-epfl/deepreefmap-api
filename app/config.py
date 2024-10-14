@@ -76,6 +76,8 @@ class Config(BaseSettings):
     CACHE_PORT: int
     CACHE_TTL: int = 3600
     CACHE_DB: int = 0
+    CACHE_SECRET: str  # Secret key for cache hashing
+    CACHE_PASSWORD: str  # Redis' password
 
     VALID_ROLES: list[str] = ["admin", "user"]
 

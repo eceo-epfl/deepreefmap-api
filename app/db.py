@@ -22,10 +22,8 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
 # Cache setup
 cache.setup(
     f"redis://{config.CACHE_URL}:{config.CACHE_PORT}/",
+    password=config.CACHE_PASSWORD,
     db=config.CACHE_DB,
     enable=config.CACHE_ENABLED,
-    # suppress=True,
-    # client_side=True,
-    # socket_connect_timeout=0.1,
-    # retry_on_timeout=False,
+    secret=config.CACHE_SECRET.encode(),
 )
