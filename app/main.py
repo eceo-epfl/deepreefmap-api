@@ -1,12 +1,12 @@
-from fastapi import FastAPI, status, Depends
+from fastapi import FastAPI, status, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import config
 from pydantic import BaseModel
 from app.db import get_session, AsyncSession
 from sqlalchemy.sql import text
-from app.submissions.k8s import get_k8s_v1
-from kubernetes.client import CoreV1Api
+from app.submissions.k8s import get_kubernetes_status
 from app.auth.models import KeycloakConfig
+from app.objects.service import get_s3_status
 
 from app.submissions.views import (
     router as submissions_router,
@@ -56,7 +56,6 @@ async def get_keycloak_config() -> KeycloakConfig:
 )
 async def get_health(
     session: AsyncSession = Depends(get_session),
-    k8s: CoreV1Api = Depends(get_k8s_v1),
 ) -> HealthCheck:
     """
     Endpoint to perform a healthcheck on for kubernetes liveness and
@@ -66,8 +65,14 @@ async def get_health(
     await session.exec(text("SELECT 1"))
 
     # Query kubernetes API to check RCP:RunAI connection
-    k8s.list_namespaced_pod(config.NAMESPACE)
+    _, k8s = await get_kubernetes_status()
+    _, s3 = await get_s3_status()
 
+    if not k8s or not s3:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Kubernetes or S3 service is not available",
+        )
     return HealthCheck(status="OK")
 
 
