@@ -21,6 +21,12 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+      redis:
+        image: redis:7.4.0
+        ports:
+          - 6379:6379
+        options: --requirepass test
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
@@ -71,3 +77,8 @@ jobs:
           KEYCLOAK_REALM: test
           KEYCLOAK_URL: test
           SERIALIZER_SECRET_KEY: test
+          CACHE_URL: localhost
+          CACHE_PORT: 6379
+          CACHE_DB: 0
+          CACHE_SECRET: test
+          CACHE_PASSWORD: test
