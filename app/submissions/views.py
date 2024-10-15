@@ -490,6 +490,27 @@ async def create_submission(
             detail="At least one file must be provided",
         )
 
+    # Check that the input associations belong to the transect
+    # that the submission to be created is associated with
+    for input_file in submission.input_associations:
+        query = select(InputObject).where(
+            InputObject.id == input_file.input_object_id
+        )
+        res = await session.exec(query)
+        input_object_obj = res.one_or_none()
+        if not input_object_obj:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Object not found ({input_file.input_object_id})",
+            )
+        if input_object_obj.transect_id != submission.transect_id:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Input object does not belong to the submission's transect"
+                ),
+            )
+
     # Create submission object to get submission_id to link to input objects
     obj = Submission(
         name=submission.name,
