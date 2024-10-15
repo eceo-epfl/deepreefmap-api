@@ -23,9 +23,11 @@ jobs:
 
       redis:
         image: redis:7.4.0
+        env:
+          REDIS_PASSWORD: test
         ports:
           - 6379:6379
-        options: --requirepass test
+        options: --health-cmd "redis-cli -a test ping" --health-interval 10s --health-timeout 5s --health-retries 5
 
     steps:
       - name: Checkout code
@@ -46,6 +48,12 @@ jobs:
         run: |
           for i in {1..30}; do
             pg_isready -h localhost -p 5432 -U postgres && break || sleep 1
+          done
+
+      - name: Wait for Redis to be ready
+        run: |
+          for i in {1..30}; do
+            redis-cli -a test ping && break || sleep 1
           done
 
       - name: Run tests
