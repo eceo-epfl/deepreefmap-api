@@ -12,11 +12,9 @@ from fastapi import (
     Response,
     HTTPException,
     Request,
-    Header,
 )
 from uuid import UUID
 from app.crud import CRUD
-from typing import Annotated
 from app.users.models import User
 from app.auth.services import get_user_info
 
@@ -74,9 +72,10 @@ async def get_one(
         user=user,
     )
 
-    if not res:
+    if not res or res.owner != user.id:
         raise HTTPException(
-            status_code=404, detail=f"ID: {transect_id} not found"
+            status_code=404,
+            detail=f"ID: {transect_id} not found or unauthorized",
         )
     return res
 

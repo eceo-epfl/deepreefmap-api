@@ -231,14 +231,13 @@ class CRUD:
     async def get_model_by_id(
         self,
         session: AsyncSession,
-        user: User = Depends(get_user_info),
+        user: User,
         *,
         model_id: UUID,
     ) -> Any:
         """Get a model by id"""
 
         query = select(self.db_model).where(self.db_model.id == model_id)
-
         if not user.is_admin:
             query = query.filter(self.db_model.owner == user.id)
 

@@ -17,3 +17,5 @@ class User(BaseModel):
         # Check if user is an admin
         if "admin" in self.realm_roles:
             self.is_admin = True
+
+        return self
