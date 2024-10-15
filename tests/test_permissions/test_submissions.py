@@ -1,9 +1,12 @@
-# import pytest
-# from uuid import uuid4
-# from app.config import config
-# from app.objects.models import InputObject
+import pytest
+from uuid import uuid4
+from app.config import config
+from app.objects.models import InputObject
+from app.transects.models import Transect
+from app.users.models import User
+from geoalchemy2 import WKTElement
 
-# ROUTE = f"{config.API_PREFIX}/submissions"
+ROUTE = f"{config.API_PREFIX}/submissions"
 
 
 # @pytest.mark.asyncio
@@ -64,3 +67,49 @@
 #     )
 
 #     assert res_retrieved_admin.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_forbid_object_of_other_transect_into_submission(
+    test_user_one, client_one_user, modified_async_session
+):
+    # Add a transect, then add an object into it and try to create a submission with that object
+
+    transect = Transect(
+        owner=test_user_one.id,
+        name="Test Transect 2",
+        description="Test Transect Description",
+        geom=WKTElement("LINESTRING(0 0, 2 2)", srid=4326),
+    )
+    modified_async_session.add(transect)
+
+    await modified_async_session.commit()
+    await modified_async_session.refresh(transect)
+
+    # Create video object straight into DB to avoid checks on a real video
+    input_object = InputObject(
+        owner=test_user_one.id,
+        name="Test Video",
+        description="Test Video Description",
+        status="completed",
+        input_type="video",
+        input_metadata={"duration": 10},
+        transect_id=transect.id,
+    )
+
+    modified_async_session.add(input_object)
+    await modified_async_session.commit()
+    await modified_async_session.refresh(input_object)
+
+    res_created = await client_one_user.post(
+        f"{ROUTE}",
+        json={
+            "owner": test_user_one.id,
+            "name": "Test Submission",
+            "description": "Test Submission Description",
+            "status": "completed",
+            "input_associations": [{"input_object_id": input_object.id.hex}],
+        },
+    )
+
+    assert res_created.status_code == 400, res_created.text
