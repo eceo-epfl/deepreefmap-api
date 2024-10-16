@@ -4,7 +4,6 @@ from fastapi import (
     Request,
     Query,
     BackgroundTasks,
-    Header,
     Response,
     HTTPException,
 )
@@ -20,9 +19,7 @@ from typing import Any
 from aioboto3 import Session as S3Session
 from app.objects.utils import (
     generate_video_statistics,
-    delete_incomplete_object,
 )
-import datetime
 import json
 from app.users.models import User
 from app.auth.services import get_user_info, get_payload
@@ -41,6 +38,7 @@ async def handle_file_upload(
 ):
     # Read the JSON payload from the request
     payload = await request.json()
+    print(payload)
     try:
         # Extracting the JWT auth token
         auth_token = payload["Event"]["HTTPRequest"]["Header"][
@@ -67,6 +65,11 @@ async def handle_file_upload(
 
     if payload["Type"] == "post-finish":
         return await hooks.post_finish(session, user, payload, s3, background)
+
+    return JSONResponse(
+        content={"message": "No hook found for this event type"},
+        status_code=404,
+    )
 
 
 @router.get("/{object_id}", response_model=InputObjectRead)
