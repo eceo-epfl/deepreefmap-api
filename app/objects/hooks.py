@@ -4,7 +4,7 @@ from app.config import config
 from fastapi import HTTPException, status, BackgroundTasks
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
-from sqlmodel import update
+from sqlmodel import update, select
 from app.objects.utils import (
     generate_video_statistics,
     delete_incomplete_object,
@@ -162,6 +162,21 @@ async def post_finish(
     # Split the UUID out of the upload_id to get the object ID.
     # Also the + separator between UUID and TUSd upload ID
     object_id = upload_id.split(config.INPUT_FOLDER_PREFIX)[1].split("+")[0]
+
+    # If is partial, it's the last one, let's delete from DB
+    is_partial = payload["Event"]["Upload"]["IsPartial"]
+    if is_partial:
+        # Remove the object from the database
+        query = select(InputObject).where(InputObject.id == object_id)
+        res = await session.exec(query)
+        obj = res.one_or_none()
+        await session.delete(obj)
+        await session.commit()
+
+        # Respond with a 200 to acknowledge the request
+        return JSONResponse(
+            status_code=200, content={"message": "Upload completed"}
+        )
 
     # Update the object
     update_query = (
