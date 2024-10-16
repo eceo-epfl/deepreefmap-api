@@ -72,10 +72,9 @@ async def get_one(
         user=user,
     )
 
-    if not res or res.owner != user.id:
+    if not res:
         raise HTTPException(
-            status_code=404,
-            detail=f"ID: {transect_id} not found or unauthorized",
+            status_code=404, detail=f"ID: {transect_id} not found"
         )
     return res
 
