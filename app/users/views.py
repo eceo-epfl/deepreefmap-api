@@ -164,7 +164,7 @@ async def cached_fetch_all_users(
     range: list,
 ) -> List[KeycloakUser]:
 
-    print("Fetching users from Keycloak")
+    print("Fetching users from Keycloak...")
     return await fetch_all_users(keycloak, filter, sort, range)
 
 

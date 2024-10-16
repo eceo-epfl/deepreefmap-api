@@ -8,6 +8,7 @@ from fastapi import (
     Response,
     HTTPException,
 )
+from fastapi.responses import JSONResponse
 from app.db import get_session, AsyncSession
 from app.objects.models import InputObject, InputObjectRead, InputObjectUpdate
 from app.objects.service import get_s3
@@ -15,7 +16,7 @@ from app.config import config
 from uuid import UUID
 from sqlmodel import select, update
 from sqlalchemy import func
-from typing import Any, Annotated
+from typing import Any
 from aioboto3 import Session as S3Session
 from app.objects.utils import (
     generate_video_statistics,
@@ -24,221 +25,48 @@ from app.objects.utils import (
 import datetime
 import json
 from app.users.models import User
-from app.auth.services import get_user_info
+from app.auth.services import get_user_info, get_payload
+from app.objects import hooks
 
 router = APIRouter()
 
 
-@router.post("")
-async def upload_file(
-    user: User = Depends(get_user_info),
-    upload_length: int = Header(..., alias="Upload-Length"),
-    content_type: str = Header(..., alias="Content-Type"),
-    transect_id: str = Header(None, alias="Transect-Id"),
-    session: AsyncSession = Depends(get_session),
-    s3: S3Session = Depends(get_s3),
-    *,
-    background_tasks: BackgroundTasks,
-) -> str:
-    # Handle chunked file upload
-    try:
-        object = InputObject(
-            size_bytes=upload_length,
-            all_parts_received=False,
-            last_part_received_utc=datetime.datetime.now(),
-            processing_message="Upload started",
-            transect_id=transect_id if transect_id else None,
-            owner=user.id,
-        )
-        session.add(object)
-
-        await session.commit()
-        await session.refresh(object)
-
-        key = f"{config.S3_PREFIX}/inputs/{str(object.id)}"
-        # Create multipart upload and add the upload id to the object
-        response = await s3.create_multipart_upload(
-            Bucket=config.S3_BUCKET_ID,
-            Key=key,
-        )
-
-        # Wait for the response to return the upload id
-        object.upload_id = response["UploadId"]
-        await session.commit()
-
-        # Create a worker to monitor stale uploads and delete if outside
-        # of threshold in config
-        background_tasks.add_task(
-            delete_incomplete_object, object.id, s3, session
-        )
-
-    except Exception:
-        await session.rollback()
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to create object",
-        )
-
-    return str(object.id)
-
-
-@router.patch("")
-async def upload_chunk(
+@router.post("/hooks")
+async def handle_file_upload(
     request: Request,
-    patch: str = Query(...),
-    user: User = Depends(get_user_info),
+    session: AsyncSession = Depends(get_session),
     s3: S3Session = Depends(get_s3),
-    session: AsyncSession = Depends(get_session),
-    upload_offset: int = Header(..., alias="Upload-Offset"),
-    upload_length: int = Header(..., alias="Upload-Length"),
-    upload_name: str = Header(..., alias="Upload-Name"),
-    content_type: str = Header(..., alias="Content-Type"),
-    content_length: int = Header(..., alias="Content-Length"),
     *,
-    background_tasks: BackgroundTasks,
+    background: BackgroundTasks,
 ):
-    """Handle chunked file upload"""
-
-    # Clean " from patch
-    patch = patch.replace('"', "")
-
-    # Get the object prefix from the DB
-    query = select(InputObject).where(InputObject.id == patch)
-    if not user.is_admin:
-        query = query.where(InputObject.owner == user.id)
-    res = await session.exec(query)
-    object = res.one_or_none()
-    if not object:
-        raise HTTPException(
-            status_code=404,
-            detail="Object not found",
-        )
-
-    final_part = False
-    # Get the part number from the offset
-    if upload_length - upload_offset == content_length:
-        # The last object is probably not the same size as the other parts, so
-        # we need to check if the part number is the last part
-        last_part = object.parts[-1]
-        part_number = last_part["PartNumber"] + 1
-    else:
-        # Calculate the part number from the division of the offset by the part
-        # size (content-length) from the upload length
-        part_number = (int(upload_offset) // int(content_length)) + 1
-
-    if upload_offset + content_length == upload_length:
-        final_part = True
-
-    # Upload the chunk to S3
-    key = f"{config.S3_PREFIX}/inputs/{str(object.id)}"
-
-    data = await request.body()
-
+    # Read the JSON payload from the request
+    payload = await request.json()
     try:
-        part = await s3.upload_part(
-            Bucket=config.S3_BUCKET_ID,
-            Key=key,
-            UploadId=object.upload_id,
-            PartNumber=part_number,
-            Body=data,
-        )
-        if object.parts is None or not object.parts:
-            object.parts = []
-
-        object.parts += [
-            {
-                "PartNumber": part_number,
-                "ETag": part["ETag"],
-                "Size": content_length,
-                "Offset": upload_offset,
-                "Length": content_length,
-            }
-        ]
-        update_query = (
-            update(InputObject)
-            .where(InputObject.id == object.id)
-            .values(
-                parts=object.parts,
-                filename=upload_name,
-                last_part_received_utc=datetime.datetime.now(),
-            )
-        )
-        await session.exec(update_query)
-        await session.commit()
-
-        if final_part:
-            # Complete the multipart upload
-
-            # Simplify the parts list to only include the PartNumber and ETag
-            parts_list = [
-                {"PartNumber": x["PartNumber"], "ETag": x["ETag"]}
-                for x in object.parts
-            ]
-            res = await s3.complete_multipart_upload(
-                Bucket=config.S3_BUCKET_ID,
-                Key=key,
-                UploadId=object.upload_id,
-                MultipartUpload={"Parts": parts_list},
-            )
-
-            update_query = (
-                update(InputObject)
-                .where(InputObject.id == object.id)
-                .values(
-                    last_part_received_utc=datetime.datetime.now(),
-                    all_parts_received=True,
-                )
-            )
-            await session.exec(update_query)
-            await session.commit()
-
-            # Create background task to generate video statistics
-            background_tasks.add_task(
-                generate_video_statistics, object.id, s3, session
-            )
-
-    except Exception as e:
+        # Extracting the JWT auth token
+        auth_token = payload["Event"]["HTTPRequest"]["Header"][
+            "Authorization"
+        ][0].split("Bearer ")[1]
+        user = get_user_info(get_payload(auth_token))
+    except Exception:
         raise HTTPException(
-            status_code=500,
-            detail=f"Failed to upload file to S3: {e}",
+            detail="Unauthorized",
+            status_code=401,
         )
 
-    await session.refresh(object)
-    return object
+    if payload["Type"] == "pre-create":
+        return await hooks.pre_create(session, user, payload)
 
+    if payload["Type"] == "post-receive":
+        return await hooks.post_receive(session, user, payload)
 
-@router.head("")
-async def check_uploaded_chunks(
-    response: Response,
-    user: User = Depends(get_user_info),
-    patch: str = Query(...),
-    session: AsyncSession = Depends(get_session),
-):
-    """Responds with the offset of the next expected chunk"""
-    # Get the InputObject from the DB
-    # Clean " from patch
-    patch = patch.replace('"', "")
-    query = select(InputObject).where(InputObject.id == patch)
-    if not user.is_admin:
-        query = query.where(InputObject.owner == user.id)
-    res = await session.exec(query)
-    object = res.one_or_none()
-    if not object:
-        raise HTTPException(
-            status_code=404,
-            detail="Object not found",
-        )
+    if payload["Type"] == "post-create":
+        return await hooks.post_create(session, user, payload, s3, background)
 
-    # Calculate the next expected offset
-    next_expected_offset = 0
-    if object.parts:
-        last_part = object.parts[-1]
-        next_expected_offset = last_part["Offset"] + last_part["Length"]
+    if payload["Type"] == "pre-finish":
+        return await hooks.pre_finish(session, user, payload)
 
-    # Return headers with Upload-Offset
-    response.headers["Upload-Offset"] = str(next_expected_offset)
-
-    return
+    if payload["Type"] == "post-finish":
+        return await hooks.post_finish(session, user, payload, s3, background)
 
 
 @router.get("/{object_id}", response_model=InputObjectRead)

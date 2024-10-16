@@ -23,7 +23,7 @@ keycloak_openid = KeycloakOpenID(
 
 
 # Get the payload/token from keycloak
-async def get_payload(
+def get_payload(
     token: str = Security(oauth2_scheme),
 ) -> dict:
     try:
@@ -37,7 +37,7 @@ async def get_payload(
 
 
 # Get user infos from the payload
-async def get_user_info(
+def get_user_info(
     payload: dict = Depends(get_payload),
 ) -> User:
     try:

@@ -80,7 +80,7 @@ def fetch_kubernetes_status():
 async def get_kubernetes_status() -> Any:
     """Offload the blocking Kubernetes status fetch to a thread."""
 
-    print("Fetching Kubernetes status asynchronously")
+    print("Fetching Kubernetes status...")
     return await run_in_threadpool(fetch_kubernetes_status)
 
 
@@ -159,5 +159,5 @@ def fetch_jobs():
 
 @cache.early(ttl="30m", early_ttl="10s", key="jobs:all")
 async def fetch_cached_jobs():
-    print("Fetching all k8s jobs")
+    print("Fetching all k8s jobs...")
     return await run_in_threadpool(fetch_jobs)

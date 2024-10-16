@@ -112,21 +112,19 @@ async def delete_incomplete_object(
         if obj.all_parts_received:
             return
 
-        if time_since_last_part < config.OBJECT_CONSIDER_ABANDONED:
-            message = "Upload in progress"
-        else:
+        if time_since_last_part > config.INCOMPLETE_OBJECT_CONSIDER_ABANDONED:
             message = (
                 "Abandoned upload, waiting for parts. Last part received "
-                f"{math.ceil(time_since_last_part/60)} minutes ago. "
+                f"{math.ceil(time_since_last_part)} seconds ago. "
             )
 
-        update_query = (
-            update(InputObject)
-            .where(InputObject.id == input_object_id)
-            .values(processing_message=message)
-        )
-        await db.exec(update_query)
-        await db.commit()
+            update_query = (
+                update(InputObject)
+                .where(InputObject.id == input_object_id)
+                .values(processing_message=message)
+            )
+            await db.exec(update_query)
+            await db.commit()
 
         # Recheck the object
         await asyncio.sleep(config.INCOMPLETE_OBJECT_CHECK_INTERVAL)
@@ -142,12 +140,12 @@ async def delete_incomplete_object(
         Key=f"{config.S3_PREFIX}/inputs/{input_object_id}",
     )
 
-    # Delete chunked object from S3
-    await s3.abort_multipart_upload(
-        Bucket=config.S3_BUCKET_ID,
-        Key=f"{config.S3_PREFIX}/inputs/{obj.id}",
-        UploadId=obj.upload_id,
-    )
+    # # Delete chunked object from S3
+    # await s3.abort_multipart_upload(
+    #     Bucket=config.S3_BUCKET_ID,
+    #     Key=f"{config.S3_PREFIX}/inputs/{obj.id}",
+    #     UploadId=obj.upload_id,
+    # )
 
     # Delete the object from the database
     delete_query = delete(InputObject).where(InputObject.id == input_object_id)

@@ -29,7 +29,7 @@ async def get_s3_status():
         aws_secret_access_key=config.S3_SECRET_KEY,
         endpoint_url=f"https://{config.S3_URL}",
     ) as s3:
-        print("Fetching S3 status")
+        print("Fetching S3 status...")
         # Get total usage (items, size) for inputs, outputs
         s3_local = S3Status()
 

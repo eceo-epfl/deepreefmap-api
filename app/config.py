@@ -38,7 +38,7 @@ class Config(BaseSettings):
     S3_SECRET_KEY: str
     INCOMPLETE_OBJECT_TIMEOUT_SECONDS: int
     INCOMPLETE_OBJECT_CHECK_INTERVAL: int
-    OBJECT_CONSIDER_ABANDONED: int = 90
+    INCOMPLETE_OBJECT_CONSIDER_ABANDONED: int = 60
 
     # Key to prefix to all assets in the S3 bucket. Should be distinct to the
     # deployment as to avoid conflicts
@@ -50,6 +50,8 @@ class Config(BaseSettings):
     KUBECONFIG: str = "/app/.kube/config.yaml"
     DEEPREEFMAP_IMAGE: str
     DEEPREEFMAP_IMAGE_TAG: str
+    ALLOWED_FILETYPES: list[str] = ["video/mp4"]
+    INPUT_FOLDER_PREFIX: str = "inputs/"
 
     # Keycloak
     KEYCLOAK_REALM: str
