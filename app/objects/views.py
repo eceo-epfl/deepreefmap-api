@@ -1,13 +1,11 @@
 from fastapi import (
     Depends,
     APIRouter,
-    Request,
     Query,
     BackgroundTasks,
     Response,
     HTTPException,
 )
-from fastapi.responses import JSONResponse
 from app.db import get_session, AsyncSession
 from app.objects.models import InputObject, InputObjectRead, InputObjectUpdate
 from app.objects.service import get_s3
@@ -17,59 +15,13 @@ from sqlmodel import select, update
 from sqlalchemy import func
 from typing import Any
 from aioboto3 import Session as S3Session
-from app.objects.utils import (
-    generate_video_statistics,
-)
+from app.objects.utils import generate_video_statistics
 import json
 from app.users.models import User
-from app.auth.services import get_user_info, get_payload
-from app.objects import hooks
+from app.auth.services import get_user_info
+
 
 router = APIRouter()
-
-
-@router.post("/hooks")
-async def handle_file_upload(
-    request: Request,
-    session: AsyncSession = Depends(get_session),
-    s3: S3Session = Depends(get_s3),
-    *,
-    background: BackgroundTasks,
-):
-    # Read the JSON payload from the request
-    payload = await request.json()
-    print(payload)
-    try:
-        # Extracting the JWT auth token
-        auth_token = payload["Event"]["HTTPRequest"]["Header"][
-            "Authorization"
-        ][0].split("Bearer ")[1]
-        user = get_user_info(get_payload(auth_token))
-    except Exception:
-        raise HTTPException(
-            detail="Unauthorized",
-            status_code=401,
-        )
-
-    if payload["Type"] == "pre-create":
-        return await hooks.pre_create(session, user, payload)
-
-    if payload["Type"] == "post-receive":
-        return await hooks.post_receive(session, user, payload)
-
-    if payload["Type"] == "post-create":
-        return await hooks.post_create(session, user, payload, s3, background)
-
-    if payload["Type"] == "pre-finish":
-        return await hooks.pre_finish(session, user, payload)
-
-    if payload["Type"] == "post-finish":
-        return await hooks.post_finish(session, user, payload, s3, background)
-
-    return JSONResponse(
-        content={"message": "No hook found for this event type"},
-        status_code=404,
-    )
 
 
 @router.get("/{object_id}", response_model=InputObjectRead)
@@ -155,36 +107,35 @@ async def get_objects(
     if not user.is_admin:
         count_query = count_query.where(InputObject.owner == user.id)
 
-    if len(filter):  # Have to filter twice for some reason? SQLModel state?
+    # Apply filters to the count query
+    if len(filter):
         for field, value in filter.items():
-            if field == "id" or field == "object_id":
+            if field in ["id", "object_id", "transect_id"]:
                 if isinstance(value, list):
-                    for v in value:
-                        count_query = count_query.filter(
-                            getattr(InputObject, field) == v
-                        )
+                    count_query = count_query.where(
+                        getattr(InputObject, field).in_(value)
+                    )
                 else:
-                    count_query = count_query.filter(
+                    count_query = count_query.where(
                         getattr(InputObject, field) == value
                     )
             elif isinstance(value, bool):
-                count_query = count_query.filter(
+                count_query = count_query.where(
                     getattr(InputObject, field) == value
                 )
             else:
-                count_query = count_query.filter(
+                count_query = count_query.where(
                     getattr(InputObject, field).like(f"%{str(value)}%")
                 )
-    total_count = await session.exec(count_query)
-    total_count = total_count.one()
+    total_count = await session.execute(count_query)
+    total_count = total_count.scalar_one()
 
-    # Query for the quantity of records in SensorInventoryData that match the
-    # sensor as well as the min and max of the time column
+    # Query for the actual records
     query = select(InputObject)
     if not user.is_admin:
         query = query.where(InputObject.owner == user.id)
 
-    # Order by sort field params ie. ["name","ASC"]
+    # Apply sorting
     if len(sort) == 2:
         sort_field, sort_order = sort
         if sort_order == "ASC":
@@ -192,22 +143,22 @@ async def get_objects(
         else:
             query = query.order_by(getattr(InputObject, sort_field).desc())
 
-    # Filter by filter field params ie. {"name":"bar"}
+    # Apply filters to the main query
     if len(filter):
         for field, value in filter.items():
-            if field == "id" or field == "object_id":
+            if field in ["id", "object_id", "transect_id"]:
                 if isinstance(value, list):
-                    for v in value:
-                        query = query.filter(getattr(InputObject, field) == v)
+                    query = query.where(getattr(InputObject, field).in_(value))
                 else:
-                    query = query.filter(getattr(InputObject, field) == value)
+                    query = query.where(getattr(InputObject, field) == value)
             elif isinstance(value, bool):
-                query = query.filter(getattr(InputObject, field) == value)
+                query = query.where(getattr(InputObject, field) == value)
             else:
-                query = query.filter(
+                query = query.where(
                     getattr(InputObject, field).like(f"%{str(value)}%")
                 )
 
+    # Apply range for pagination
     if len(range) == 2:
         start, end = range
         query = query.offset(start).limit(end - start + 1)
@@ -215,8 +166,8 @@ async def get_objects(
         start, end = [0, total_count]  # For content-range header
 
     # Execute query
-    results = await session.exec(query)
-    objects = results.all()
+    results = await session.execute(query)
+    objects = results.scalars().all()
 
     object_objs = [InputObjectRead.model_validate(x) for x in objects]
 

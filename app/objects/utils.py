@@ -114,7 +114,7 @@ async def delete_incomplete_object(
 
         if time_since_last_part > config.INCOMPLETE_OBJECT_CONSIDER_ABANDONED:
             message = (
-                "Abandoned upload, waiting for parts. Last part received "
+                "Uploading... Last part received "
                 f"{math.ceil(time_since_last_part)} seconds ago. "
             )
 

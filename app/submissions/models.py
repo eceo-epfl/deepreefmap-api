@@ -30,9 +30,9 @@ class SubmissionBase(SQLModel):
     comment: str | None = Field(default=None)
     processing_has_started: bool = Field(default=False)
     processing_completed_successfully: bool = Field(default=False)
-    fps: int | None = Field(default=None)
-    time_seconds_start: int | None = Field(default=None)
-    time_seconds_end: int | None = Field(default=None)
+    fps: int | None = Field(default=None, ge=0)
+    time_seconds_start: int | None = Field(default=None, ge=0)
+    time_seconds_end: int | None = Field(default=None, ge=0)
     percentage_covers: list[dict[str, Any]] = Field(
         default=[], sa_column=Column(JSON)
     )
@@ -43,19 +43,13 @@ class SubmissionBase(SQLModel):
         self: Self,
     ) -> Self:
 
+        if self.time_seconds_start and self.time_seconds_end:
+            if self.time_seconds_start >= self.time_seconds_end:
+                raise ValueError("Start time must be < end time")
         if self.time_seconds_start and self.time_seconds_start < 0:
             raise ValueError("Start time must be >= 0")
         if self.time_seconds_end and self.time_seconds_end < 0:
             raise ValueError("End time must be >= 0")
-        return self
-
-    @model_validator(mode="after")
-    def validate_fps(
-        self: Self,
-    ) -> Self:
-        if self.fps:
-            if self.fps <= 0:
-                raise ValueError("fps must be greater than 0")
         return self
 
 

@@ -21,8 +21,8 @@ if TYPE_CHECKING:
 class TransectBase(SQLModel):
     name: str
     description: str | None = None
-    length: float | None = None
-    depth: float | None = None
+    length: float | None = Field(None, ge=0)
+    depth: float | None = Field(None, ge=0)
     created_on: datetime.datetime = Field(
         default_factory=datetime.datetime.now,
         title="Created On",
@@ -80,10 +80,10 @@ class Transect(TransectBase, table=True):
 
 
 class TransectCreate(TransectBase):
-    latitude_start: float
-    longitude_start: float
-    latitude_end: float
-    longitude_end: float
+    latitude_start: float = Field(ge=-90, le=90)
+    longitude_start: float = Field(ge=-180, le=180)
+    latitude_end: float = Field(ge=-90, le=90)
+    longitude_end: float = Field(ge=-180, le=180)
 
     geom: Any | None = None
 
@@ -108,11 +108,11 @@ class TransectRead(TransectBase):
     id: UUID
     geom: Any | None = None
     owner: UUID
-    latitude_start: float | None = None
-    longitude_start: float | None = None
+    latitude_start: float | None = Field(None, ge=-90, le=90)
+    longitude_start: float | None = Field(None, ge=-180, le=180)
 
-    latitude_end: float | None = None
-    longitude_end: float | None = None
+    latitude_end: float | None = Field(None, ge=-90, le=90)
+    longitude_end: float | None = Field(None, ge=-180, le=180)
 
     inputs: list[Any] = []
     submissions: list[Any] = []

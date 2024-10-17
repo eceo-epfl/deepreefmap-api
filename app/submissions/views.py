@@ -516,7 +516,11 @@ async def create_submission(
         name=submission.name,
         description=submission.description,
         transect_id=submission.transect_id,
-        fps=config.DEFAULT_SUBMISSION_FPS,
+        fps=(
+            submission.fps if submission.fps else config.DEFAULT_SUBMISSION_FPS
+        ),
+        time_seconds_start=submission.time_seconds_start,
+        time_seconds_end=submission.time_seconds_end,
         owner=user.id,
     )
 
