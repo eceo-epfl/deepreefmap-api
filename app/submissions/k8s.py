@@ -140,8 +140,16 @@ def fetch_kubernetes_status():
         if not k8s:
             raise Exception("Kubernetes client initialization failed")
         ret = k8s.list_namespaced_pod(config.NAMESPACE)
+        pods_info = [  # Retrieve only the necessary information
+            {
+                "name": pod.metadata.name,
+                "status": pod.status.phase,
+            }
+            for pod in ret.items
+        ]
+
         api = ApiClient()
-        k8s_jobs = api.sanitize_for_serialization(ret.items)
+        k8s_jobs = api.sanitize_for_serialization(pods_info)
         kubernetes_status = True
     except Exception as e:
         print(f"Error fetching Kubernetes status: {e}")
