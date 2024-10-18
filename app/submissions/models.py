@@ -19,6 +19,7 @@ from typing_extensions import Self
 from pydantic import model_validator
 from geoalchemy2 import WKBElement
 import shapely
+from app.submissions.status.models import RunStatus
 
 if TYPE_CHECKING:
     from app.transects.models import Transect
@@ -89,6 +90,11 @@ class Submission(SubmissionBase, table=True):
         sa_relationship_kwargs={"lazy": "selectin"},
     )
 
+    run_status: list[RunStatus] = Relationship(
+        back_populates="submission",
+        sa_relationship_kwargs={"lazy": "selectin"},
+    )
+
 
 class SubmissionCreate(SubmissionBase):
     # A list of UUIDs corresponding to InputObject IDs
@@ -97,7 +103,7 @@ class SubmissionCreate(SubmissionBase):
 
 class KubernetesExecutionStatus(SQLModel):
     # Information from RCP about the execution status of the submission
-    submission_id: str
+    job_id: str
     status: str
     time_started: str | None = None
 
@@ -162,7 +168,7 @@ class TransectRead(SQLModel):
 class SubmissionRead(SubmissionBase):
     id: UUID
     time_added_utc: datetime.datetime
-    run_status: list[KubernetesExecutionStatus] = []
+    run_status: list[Any] = []
     input_associations: list[InputObjectAssociationsRead] = []
     file_outputs: list[SubmissionFileOutputs] = []
     transect: TransectRead | None = None

@@ -1,4 +1,11 @@
-from fastapi import Depends, APIRouter, Query, Response, HTTPException
+from fastapi import (
+    Depends,
+    APIRouter,
+    Query,
+    Response,
+    HTTPException,
+    BackgroundTasks,
+)
 from sqlmodel import select
 from app.db import get_session, AsyncSession
 from app.submissions.models import (
@@ -10,7 +17,10 @@ from app.submissions.models import (
     KubernetesExecutionStatus,
     SubmissionFileOutputs,
 )
-from app.submissions.utils import populate_percentage_covers
+from app.submissions.utils import (
+    populate_percentage_covers,
+    iteratively_check_status,
+)
 from fastapi.responses import StreamingResponse
 from app.objects.models import InputObject, InputObjectAssociations
 from uuid import UUID
@@ -83,7 +93,11 @@ async def delete_runai_job(
     job_id = "-".join(job_id.split("-")[:-2])
 
     if k8s:
-        response = delete_job(k8s, job_id)
+        try:
+            response = delete_job(k8s, job_id)
+        except Exception:
+            response = False
+
         if response:
             return {"message": "Job deleted"}
         else:
@@ -123,6 +137,15 @@ async def get_submission(
     # Fetch job statuses using cached async function
     job_status = await get_cached_submission_jobs(submission_id)
 
+    # Sort the job_status by time_started
+    job_status = sorted(
+        job_status,
+        key=lambda x: (
+            x.time_started if x.time_started else "9999-00-00T00:00:00Z"
+        ),
+        reverse=True,
+    )
+
     # Fetch the file outputs in the S3 bucket
     response = await s3.list_objects_v2(
         Bucket=config.S3_BUCKET_ID,
@@ -142,15 +165,6 @@ async def get_submission(
         )
         for output in outputs
     ]
-
-    # Sort the job_status by time_started
-    job_status = sorted(
-        job_status,
-        key=lambda x: (
-            x.time_started if x.time_started else "9999-00-00T00:00:00Z"
-        ),
-        reverse=True,
-    )
 
     model_obj = SubmissionRead.model_validate(submission)
     model_obj.run_status = job_status
@@ -247,6 +261,8 @@ async def execute_submission(
     user: User = Depends(get_user_info),
     session: AsyncSession = Depends(get_session),
     k8s: CustomObjectsApi | None = Depends(get_k8s_custom_objects),
+    *,
+    background_task: BackgroundTasks,
 ) -> Any:
 
     # Set name to be submission_id + random number five digits long
@@ -298,6 +314,8 @@ async def execute_submission(
             status_code=500,
             detail="GPU unavailable",
         )
+
+    background_task.add_task(iteratively_check_status, session, submission_id)
     return api_response
 
 
@@ -405,7 +423,7 @@ async def get_submissions(
                 job_data = api.sanitize_for_serialization(job)
                 job_status.append(
                     KubernetesExecutionStatus(
-                        submission_id=job_data["metadata"].get("name"),
+                        job_id=job_data["metadata"].get("name"),
                         status=job_data["status"].get("phase"),
                         time_started=job_data["status"].get("startTime"),
                     )

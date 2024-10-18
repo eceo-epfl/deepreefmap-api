@@ -9,6 +9,7 @@ from alembic import context
 from sqlmodel import SQLModel
 from geoalchemy2 import alembic_helpers
 from app.submissions.models import Submission  # noqa: F401
+from app.submissions.status.models import RunStatus  # noqa: F401
 from app.objects.models import (  # noqa: F401
     InputObject,
     InputObjectAssociations,

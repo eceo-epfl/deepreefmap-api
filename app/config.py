@@ -72,6 +72,8 @@ class Config(BaseSettings):
         max_connections=500, max_keepalive_connections=50
     )
 
+    SUBMISSION_JOB_CHECK_POLLING_INTERVAL: int = 10
+
     # Redis cache
     CACHE_ENABLED: bool = True
     CACHE_URL: str

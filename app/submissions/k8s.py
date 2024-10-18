@@ -109,7 +109,7 @@ def fetch_jobs_for_submission(submission_id: UUID) -> list[dict[str, Any]]:
             job_data = api.sanitize_for_serialization(job)
             job_status.append(
                 KubernetesExecutionStatus(
-                    submission_id=job_data["metadata"].get("name"),
+                    job_id=job_data["metadata"].get("name"),
                     status=job_data["status"].get("phase"),
                     time_started=job_data["status"].get("startTime"),
                 )
@@ -129,8 +129,14 @@ async def get_cached_submission_jobs(
 
 
 def get_k8s_custom_objects() -> client.CustomObjectsApi:
+    try:
 
-    return client.CustomObjectsApi()
+        # Return the CustomObjectsApi client with the updated kubeconfig
+        return client.CustomObjectsApi()
+
+    except Exception as e:
+        print(f"Failed to load kubeconfig: {e}")
+        return None
 
 
 def fetch_kubernetes_status():
@@ -179,7 +185,7 @@ def get_jobs_for_submission(
         job_data = api.sanitize_for_serialization(job)
         job_status.append(
             KubernetesExecutionStatus(
-                submission_id=job_data["metadata"].get("name"),
+                job_id=job_data["metadata"].get("name"),
                 status=job_data["status"].get("phase"),
                 time_started=job_data["status"].get("startTime"),
             )
