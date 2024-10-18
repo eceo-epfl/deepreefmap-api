@@ -4,10 +4,11 @@ from uuid import UUID
 from app.submissions.models import KubernetesExecutionStatus
 from typing import Any
 from kubernetes.client import CoreV1Api, ApiClient
-import subprocess
-import os
 from cashews import cache
 from fastapi.concurrency import run_in_threadpool
+import subprocess
+import os
+import json
 
 
 def get_k8s_v1() -> client.CoreV1Api | None:
@@ -161,3 +162,77 @@ def fetch_jobs():
 async def fetch_cached_jobs():
     print("Fetching all k8s jobs...")
     return await run_in_threadpool(fetch_jobs)
+
+
+def submit_job(
+    k8s: CoreV1Api,
+    name: str,
+    fps: int,
+    timestamp: str,
+    submission_id: UUID,
+    input_object_ids: list[UUID],
+):
+
+    submission_id = str(submission_id)
+    input_object_ids = [str(obj_id) for obj_id in input_object_ids]
+    job = {
+        "apiVersion": "run.ai/v2alpha1",
+        "kind": "TrainingWorkload",
+        "metadata": {
+            "name": name,
+            "namespace": config.NAMESPACE,
+            "labels": {"project": config.PROJECT},
+        },
+        "spec": {
+            "environment": {
+                "items": {
+                    "FPS": {"value": str(fps)},
+                    "INPUT_OBJECT_IDS": {
+                        "value": json.dumps(input_object_ids)
+                    },
+                    "S3_ACCESS_KEY": {"value": config.S3_ACCESS_KEY},
+                    "S3_BUCKET_ID": {"value": config.S3_BUCKET_ID},
+                    "S3_PREFIX": {"value": config.S3_PREFIX},
+                    "S3_SECRET_KEY": {"value": config.S3_SECRET_KEY},
+                    "S3_URL": {"value": config.S3_URL},
+                    "SUBMISSION_ID": {"value": str(submission_id)},
+                    "TIMESTAMP": {"value": timestamp},
+                }
+            },
+            "gpu": {
+                "value": "1",
+            },
+            "image": {
+                "value": (
+                    f"{config.DEEPREEFMAP_IMAGE}:"
+                    f"{config.DEEPREEFMAP_IMAGE_TAG}"
+                ),
+            },
+            "imagePullPolicy": {
+                "value": "Always",
+            },
+            "name": {
+                "value": name,
+            },
+            "runAsGid": {
+                "value": 1000,
+            },
+            "runAsUid": {
+                "value": 1000,
+            },
+            "runAsUser": {
+                "value": True,
+            },
+        },
+    }
+
+    # Create the job
+    api_response = k8s.create_namespaced_custom_object(
+        namespace=config.NAMESPACE,
+        plural="trainingworkloads",
+        body=job,
+        version="v2alpha1",
+        group="run.ai",
+    )
+
+    return api_response

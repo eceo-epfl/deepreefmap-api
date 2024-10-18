@@ -1,8 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import config
-
-
 from app.submissions.views import (
     router as submissions_router,
     job_log_router as submission_job_logs_router,

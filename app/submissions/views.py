@@ -28,6 +28,7 @@ from app.submissions.k8s import (
     get_cached_submission_jobs,
     get_cached_job_log,
     fetch_cached_jobs,
+    submit_job,
 )
 import random
 from app.users.models import User
@@ -120,7 +121,10 @@ async def get_submission(
             filename=output["Key"].split("/")[-1],
             size_bytes=output["Size"],
             last_modified=output["LastModified"],
-            url=f"/api/submissions/{submission_id}/{output['Key'].split('/')[-1]}",
+            url=(
+                "/api/submissions/"
+                f"{submission_id}/{output['Key'].split('/')[-1]}"
+            ),
         )
         for output in outputs
     ]
@@ -252,7 +256,7 @@ async def execute_submission(
 
     input_associations = res.all()
     input_object_ids = [
-        str(association.input_object_id) for association in input_associations
+        association.input_object_id for association in input_associations
     ]
 
     # Timestamp logic remains the same
@@ -266,73 +270,20 @@ async def execute_submission(
             f"begin-{submission.time_seconds_end}"
         )
 
-    # Updated job definition for TrainingWorkload
-    job = {
-        "apiVersion": "run.ai/v2alpha1",
-        "kind": "TrainingWorkload",
-        "metadata": {
-            "name": name,
-            "namespace": config.NAMESPACE,
-            "labels": {"project": config.PROJECT},
-        },
-        "spec": {
-            "environment": {
-                "items": {
-                    "FPS": {"value": str(submission.fps)},
-                    "INPUT_OBJECT_IDS": {
-                        "value": json.dumps(input_object_ids)
-                    },
-                    "S3_ACCESS_KEY": {"value": config.S3_ACCESS_KEY},
-                    "S3_BUCKET_ID": {"value": config.S3_BUCKET_ID},
-                    "S3_PREFIX": {"value": config.S3_PREFIX},
-                    "S3_SECRET_KEY": {"value": config.S3_SECRET_KEY},
-                    "S3_URL": {"value": config.S3_URL},
-                    "SUBMISSION_ID": {"value": str(submission_id)},
-                    "TIMESTAMP": {"value": timestamp},
-                }
-            },
-            "gpu": {
-                "value": "1",
-            },
-            "image": {
-                "value": (
-                    f"{config.DEEPREEFMAP_IMAGE}:"
-                    f"{config.DEEPREEFMAP_IMAGE_TAG}"
-                ),
-            },
-            "imagePullPolicy": {
-                "value": "Always",
-            },
-            "name": {
-                "value": name,
-            },
-            "runAsGid": {
-                "value": 1000,
-            },
-            "runAsUid": {
-                "value": 1000,
-            },
-            "runAsUser": {
-                "value": True,
-            },
-        },
-    }
-
-    # Create the job
     if k8s:
-        api_response = k8s.create_namespaced_custom_object(
-            namespace=config.NAMESPACE,
-            plural="trainingworkloads",
-            body=job,
-            version="v2alpha1",
-            group="run.ai",
+        api_response = submit_job(
+            k8s,
+            name,
+            submission.fps,
+            timestamp,
+            submission_id,
+            input_object_ids,
         )
     else:
-        return HTTPException(
+        raise HTTPException(
             status_code=500,
-            detail="Kubernetes API not available",
+            detail="GPU unavailable",
         )
-
     return api_response
 
 
