@@ -20,7 +20,7 @@ from typing import Any
 from app.objects.service import get_s3
 from aioboto3 import Session as S3Session
 from app.config import config
-from kubernetes.client import CoreV1Api, ApiClient
+from kubernetes.client import CoreV1Api, ApiClient, CustomObjectsApi
 from app.submissions.k8s import (
     get_k8s_v1,
     get_k8s_custom_objects,
@@ -73,6 +73,7 @@ async def get_jobs(
 @router.delete("/kubernetes/jobs/{job_id}")
 async def delete_runai_job(
     job_id: str,
+    k8s: CustomObjectsApi | None = Depends(get_k8s_custom_objects),
     user: User = Depends(get_user_info),
 ) -> Any:
 
@@ -81,7 +82,20 @@ async def delete_runai_job(
     # should be deepreef-463230f2-82c7-439c-831b-ef8c0b201ee1-56966
     job_id = "-".join(job_id.split("-")[:-2])
 
-    delete_job(job_id)
+    if k8s:
+        response = delete_job(k8s, job_id)
+        if response:
+            return {"message": "Job deleted"}
+        else:
+            raise HTTPException(
+                detail="Error deleting job",
+                status_code=500,
+            )
+    else:
+        raise HTTPException(
+            status_code=500,
+            detail="Kubernetes client initialization failed",
+        )
 
 
 @router.get("/{submission_id}", response_model=SubmissionRead)
@@ -232,7 +246,7 @@ async def execute_submission(
     submission_id: UUID,
     user: User = Depends(get_user_info),
     session: AsyncSession = Depends(get_session),
-    k8s: CoreV1Api | None = Depends(get_k8s_custom_objects),
+    k8s: CustomObjectsApi | None = Depends(get_k8s_custom_objects),
 ) -> Any:
 
     # Set name to be submission_id + random number five digits long

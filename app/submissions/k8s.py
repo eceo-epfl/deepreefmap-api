@@ -3,21 +3,94 @@ from app.config import config
 from uuid import UUID
 from app.submissions.models import KubernetesExecutionStatus
 from typing import Any
-from kubernetes.client import CoreV1Api, ApiClient
+from kubernetes.client import CoreV1Api, ApiClient, CustomObjectsApi
 from cashews import cache
 from fastapi.concurrency import run_in_threadpool
-import subprocess
 import os
 import json
+import yaml
+import requests
 
 
-def get_k8s_v1() -> client.CoreV1Api | None:
+def refresh_oidc_token(kubeconfig_path):
+    # Read the kubeconfig file
+    with open(kubeconfig_path, "r") as f:
+        kubeconfig = yaml.safe_load(f)
+
+    # Find the current context
+    current_context_name = kubeconfig.get("current-context")
+    contexts = kubeconfig.get("contexts", [])
+    current_context = next(
+        (ctx for ctx in contexts if ctx["name"] == current_context_name), None
+    )
+    if not current_context:
+        raise Exception("Current context not found in kubeconfig")
+
+    # Get the user associated with the current context
+    user_name = current_context["context"]["user"]
+    users = kubeconfig.get("users", [])
+    user = next((u for u in users if u["name"] == user_name), None)
+    if not user:
+        raise Exception(f"User {user_name} not found in kubeconfig")
+
+    auth_provider = user["user"].get("auth-provider")
+    if not auth_provider or auth_provider.get("name") != "oidc":
+        raise Exception("Auth provider is not OIDC")
+
+    # Extract the refresh token, client ID, and idp-issuer-url
+    config = auth_provider.get("config", {})
+    refresh_token = config.get("refresh-token")
+    client_id = config.get("client-id")
+    idp_issuer_url = config.get("idp-issuer-url")
+    if not refresh_token or not idp_issuer_url or not client_id:
+        raise Exception("Required fields not found in kubeconfig")
+
+    # Prepare the token endpoint URL
+    token_endpoint = f"{idp_issuer_url}/protocol/openid-connect/token"
+
+    # Prepare the POST request data
+    data = {
+        "grant_type": "refresh_token",
+        "refresh_token": refresh_token,
+        "client_id": client_id,
+    }
+
+    # Send the POST request to refresh the token
+    response = requests.post(token_endpoint, data=data)
+    if response.status_code != 200:
+        raise Exception(f"Failed to refresh token: {response.text}")
+
+    token_response = response.json()
+    new_id_token = token_response.get("id_token")
+    if not new_id_token:
+        raise Exception("id_token not found in token response")
+
+    # Update the kubeconfig in memory
+    # Remove the auth-provider section and set the token
+    user["user"].pop("auth-provider", None)
+    user["user"]["token"] = new_id_token
+
+    return kubeconfig
+
+
+def get_k8s_v1():
     try:
-        list_jobs_runai()
-        k8s_config.load_kube_config(config_file=config.KUBECONFIG)
-    except Exception:
+        # Path to your kubeconfig file
+        kubeconfig_path = config.KUBECONFIG
+
+        # Refresh the token and get the updated kubeconfig
+        kubeconfig_dict = refresh_oidc_token(kubeconfig_path)
+
+        # Load the kubeconfig from the updated dictionary
+        k8s_config.load_kube_config_from_dict(config_dict=kubeconfig_dict)
+
+        # Create the CoreV1Api client
+        api_client = client.CoreV1Api()
+        return api_client
+
+    except Exception as e:
+        print(f"Failed to load kubeconfig: {e}")
         return None
-    return client.CoreV1Api()
 
 
 def fetch_jobs_for_submission(submission_id: UUID) -> list[dict[str, Any]]:
@@ -55,8 +128,8 @@ async def get_cached_submission_jobs(
     return await run_in_threadpool(fetch_jobs_for_submission, submission_id)
 
 
-def get_k8s_custom_objects() -> client.CoreV1Api:
-    k8s_config.load_kube_config(config_file=config.KUBECONFIG)
+def get_k8s_custom_objects() -> client.CustomObjectsApi:
+
     return client.CustomObjectsApi()
 
 
@@ -106,26 +179,25 @@ def get_jobs_for_submission(
     return job_status
 
 
-def delete_job(job_name: str):
+def delete_job(k8s: CustomObjectsApi, job_name: str) -> bool:
     env = os.environ.copy()
     env["KUBECONFIG"] = config.KUBECONFIG
-    subprocess.run(
-        ["runai", "delete", "job", "-p", config.PROJECT, job_name],
-        env=env,
-        check=True,
+    print(f"Deleting job {job_name} of project {config.PROJECT}")
+    api_response = k8s.delete_namespaced_custom_object(
+        namespace=config.NAMESPACE,
+        plural="trainingworkloads",
+        name=job_name,
+        group="run.ai",
+        version="v2alpha1",
     )
+    if (
+        api_response
+        and "status" in api_response
+        and api_response["status"] == "Success"
+    ):
+        return True
 
-
-def list_jobs_runai():
-    env = os.environ.copy()
-    env["KUBECONFIG"] = config.KUBECONFIG
-    result = subprocess.run(
-        ["runai", "list", "projects"],
-        env=env,
-        check=True,
-        capture_output=True,
-    )
-    return result.stdout.decode("utf-8")
+    return False
 
 
 def fetch_job_log(job_id: str) -> str:
@@ -165,7 +237,7 @@ async def fetch_cached_jobs():
 
 
 def submit_job(
-    k8s: CoreV1Api,
+    k8s: CustomObjectsApi,
     name: str,
     fps: int,
     timestamp: str,
