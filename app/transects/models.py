@@ -104,6 +104,13 @@ class TransectCreate(TransectBase):
         return values
 
 
+class SubmissionReadSimple(SQLModel):
+    id: UUID
+    name: str | None = None
+    time_added_utc: datetime.datetime
+    run_status: list[Any] = []
+
+
 class TransectRead(TransectBase):
     id: UUID
     geom: Any | None = None
@@ -115,7 +122,7 @@ class TransectRead(TransectBase):
     longitude_end: float | None = Field(None, ge=-180, le=180)
 
     inputs: list[Any] = []
-    submissions: list[Any] = []
+    submissions: list[SubmissionReadSimple] = []
 
     @model_validator(mode="after")
     def convert_wkb_to_lat_long(
