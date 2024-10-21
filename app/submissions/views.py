@@ -23,6 +23,7 @@ from app.submissions.utils import (
 )
 from fastapi.responses import StreamingResponse
 from app.objects.models import InputObject, InputObjectAssociations
+from app.submissions.status.models import RunStatus
 from uuid import UUID
 from sqlalchemy import func
 import json
@@ -35,8 +36,6 @@ from app.submissions.k8s import (
     get_k8s_v1,
     get_k8s_custom_objects,
     delete_job,
-    get_cached_submission_jobs,
-    get_cached_job_log,
     fetch_cached_jobs,
     submit_job,
 )
@@ -55,43 +54,28 @@ router = APIRouter()
 async def get_job_log(
     job_id: str,
     user: User = Depends(get_user_info),
+    session: AsyncSession = Depends(get_session),
 ) -> SubmissionJobLogRead:
     """Get the log for the given submission job"""
 
-    log_content = await get_cached_job_log(job_id)
-    return SubmissionJobLogRead(id=job_id, message=log_content)
+    # log_content = await get_cached_job_log(f"{job_id}-0-0")
+    query = select(RunStatus).where(RunStatus.kubernetes_pod_name == job_id)
+    res = await session.exec(query)
+    job = res.one_or_none()
+
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    return SubmissionJobLogRead(id=job_id, message=job.logs)
 
 
-@router.get("/kubernetes/jobs")
-async def get_jobs(
-    k8s: CoreV1Api | None = Depends(get_k8s_v1),
-    user: User = Depends(get_user_info),
-) -> Any:
-    """Get all kubernetes jobs in the namespace"""
-    items = []
-    if k8s:
-        try:
-            ret = k8s.list_namespaced_pod(config.NAMESPACE)
-            api = ApiClient()
-            items = api.sanitize_for_serialization(ret.items)
-        except Exception:
-            items = []
-
-    return items
-
-
-@router.delete("/kubernetes/jobs/{job_id}")
-async def delete_runai_job(
+@router.delete("/jobs/{job_id}")
+async def delete_job_from_k8s(
     job_id: str,
     k8s: CustomObjectsApi | None = Depends(get_k8s_custom_objects),
     user: User = Depends(get_user_info),
 ) -> Any:
-
-    # Remove the two digits at the end of the job ID to get the submission ID
-    # For example deepreef-463230f2-82c7-439c-831b-ef8c0b201ee1-56966-0-0
-    # should be deepreef-463230f2-82c7-439c-831b-ef8c0b201ee1-56966
-    job_id = "-".join(job_id.split("-")[:-2])
-
+    """Deletes a job from the k8s cluster"""
     if k8s:
         try:
             response = delete_job(k8s, job_id)
@@ -134,18 +118,15 @@ async def get_submission(
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
 
-    # Fetch job statuses using cached async function
-    job_status = await get_cached_submission_jobs(submission_id)
-
     # Sort the job_status by time_started
     job_status = sorted(
-        job_status,
+        # job_status,
+        submission.run_status,
         key=lambda x: (
             x.time_started if x.time_started else "9999-00-00T00:00:00Z"
         ),
         reverse=True,
     )
-
     # Fetch the file outputs in the S3 bucket
     response = await s3.list_objects_v2(
         Bucket=config.S3_BUCKET_ID,
@@ -263,6 +244,7 @@ async def execute_submission(
     k8s: CustomObjectsApi | None = Depends(get_k8s_custom_objects),
     *,
     background_task: BackgroundTasks,
+    s3: S3Session = Depends(get_s3),
 ) -> Any:
 
     # Set name to be submission_id + random number five digits long
@@ -318,6 +300,7 @@ async def execute_submission(
     background_task.add_task(
         iteratively_check_status,
         session,
+        s3,
         submission_id,
         job_id=name,
     )
@@ -411,51 +394,18 @@ async def get_submissions(
     submissions = [
         SubmissionRead.model_validate(submission) for submission in submissions
     ]
-    # Get all jobs from k8s then filter out the ones that belong to the
-    # submission_id
 
-    jobs: list[str] = await fetch_cached_jobs()
-
-    if jobs:
-        jobs = jobs.items
-        for submission in submissions:
-            submission_jobs = [
-                job for job in jobs if str(submission.id) in job.metadata.name
-            ]
-            job_status = []
-            for job in submission_jobs:
-                api = ApiClient()
-                job_data = api.sanitize_for_serialization(job)
-                job_status.append(
-                    KubernetesExecutionStatus(
-                        job_id=job_data["metadata"].get("name"),
-                        status=job_data["status"].get("phase"),
-                        time_started=job_data["status"].get("startTime"),
-                    )
-                )
-            job_status = sorted(
-                job_status,
-                key=lambda x: (
-                    x.time_started
-                    if x.time_started
-                    else "9999-00-00T00:00:00Z"  # noqa
-                ),
-                reverse=True,
-            )
-            submission.run_status = job_status
-
-            # If the latest job status is "Succeeded", and there is no data for
-            # percentage_covers in the DB, then populate the percentage_covers
-            # field with the data from the S3 bucket. This is done in case
-            # an export is req'd in the frontend before the processing is
-            # completed (which is mostly done when a single submission is
-            # viewed).
-            if job_status and (job_status[0].status == "Succeeded"):
-                submission = await populate_percentage_covers(
-                    submission_id=submission.id,
-                    session=session,
-                    s3=s3,
-                )
+    for submission in submissions:
+        job_status = sorted(
+            submission.run_status,
+            key=lambda x: (
+                x.time_started
+                if x.time_started
+                else "9999-00-00T00:00:00Z"  # noqa
+            ),
+            reverse=True,
+        )
+        submission.run_status = job_status
 
     response.headers["Content-Range"] = (
         f"submissions {start}-{end}/{total_count}"

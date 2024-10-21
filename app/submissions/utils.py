@@ -6,7 +6,7 @@ from uuid import UUID
 from aioboto3 import Session as S3Session
 from botocore.exceptions import ClientError
 from sqlmodel import select, update
-from app.submissions.k8s import get_cached_submission_jobs
+from app.submissions.k8s import get_cached_submission_jobs, get_cached_job_log
 import json
 import datetime
 import asyncio
@@ -26,7 +26,7 @@ async def populate_percentage_covers(
     query = select(Submission).where(Submission.id == submission_id)
     submission = await session.exec(query)
     submission = submission.one_or_none()
-
+    print(f"Populating percentage covers for submission {submission_id}")
     try:
         if not submission:
             raise ValueError(f"Submission with ID {submission_id} not found.")
@@ -76,11 +76,13 @@ async def populate_percentage_covers(
 
     await session.refresh(submission)
 
+    print(f"Populated percentage covers for submission {submission_id}")
     return submission
 
 
 async def iteratively_check_status(
     session: AsyncSession,
+    s3: S3Session,
     submission_id: UUID,
     job_id: str,
     timeout: int = config.SUBMISSION_JOB_CHECK_TIMEOUT,
@@ -122,11 +124,10 @@ async def iteratively_check_status(
     await session.commit()
 
     # Hold this for the final update in case it's deleted during the run
-    last_status = None
-
     while job and job.status in ["Pending", "Running"]:
         print("In loop")
         print(f"Job: {job}")
+        logs = await get_cached_job_log(f"{job_id}-0-0")
 
         await session.exec(
             update(RunStatus)
@@ -137,10 +138,10 @@ async def iteratively_check_status(
                 is_successful=False,
                 time_started=job.time_started,
                 last_updated=datetime.datetime.now(),
+                logs=logs,
             )
         )
         await session.commit()
-        last_status = job.status
 
         print(f"Submission ID: {submission_id}: Job {job_id} is running")
 
@@ -159,6 +160,10 @@ async def iteratively_check_status(
     if job and is_k8s_resource and job.status == "Succeeded":
         final_status = True
 
+    if is_k8s_resource:
+        logs = await get_cached_job_log(f"{job_id}-0-0")
+        await populate_percentage_covers(submission_id, session, s3)
+
     await session.exec(
         update(RunStatus)
         .where(RunStatus.kubernetes_pod_name == job_id)
@@ -167,7 +172,8 @@ async def iteratively_check_status(
             is_successful=final_status,
             is_still_kubernetes_resource=is_k8s_resource,
             last_updated=datetime.datetime.now(),
-            status=job.status if is_k8s_resource else last_status,
+            status=job.status if is_k8s_resource else "Deleted",
+            logs=logs,
         )
     )
     await session.commit()

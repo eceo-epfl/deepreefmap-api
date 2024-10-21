@@ -189,15 +189,6 @@ async def get_kubernetes_status(session: AsyncSession) -> Any:
     # Query for all of the run statuses that are not in the k8s_jobs list
     # and update their kubernetes status to False
     jobs = [strip_pod_name(job["name"]) for job in k8s_jobs]
-    print(jobs)
-
-    query = await session.exec(
-        select(RunStatus.kubernetes_pod_name).where(
-            RunStatus.kubernetes_pod_name.notin_(jobs)
-        )
-    )
-    job_objs = query.all()
-    [print("Not in", job) for job in job_objs]
 
     await session.exec(
         update(RunStatus)
@@ -206,6 +197,7 @@ async def get_kubernetes_status(session: AsyncSession) -> Any:
         .values(
             is_still_kubernetes_resource=False,
             last_updated=datetime.datetime.now(),
+            status="Deleted",
         )
     )
     await session.commit()
@@ -266,7 +258,7 @@ def fetch_job_log(job_id: str) -> str:
     return "No logs available"
 
 
-@cache.early(ttl="30m", early_ttl="10s", key="job:{job_id}:log")
+@cache.early(ttl="30m", early_ttl="5s", key="job:{job_id}:log")
 async def get_cached_job_log(job_id: str) -> str:
     print(f"Fetching job log for {job_id}")
     return await run_in_threadpool(fetch_job_log, job_id)
