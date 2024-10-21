@@ -315,7 +315,12 @@ async def execute_submission(
             detail="GPU unavailable",
         )
 
-    background_task.add_task(iteratively_check_status, session, submission_id)
+    background_task.add_task(
+        iteratively_check_status,
+        session,
+        submission_id,
+        job_id=name,
+    )
     return api_response
 
 

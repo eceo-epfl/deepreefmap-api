@@ -1,7 +1,6 @@
 from pydantic import model_validator
 from pydantic_settings import BaseSettings
 from functools import lru_cache
-import sys
 import httpx
 from enum import Enum
 
@@ -73,6 +72,7 @@ class Config(BaseSettings):
     )
 
     SUBMISSION_JOB_CHECK_POLLING_INTERVAL: int = 10
+    SUBMISSION_JOB_CHECK_TIMEOUT: int = 120  # Seconds
 
     # Redis cache
     CACHE_ENABLED: bool = True

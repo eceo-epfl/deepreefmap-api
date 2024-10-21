@@ -51,7 +51,7 @@ async def get_health(
     await session.exec(text("SELECT 1"))
 
     # Query kubernetes API to check RCP:RunAI connection
-    _, k8s = await get_kubernetes_status()
+    _, k8s = await get_kubernetes_status(session)
     _, s3 = await get_s3_status()
 
     if not k8s or not s3:

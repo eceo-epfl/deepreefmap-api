@@ -6,10 +6,14 @@ from typing import Any
 from kubernetes.client import CoreV1Api, ApiClient, CustomObjectsApi
 from cashews import cache
 from fastapi.concurrency import run_in_threadpool
+from app.db import AsyncSession
+from app.submissions.status.models import RunStatus
+from sqlmodel import update, select
 import os
 import json
 import yaml
 import requests
+import datetime
 
 
 def refresh_oidc_token(kubeconfig_path):
@@ -130,7 +134,6 @@ async def get_cached_submission_jobs(
 
 def get_k8s_custom_objects() -> client.CustomObjectsApi:
     try:
-
         # Return the CustomObjectsApi client with the updated kubeconfig
         return client.CustomObjectsApi()
 
@@ -156,6 +159,7 @@ def fetch_kubernetes_status():
 
         api = ApiClient()
         k8s_jobs = api.sanitize_for_serialization(pods_info)
+
         kubernetes_status = True
     except Exception as e:
         print(f"Error fetching Kubernetes status: {e}")
@@ -164,12 +168,49 @@ def fetch_kubernetes_status():
     return k8s_jobs, kubernetes_status
 
 
+def strip_pod_name(job_name: str) -> str:
+    """Strip the run ID from the job name.
+
+    Example if deepreef-40595051-b2e8-4563-99bf-1e8f2722b439-74145-0-0 is given
+    then return deepreef-40595051-b2e8-4563-99bf-1e8f2722b439-74145
+    """
+
+    return "-".join(job_name.split("-")[:-2])
+
+
 @cache.early(ttl="30s", early_ttl="10s", key="k8s:status")
-async def get_kubernetes_status() -> Any:
+async def get_kubernetes_status(session: AsyncSession) -> Any:
     """Offload the blocking Kubernetes status fetch to a thread."""
 
     print("Fetching Kubernetes status...")
-    return await run_in_threadpool(fetch_kubernetes_status)
+
+    k8s_jobs, k8s = await run_in_threadpool(fetch_kubernetes_status)
+
+    # Query for all of the run statuses that are not in the k8s_jobs list
+    # and update their kubernetes status to False
+    jobs = [strip_pod_name(job["name"]) for job in k8s_jobs]
+    print(jobs)
+
+    query = await session.exec(
+        select(RunStatus.kubernetes_pod_name).where(
+            RunStatus.kubernetes_pod_name.notin_(jobs)
+        )
+    )
+    job_objs = query.all()
+    [print("Not in", job) for job in job_objs]
+
+    await session.exec(
+        update(RunStatus)
+        .where(RunStatus.kubernetes_pod_name.notin_(jobs))
+        .where(RunStatus.is_still_kubernetes_resource)
+        .values(
+            is_still_kubernetes_resource=False,
+            last_updated=datetime.datetime.now(),
+        )
+    )
+    await session.commit()
+
+    return k8s_jobs, k8s
 
 
 def get_jobs_for_submission(
