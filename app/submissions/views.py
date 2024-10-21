@@ -120,7 +120,6 @@ async def get_submission(
 
     # Sort the job_status by time_started
     job_status = sorted(
-        # job_status,
         submission.run_status,
         key=lambda x: (
             x.time_started if x.time_started else "9999-00-00T00:00:00Z"
@@ -146,6 +145,16 @@ async def get_submission(
         )
         for output in outputs
     ]
+
+    # If there are file outputs and no percentage covers, generate them
+    if output_files and not submission.percentage_covers:
+        # Make sure we have the file we need
+        files = [output.filename for output in output_files]
+        if ("percentage_covers.json" in files) and (
+            "class_to_color.json" in files
+        ):
+            print("Generating percentage covers")
+            await populate_percentage_covers(submission_id, session, s3)
 
     model_obj = SubmissionRead.model_validate(submission)
     model_obj.run_status = job_status
