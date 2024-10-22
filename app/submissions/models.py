@@ -25,6 +25,24 @@ if TYPE_CHECKING:
     from app.transects.models import Transect
 
 
+def validate_time_seconds(
+    self: Self,
+) -> Self:
+
+    if (
+        self.time_seconds_start
+        and self.time_seconds_end
+        and len(self.input_associations) < 2
+    ):
+        if self.time_seconds_start >= self.time_seconds_end:
+            raise ValueError("Start time must be < end time")
+    if self.time_seconds_start and self.time_seconds_start < 0:
+        raise ValueError("Start time must be >= 0")
+    if self.time_seconds_end and self.time_seconds_end < 0:
+        raise ValueError("End time must be >= 0")
+    return self
+
+
 class SubmissionBase(SQLModel):
     name: str | None = Field(default=None, index=True)
     description: str | None = Field(default=None)
@@ -38,20 +56,6 @@ class SubmissionBase(SQLModel):
         default=[], sa_column=Column(JSON)
     )
     transect_id: UUID | None = Field(default=None, foreign_key="transect.id")
-
-    @model_validator(mode="after")
-    def validate_time_seconds(
-        self: Self,
-    ) -> Self:
-
-        if self.time_seconds_start and self.time_seconds_end:
-            if self.time_seconds_start >= self.time_seconds_end:
-                raise ValueError("Start time must be < end time")
-        if self.time_seconds_start and self.time_seconds_start < 0:
-            raise ValueError("Start time must be >= 0")
-        if self.time_seconds_end and self.time_seconds_end < 0:
-            raise ValueError("End time must be >= 0")
-        return self
 
 
 class Submission(SubmissionBase, table=True):
@@ -99,6 +103,8 @@ class Submission(SubmissionBase, table=True):
 class SubmissionCreate(SubmissionBase):
     # A list of UUIDs corresponding to InputObject IDs
     input_associations: list[InputObjectAssociations] = []
+
+    validate_input_time = model_validator(mode="after")(validate_time_seconds)
 
 
 class KubernetesExecutionStatus(SQLModel):
@@ -177,6 +183,8 @@ class SubmissionRead(SubmissionBase):
 
 class SubmissionUpdate(SubmissionBase):
     input_associations: list[InputObjectAssociationsUpdate]
+
+    validate_input_time = model_validator(mode="after")(validate_time_seconds)
 
 
 class SubmissionJobLogRead(SQLModel):
