@@ -1,0 +1,695 @@
+{
+  "contract_version": 1,
+  "min_contract_version": 1,
+  "pull_sections": [
+    "sites",
+    "campaigns",
+    "transects",
+    "presets"
+  ],
+  "push_sections": [
+    "transects",
+    "videos",
+    "passes",
+    "pass_videos",
+    "runs",
+    "cover_rows"
+  ],
+  "sections": [
+    "sites",
+    "campaigns",
+    "transects",
+    "videos",
+    "passes",
+    "pass_videos",
+    "runs",
+    "cover_rows",
+    "presets"
+  ],
+  "tables": [
+    {
+      "columns": [
+        {
+          "kind": "uuid",
+          "name": "id",
+          "nullable": false
+        },
+        {
+          "kind": "text",
+          "name": "name",
+          "nullable": false
+        },
+        {
+          "kind": "text",
+          "name": "country",
+          "nullable": true
+        },
+        {
+          "kind": "text",
+          "name": "region",
+          "nullable": true
+        },
+        {
+          "kind": "text",
+          "name": "description",
+          "nullable": false
+        },
+        {
+          "kind": "float",
+          "name": "latitude",
+          "nullable": true
+        },
+        {
+          "kind": "float",
+          "name": "longitude",
+          "nullable": true
+        },
+        {
+          "kind": "timestamp",
+          "name": "created_at",
+          "nullable": false
+        },
+        {
+          "kind": "timestamp",
+          "name": "updated_at",
+          "nullable": false
+        },
+        {
+          "kind": "timestamp",
+          "name": "deleted_at",
+          "nullable": true
+        },
+        {
+          "kind": "uuid",
+          "name": "device_id",
+          "nullable": true
+        }
+      ],
+      "section": "sites",
+      "table": "site"
+    },
+    {
+      "columns": [
+        {
+          "kind": "uuid",
+          "name": "id",
+          "nullable": false
+        },
+        {
+          "kind": "text",
+          "name": "name",
+          "nullable": false
+        },
+        {
+          "kind": "date",
+          "name": "begin_date",
+          "nullable": true
+        },
+        {
+          "kind": "date",
+          "name": "end_date",
+          "nullable": true
+        },
+        {
+          "kind": "text",
+          "name": "description",
+          "nullable": false
+        },
+        {
+          "kind": "timestamp",
+          "name": "created_at",
+          "nullable": false
+        },
+        {
+          "kind": "timestamp",
+          "name": "updated_at",
+          "nullable": false
+        },
+        {
+          "kind": "timestamp",
+          "name": "deleted_at",
+          "nullable": true
+        },
+        {
+          "kind": "uuid",
+          "name": "device_id",
+          "nullable": true
+        }
+      ],
+      "section": "campaigns",
+      "table": "campaign"
+    },
+    {
+      "columns": [
+        {
+          "kind": "uuid",
+          "name": "id",
+          "nullable": false
+        },
+        {
+          "kind": "uuid",
+          "name": "site_id",
+          "nullable": true
+        },
+        {
+          "kind": "text",
+          "name": "name",
+          "nullable": false
+        },
+        {
+          "kind": "text",
+          "name": "description",
+          "nullable": false
+        },
+        {
+          "kind": "float",
+          "name": "start_lat",
+          "nullable": false
+        },
+        {
+          "kind": "float",
+          "name": "start_lon",
+          "nullable": false
+        },
+        {
+          "kind": "float",
+          "name": "start_accuracy_m",
+          "nullable": true
+        },
+        {
+          "kind": "float",
+          "name": "end_lat",
+          "nullable": false
+        },
+        {
+          "kind": "float",
+          "name": "end_lon",
+          "nullable": false
+        },
+        {
+          "kind": "float",
+          "name": "end_accuracy_m",
+          "nullable": true
+        },
+        {
+          "kind": "float",
+          "name": "length_m",
+          "nullable": true
+        },
+        {
+          "kind": "float",
+          "name": "depth_m",
+          "nullable": true
+        },
+        {
+          "kind": "timestamp",
+          "name": "created_at",
+          "nullable": false
+        },
+        {
+          "kind": "timestamp",
+          "name": "updated_at",
+          "nullable": false
+        },
+        {
+          "kind": "timestamp",
+          "name": "deleted_at",
+          "nullable": true
+        },
+        {
+          "kind": "uuid",
+          "name": "device_id",
+          "nullable": true
+        }
+      ],
+      "section": "transects",
+      "table": "transect"
+    },
+    {
+      "columns": [
+        {
+          "kind": "uuid",
+          "name": "id",
+          "nullable": false
+        },
+        {
+          "kind": "text",
+          "name": "hash",
+          "nullable": true
+        },
+        {
+          "kind": "text",
+          "name": "file_name",
+          "nullable": false
+        },
+        {
+          "kind": "big_int",
+          "name": "size_bytes",
+          "nullable": true
+        },
+        {
+          "kind": "float",
+          "name": "duration_s",
+          "nullable": true
+        },
+        {
+          "kind": "float",
+          "name": "fps",
+          "nullable": true
+        },
+        {
+          "kind": "int",
+          "name": "width",
+          "nullable": true
+        },
+        {
+          "kind": "int",
+          "name": "height",
+          "nullable": true
+        },
+        {
+          "kind": "text",
+          "name": "codec",
+          "nullable": true
+        },
+        {
+          "kind": "timestamp",
+          "name": "captured_at",
+          "nullable": true
+        },
+        {
+          "kind": "text",
+          "name": "captured_source",
+          "nullable": true
+        },
+        {
+          "kind": "text",
+          "name": "gravity",
+          "nullable": false
+        },
+        {
+          "kind": "text",
+          "name": "gps",
+          "nullable": false
+        },
+        {
+          "kind": "timestamp",
+          "name": "created_at",
+          "nullable": false
+        },
+        {
+          "kind": "timestamp",
+          "name": "updated_at",
+          "nullable": false
+        },
+        {
+          "kind": "timestamp",
+          "name": "deleted_at",
+          "nullable": true
+        },
+        {
+          "kind": "uuid",
+          "name": "device_id",
+          "nullable": true
+        }
+      ],
+      "section": "videos",
+      "table": "video_asset"
+    },
+    {
+      "columns": [
+        {
+          "kind": "uuid",
+          "name": "id",
+          "nullable": false
+        },
+        {
+          "kind": "uuid",
+          "name": "transect_id",
+          "nullable": true
+        },
+        {
+          "kind": "uuid",
+          "name": "campaign_id",
+          "nullable": true
+        },
+        {
+          "kind": "float",
+          "name": "begin_s",
+          "nullable": false
+        },
+        {
+          "kind": "float",
+          "name": "end_s",
+          "nullable": false
+        },
+        {
+          "kind": "text",
+          "name": "direction",
+          "nullable": true
+        },
+        {
+          "kind": "bool",
+          "name": "upside_down",
+          "nullable": false
+        },
+        {
+          "kind": "text",
+          "name": "label",
+          "nullable": false
+        },
+        {
+          "kind": "text",
+          "name": "notes",
+          "nullable": false
+        },
+        {
+          "kind": "text",
+          "name": "quality",
+          "nullable": true
+        },
+        {
+          "kind": "timestamp",
+          "name": "created_at",
+          "nullable": false
+        },
+        {
+          "kind": "timestamp",
+          "name": "updated_at",
+          "nullable": false
+        },
+        {
+          "kind": "timestamp",
+          "name": "deleted_at",
+          "nullable": true
+        },
+        {
+          "kind": "uuid",
+          "name": "device_id",
+          "nullable": true
+        }
+      ],
+      "section": "passes",
+      "table": "transect_pass"
+    },
+    {
+      "columns": [
+        {
+          "kind": "uuid",
+          "name": "id",
+          "nullable": false
+        },
+        {
+          "kind": "uuid",
+          "name": "pass_id",
+          "nullable": false
+        },
+        {
+          "kind": "uuid",
+          "name": "video_id",
+          "nullable": false
+        },
+        {
+          "kind": "int",
+          "name": "ordinal",
+          "nullable": false
+        },
+        {
+          "kind": "timestamp",
+          "name": "created_at",
+          "nullable": false
+        },
+        {
+          "kind": "timestamp",
+          "name": "updated_at",
+          "nullable": false
+        },
+        {
+          "kind": "timestamp",
+          "name": "deleted_at",
+          "nullable": true
+        },
+        {
+          "kind": "uuid",
+          "name": "device_id",
+          "nullable": true
+        }
+      ],
+      "section": "pass_videos",
+      "table": "pass_video"
+    },
+    {
+      "columns": [
+        {
+          "kind": "uuid",
+          "name": "id",
+          "nullable": false
+        },
+        {
+          "kind": "uuid",
+          "name": "pass_id",
+          "nullable": false
+        },
+        {
+          "kind": "text",
+          "name": "status",
+          "nullable": false
+        },
+        {
+          "kind": "timestamp",
+          "name": "started_at",
+          "nullable": true
+        },
+        {
+          "kind": "timestamp",
+          "name": "finished_at",
+          "nullable": true
+        },
+        {
+          "kind": "text",
+          "name": "error",
+          "nullable": false
+        },
+        {
+          "kind": "text",
+          "name": "run_dir_name",
+          "nullable": false
+        },
+        {
+          "kind": "text",
+          "name": "gui_version",
+          "nullable": true
+        },
+        {
+          "kind": "text",
+          "name": "library_version",
+          "nullable": true
+        },
+        {
+          "kind": "text",
+          "name": "segmentation_model",
+          "nullable": true
+        },
+        {
+          "kind": "text",
+          "name": "mapping_backend",
+          "nullable": true
+        },
+        {
+          "kind": "int",
+          "name": "taxonomy_version",
+          "nullable": true
+        },
+        {
+          "kind": "text",
+          "name": "taxonomy_hash",
+          "nullable": true
+        },
+        {
+          "kind": "json",
+          "name": "model_revisions",
+          "nullable": true
+        },
+        {
+          "kind": "text",
+          "name": "preset_name",
+          "nullable": true
+        },
+        {
+          "kind": "json",
+          "name": "preset_deviations",
+          "nullable": true
+        },
+        {
+          "kind": "int",
+          "name": "preset_version",
+          "nullable": true
+        },
+        {
+          "kind": "text",
+          "name": "preset_hash",
+          "nullable": true
+        },
+        {
+          "kind": "float",
+          "name": "run_duration_s",
+          "nullable": true
+        },
+        {
+          "kind": "json",
+          "name": "stage_durations",
+          "nullable": true
+        },
+        {
+          "kind": "json",
+          "name": "stage_peaks",
+          "nullable": true
+        },
+        {
+          "kind": "timestamp",
+          "name": "created_at",
+          "nullable": false
+        },
+        {
+          "kind": "timestamp",
+          "name": "updated_at",
+          "nullable": false
+        },
+        {
+          "kind": "timestamp",
+          "name": "deleted_at",
+          "nullable": true
+        },
+        {
+          "kind": "uuid",
+          "name": "device_id",
+          "nullable": true
+        }
+      ],
+      "section": "runs",
+      "table": "run_record"
+    },
+    {
+      "columns": [
+        {
+          "kind": "uuid",
+          "name": "id",
+          "nullable": false
+        },
+        {
+          "kind": "uuid",
+          "name": "run_id",
+          "nullable": false
+        },
+        {
+          "kind": "text",
+          "name": "level",
+          "nullable": false
+        },
+        {
+          "kind": "text",
+          "name": "class_group",
+          "nullable": false
+        },
+        {
+          "kind": "text",
+          "name": "estimator",
+          "nullable": false
+        },
+        {
+          "kind": "float",
+          "name": "fraction",
+          "nullable": false
+        },
+        {
+          "kind": "float",
+          "name": "point_count",
+          "nullable": true
+        },
+        {
+          "kind": "float",
+          "name": "denominator",
+          "nullable": true
+        },
+        {
+          "kind": "text",
+          "name": "metric_source",
+          "nullable": true
+        },
+        {
+          "kind": "timestamp",
+          "name": "created_at",
+          "nullable": false
+        },
+        {
+          "kind": "timestamp",
+          "name": "updated_at",
+          "nullable": false
+        },
+        {
+          "kind": "timestamp",
+          "name": "deleted_at",
+          "nullable": true
+        },
+        {
+          "kind": "uuid",
+          "name": "device_id",
+          "nullable": true
+        }
+      ],
+      "section": "cover_rows",
+      "table": "cover_row"
+    },
+    {
+      "columns": [
+        {
+          "kind": "uuid",
+          "name": "id",
+          "nullable": false
+        },
+        {
+          "kind": "text",
+          "name": "name",
+          "nullable": false
+        },
+        {
+          "kind": "int",
+          "name": "version",
+          "nullable": false
+        },
+        {
+          "kind": "json",
+          "name": "settings",
+          "nullable": false
+        },
+        {
+          "kind": "text",
+          "name": "description",
+          "nullable": false
+        },
+        {
+          "kind": "timestamp",
+          "name": "created_at",
+          "nullable": false
+        },
+        {
+          "kind": "timestamp",
+          "name": "updated_at",
+          "nullable": false
+        },
+        {
+          "kind": "timestamp",
+          "name": "deleted_at",
+          "nullable": true
+        },
+        {
+          "kind": "uuid",
+          "name": "device_id",
+          "nullable": true
+        }
+      ],
+      "section": "presets",
+      "table": "preset"
+    }
+  ]
+}

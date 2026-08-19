@@ -1,0 +1,380 @@
+{
+  "contract_version": 1,
+  "legacy_exclusions": [
+    {
+      "raw": "calibration",
+      "reason": "camera calibration footage, so there is no pass to record"
+    },
+    {
+      "raw": "exclude",
+      "reason": "marked unusable in the field, so the footage is not surveyed"
+    }
+  ],
+  "vocabularies": [
+    {
+      "columns": [
+        "transect_pass.quality"
+      ],
+      "multi_value": "worst",
+      "name": "pass_quality",
+      "nullable": true,
+      "terms": [
+        {
+          "aliases": [],
+          "code": "excellent",
+          "definition": "Clear water, steady swim, the transect line visible throughout.",
+          "label": "Excellent"
+        },
+        {
+          "aliases": [
+            "very good",
+            "verygood"
+          ],
+          "code": "very_good",
+          "definition": "Minor turbidity or camera motion, nothing that costs coverage.",
+          "label": "Very good"
+        },
+        {
+          "aliases": [],
+          "code": "good",
+          "definition": "Usable throughout, with visible turbidity or uneven pacing.",
+          "label": "Good"
+        },
+        {
+          "aliases": [
+            "mediocre",
+            "ok",
+            "okay",
+            "average"
+          ],
+          "code": "meh",
+          "definition": "Reconstructs, but parts of the swim are too poor to trust.",
+          "label": "Mediocre"
+        },
+        {
+          "aliases": [],
+          "code": "bad",
+          "definition": "Largely unusable: heavy turbidity, surge, or lost line.",
+          "label": "Bad"
+        },
+        {
+          "aliases": [
+            "very bad",
+            "verybad",
+            "terrible"
+          ],
+          "code": "very_bad",
+          "definition": "No usable reconstruction is expected from this swim.",
+          "label": "Very bad"
+        }
+      ],
+      "unknown_aliases": [
+        "undefined",
+        "unknown",
+        "n/a",
+        "?"
+      ],
+      "unknown_code": null
+    },
+    {
+      "columns": [
+        "transect_pass.direction"
+      ],
+      "multi_value": "split",
+      "name": "pass_direction",
+      "nullable": true,
+      "terms": [
+        {
+          "aliases": [
+            "fw",
+            "fwd",
+            "f",
+            "out"
+          ],
+          "code": "forward",
+          "definition": "Swum from the transect's start point towards its end point.",
+          "label": "Forward"
+        },
+        {
+          "aliases": [
+            "bw",
+            "bwd",
+            "b",
+            "backward",
+            "backwards",
+            "back",
+            "return"
+          ],
+          "code": "reverse",
+          "definition": "Swum from the transect's end point back to its start point.",
+          "label": "Reverse"
+        }
+      ],
+      "unknown_aliases": [
+        "undefined",
+        "unknown",
+        "n/a",
+        "?"
+      ],
+      "unknown_code": null
+    },
+    {
+      "columns": [
+        "video_asset.gravity",
+        "video_asset.gps"
+      ],
+      "multi_value": "split",
+      "name": "telemetry_tristate",
+      "nullable": false,
+      "terms": [
+        {
+          "aliases": [
+            "y",
+            "true",
+            "t",
+            "1",
+            "present"
+          ],
+          "code": "yes",
+          "definition": "The stream is present in the clip's telemetry.",
+          "label": "Yes"
+        },
+        {
+          "aliases": [
+            "n",
+            "false",
+            "f",
+            "0",
+            "absent"
+          ],
+          "code": "no",
+          "definition": "The clip was read and carries no such stream.",
+          "label": "No"
+        },
+        {
+          "aliases": [
+            "unread",
+            "?",
+            "n/a"
+          ],
+          "code": "unknown",
+          "definition": "The clip's telemetry has not been read.",
+          "label": "Unknown"
+        }
+      ],
+      "unknown_aliases": [],
+      "unknown_code": "unknown"
+    },
+    {
+      "columns": [
+        "video_asset.captured_source"
+      ],
+      "multi_value": "split",
+      "name": "capture_source",
+      "nullable": true,
+      "terms": [
+        {
+          "aliases": [
+            "metadata",
+            "embedded"
+          ],
+          "code": "container",
+          "definition": "Read from the video container's own creation stamp.",
+          "label": "Container metadata"
+        },
+        {
+          "aliases": [
+            "file",
+            "filesystem",
+            "modified"
+          ],
+          "code": "mtime",
+          "definition": "Taken from the file's modification time, so it is an estimate.",
+          "label": "File modification time"
+        }
+      ],
+      "unknown_aliases": [
+        "unknown",
+        "n/a"
+      ],
+      "unknown_code": null
+    },
+    {
+      "columns": [
+        "run_record.status"
+      ],
+      "multi_value": "split",
+      "name": "run_status",
+      "nullable": false,
+      "terms": [
+        {
+          "aliases": [
+            "queued",
+            "waiting"
+          ],
+          "code": "pending",
+          "definition": "Recorded but not started.",
+          "label": "Pending"
+        },
+        {
+          "aliases": [
+            "in_progress",
+            "processing"
+          ],
+          "code": "running",
+          "definition": "In flight on the producing device.",
+          "label": "Running"
+        },
+        {
+          "aliases": [
+            "success",
+            "done",
+            "complete",
+            "completed"
+          ],
+          "code": "succeeded",
+          "definition": "Finished and wrote its outputs.",
+          "label": "Succeeded"
+        },
+        {
+          "aliases": [
+            "failure",
+            "error"
+          ],
+          "code": "failed",
+          "definition": "Stopped on an error, which `error` carries.",
+          "label": "Failed"
+        },
+        {
+          "aliases": [
+            "canceled",
+            "aborted"
+          ],
+          "code": "cancelled",
+          "definition": "Stopped on purpose, so nothing is owed.",
+          "label": "Cancelled"
+        },
+        {
+          "aliases": [
+            "crashed",
+            "incomplete"
+          ],
+          "code": "interrupted",
+          "definition": "The process stopped mid-run, so it is worth redoing.",
+          "label": "Interrupted"
+        }
+      ],
+      "unknown_aliases": [],
+      "unknown_code": null
+    },
+    {
+      "columns": [
+        "cover_row.level"
+      ],
+      "multi_value": "split",
+      "name": "cover_level",
+      "nullable": false,
+      "terms": [
+        {
+          "aliases": [
+            "class",
+            "classes",
+            "raw"
+          ],
+          "code": "fine",
+          "definition": "One row per segmentation class, named as the class list names it.",
+          "label": "Fine"
+        },
+        {
+          "aliases": [
+            "mid",
+            "medium",
+            "group"
+          ],
+          "code": "intermediate",
+          "definition": "Classes rolled up to the taxonomy's intermediate groups.",
+          "label": "Intermediate"
+        },
+        {
+          "aliases": [
+            "broad",
+            "top"
+          ],
+          "code": "coarse",
+          "definition": "Classes rolled up to the taxonomy's broadest groups.",
+          "label": "Coarse"
+        }
+      ],
+      "unknown_aliases": [],
+      "unknown_code": null
+    },
+    {
+      "columns": [
+        "cover_row.estimator"
+      ],
+      "multi_value": "split",
+      "name": "cover_estimator",
+      "nullable": false,
+      "terms": [
+        {
+          "aliases": [
+            "per pass",
+            "pass",
+            "single",
+            "single_pass"
+          ],
+          "code": "per_pass",
+          "definition": "Measured on one pass alone.",
+          "label": "Per pass"
+        },
+        {
+          "aliases": [
+            "pool",
+            "combined",
+            "transect"
+          ],
+          "code": "pooled",
+          "definition": "Count-weighted estimate over every contributing pass.",
+          "label": "Pooled"
+        }
+      ],
+      "unknown_aliases": [],
+      "unknown_code": null
+    },
+    {
+      "columns": [
+        "cover_row.metric_source"
+      ],
+      "multi_value": "split",
+      "name": "cover_metric_source",
+      "nullable": true,
+      "terms": [
+        {
+          "aliases": [
+            "unprojection",
+            "raw",
+            "default"
+          ],
+          "code": "unprojected",
+          "definition": "Depth unprojected per frame, the pipeline's default cloud.",
+          "label": "Unprojected cloud"
+        },
+        {
+          "aliases": [
+            "tsdf_cloud",
+            "fused",
+            "fusion"
+          ],
+          "code": "tsdf",
+          "definition": "Fused TSDF cloud, produced only when fusion was enabled.",
+          "label": "TSDF cloud"
+        }
+      ],
+      "unknown_aliases": [
+        "unknown",
+        "n/a"
+      ],
+      "unknown_code": null
+    }
+  ]
+}
