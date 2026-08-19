@@ -1,0 +1,97 @@
+[workspace]
+members = [".", "migration"]
+resolver = "2"
+
+[package]
+name = "deepreefmap-api"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+authors = ["ECEO Team"]
+description = "Reef survey metadata registry for the DeepReefMap desktop application"
+license = "MIT"
+# `src/bin/export-contract.rs` is the second binary, so `cargo run` needs telling.
+default-run = "deepreefmap-api"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+
+[dependencies]
+# Web framework
+axum = { version = "0.8", features = ["macros"] }
+tower = { version = "0.5.3", features = ["timeout", "limit"] }
+tower-http = { version = "0.7", features = ["cors", "trace", "compression-gzip", "limit"] }
+
+# Database
+sea-orm = { version = "2.0.2", features = [
+    "sqlx-postgres",
+    "runtime-tokio-rustls",
+    "with-uuid",
+    "with-chrono",
+    "with-json",
+] }
+sea-orm-migration = { version = "2.0.2", features = ["sqlx-postgres", "runtime-tokio-rustls"] }
+
+# Async runtime
+tokio = { version = "1.53", features = ["full"] }
+
+# Serialization
+chrono = { version = "0.4", features = ["serde"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+form_urlencoded = "1.2"
+
+# API docs
+utoipa = { version = "5.5", features = ["axum_extras", "chrono", "uuid"] }
+utoipa-axum = "0.2"
+utoipa-scalar = { version = "0.3", features = ["axum"] }
+
+# Required by crudcrate generated code
+hyper = "1.11"
+
+# Utilities
+uuid = { version = "1.24", features = ["v4", "serde"] }
+dotenvy = "0.15.7"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+thiserror = "2.0.20"
+
+# Admin CRUD
+crudcrate = { version = "0.10.0", default-features = false, features = ["postgresql", "derive"] }
+
+# Authentication
+axum-keycloak-auth = "0.8"
+
+# Device-token secret hashing (argon2id). Verification is constant-time inside the
+# argon2 crate, so no separate timing-safe compare is needed.
+argon2 = { version = "0.5.3", features = ["std"] }
+# Held back deliberately. sqlx-postgres pulls sha2 0.11 and sqlx-core 0.10, so both
+# digest majors are in the tree whichever we take; 0.10 is the one argon2 shares.
+sha2 = "0.10"
+rand = "0.10"
+# 0.23 would fork base64 against sqlx, reqwest, jsonwebtoken and pem, which all take 0.22.
+base64 = "0.22"
+
+# Short-TTL device-token validation cache, so a sync burst does not argon2-verify per request
+moka = { version = "0.12.16", features = ["future"] }
+
+# Archive blob store. Path-style requests, because MinIO serves no virtual-host buckets.
+aws-config = { version = "1.10", default-features = false }
+aws-sdk-s3 = "1.142"
+
+# Rate limiting on the unauthenticated enrolment endpoint. Default features are off
+# because tower_governor 0.8 defaults to tonic, and only axum is served here.
+tower_governor = { version = "0.8", default-features = false, features = ["axum"] }
+
+migration = { path = "migration" }
+
+[dev-dependencies]
+chrono = "0.4"
+tokio-test = "0.4"
+tower = { version = "0.5.3", features = ["util"] }
+http-body-util = "0.1"
+# Drives presigned URLs in the S3 end-to-end test. rustls, matching the rest of the tree.
+reqwest = { version = "0.13", default-features = false, features = ["rustls"] }
