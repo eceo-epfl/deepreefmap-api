@@ -1,28 +1,36 @@
-FROM python:3.12.3
-
-RUN apt-get update && apt-get install -y curl python3-pip g++ libgeos-dev proj-bin libproj-dev
-
-WORKDIR /root
-RUN mkdir .kube
-
-RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && \
-    curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl.sha256" && \
-    echo "$(cat kubectl.sha256)  kubectl" | sha256sum -c && \
-    install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl && \
-    kubectl version --client --output=yaml
-
-ENV POETRY_VERSION=1.8.2
-RUN pip install "poetry==$POETRY_VERSION"
-ENV PYTHONPATH="$PYTHONPATH:/app"
+FROM rust:1.97.1-trixie AS builder
 
 WORKDIR /app
 
-COPY poetry.lock pyproject.toml /app/
-RUN poetry config virtualenvs.create false
-RUN poetry install --no-interaction --without dev
+# Manifests first, so the dependency build is cached independently of source edits.
+COPY Cargo.toml Cargo.lock ./
+COPY migration/Cargo.toml migration/Cargo.toml
+RUN mkdir -p src && echo "fn main() {}" > src/main.rs && echo "" > src/lib.rs \
+    && mkdir -p migration/src && echo "fn main() {}" > migration/src/main.rs \
+    && echo "" > migration/src/lib.rs
+RUN cargo build --release && rm -rf src migration/src
 
-COPY alembic.ini prestart.sh /app
-COPY migrations /app/migrations
-COPY app /app/app
+COPY src src
+COPY migration/src migration/src
+# The stub build above leaves fingerprints newer than the real sources, so cargo
+# would consider the binary current and ship a stub that serves nothing.
+RUN touch src/main.rs src/lib.rs migration/src/lib.rs && cargo build --release
 
-ENTRYPOINT sh prestart.sh
+FROM debian:trixie-slim
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Unprivileged: the process needs nothing but a socket and a database connection.
+RUN useradd --system --create-home --uid 10001 deepreefmap
+USER deepreefmap
+
+COPY --from=builder /app/target/release/deepreefmap-api /usr/local/bin/deepreefmap-api
+
+EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -sf http://localhost:3000/healthz || exit 1
+
+ENTRYPOINT ["/usr/local/bin/deepreefmap-api"]

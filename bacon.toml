@@ -1,0 +1,48 @@
+# bacon.toml — hot reload for the dev container and local work
+
+default_job = "run"
+
+[jobs.check]
+command = ["cargo", "check", "--color", "always"]
+need_stdout = false
+
+[jobs.clippy]
+command = ["cargo", "clippy", "--all-targets", "--color", "always"]
+need_stdout = false
+
+[jobs.test]
+command = ["cargo", "test", "--color", "always"]
+need_stdout = true
+
+[jobs.test-unit]
+command = ["cargo", "test", "--lib", "--color", "always"]
+need_stdout = true
+
+[jobs.test-integration]
+command = [
+    "cargo", "nextest", "run", "--tests", "--color", "always",
+    "--hide-progress-bar",
+    "--failure-output", "final", "--status-level", "fail",
+]
+need_stdout = true
+
+[jobs.run]
+command = ["cargo", "run", "--color", "always"]
+need_stdout = true
+allow_warnings = true
+background = true
+on_change_strategy = "kill_then_restart"
+
+[jobs.doc]
+command = ["cargo", "doc", "--no-deps", "--color", "always"]
+need_stdout = false
+
+# Read only by an interactive bacon. The container names its job on the command line.
+[keybindings]
+c = "job:check"
+l = "job:clippy"
+t = "job:test"
+i = "job:test-integration"
+u = "job:test-unit"
+r = "job:run"
+d = "job:doc"

@@ -1,17 +1,21 @@
-FROM python:3.12.3
-ENV POETRY_VERSION=1.8.2
-RUN pip install "poetry==$POETRY_VERSION"
-ENV PYTHONPATH="$PYTHONPATH:/app"
+FROM rust:1.97.1-trixie
+
+# bacon watches the mounted source and restarts the server; nextest runs the
+# integration suite in the test-watcher service.
+RUN cargo install bacon && cargo install --locked cargo-nextest
 
 WORKDIR /app
 
-# geos-dev is required for shapely, proj for pyproj
-RUN apt-get update && apt-get install -y g++ libgeos-dev proj-bin proj-data libproj-dev
+# Only the manifests are copied. Source is volume-mounted at runtime, so a code
+# change does not invalidate the dependency layer.
+COPY Cargo.toml Cargo.lock ./
+COPY migration/Cargo.toml migration/Cargo.toml
 
-COPY poetry.lock pyproject.toml /app/
-RUN poetry config virtualenvs.create false
-RUN poetry install --no-interaction
+# Stub sources so cargo can resolve the workspace before the real ones are mounted.
+RUN mkdir -p src && echo "fn main() {}" > src/main.rs && echo "" > src/lib.rs \
+    && mkdir -p migration/src && echo "fn main() {}" > migration/src/main.rs \
+    && echo "" > migration/src/lib.rs
 
-COPY app /app/app
+RUN cargo fetch
 
-ENTRYPOINT ptw --now --disable-warnings .
+ENTRYPOINT ["bacon", "--headless", "run"]
