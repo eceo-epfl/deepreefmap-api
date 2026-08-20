@@ -15,7 +15,8 @@ use sea_orm::entity::prelude::*;
     name_singular = "preset",
     name_plural = "presets",
     generate_router,
-    read::one::body = get_live_one,
+    require_scope,
+    deny_unknown_fields,
     delete::one::body = soft_delete_one,
     delete::many::body = soft_delete_many
 )]
@@ -27,8 +28,10 @@ pub struct Model {
     pub name: String,
     #[crudcrate(filterable, sortable)]
     pub version: i32,
-    /// The settings document itself, opaque to the registry.
+    /// The settings document itself, opaque to the registry. Detail view only: a page
+    /// of presets does not carry every document.
     #[sea_orm(column_type = "JsonBinary")]
+    #[crudcrate(exclude(list))]
     pub settings: serde_json::Value,
     #[crudcrate(fulltext)]
     pub description: String,
@@ -56,5 +59,24 @@ pub struct Model {
 pub enum Relation {}
 
 impl ActiveModelBehavior for ActiveModel {}
+
+impl crudcrate::validation::Validatable for PresetCreate {
+    fn validate(&self) -> Result<(), crudcrate::validation::ValidationError> {
+        crudcrate::validation::validators::validate_required("name", &self.name)?;
+        crudcrate::validation::validators::validate_range("version", self.version, Some(1), None)
+    }
+}
+
+impl crudcrate::validation::Validatable for PresetUpdate {
+    fn validate(&self) -> Result<(), crudcrate::validation::ValidationError> {
+        if let Some(Some(name)) = &self.name {
+            crudcrate::validation::validators::validate_required("name", name)?;
+        }
+        if let Some(Some(version)) = self.version {
+            crudcrate::validation::validators::validate_range("version", version, Some(1), None)?;
+        }
+        Ok(())
+    }
+}
 
 crate::soft_delete_hooks!(Preset);

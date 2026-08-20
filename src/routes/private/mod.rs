@@ -59,8 +59,9 @@ pub fn protected_router(state: &AppState) -> OpenApiRouter {
         .nest("/videos", Video::read_only_router(db))
         .nest("/runs", Run::read_only_router(db))
         .nest("/cover_rows", CoverRow::read_only_router(db))
-        // Every syncable list, since a tombstone is a sync signal and not a row to show.
-        // Get-one is filtered per entity by the `read::one::body` hook instead.
+        // Every syncable read, since a tombstone is a sync signal and not a row to
+        // show. The entities above carry `require_scope`, so a nest that loses this
+        // layer refuses reads rather than serving tombstones.
         .layer(middleware::from_fn(hide_tombstones))
         // Devices are created by enrolment and retired by revoke, never by CRUD.
         .nest("/devices", Device::read_only_router(db))

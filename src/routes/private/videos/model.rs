@@ -11,7 +11,7 @@ use sea_orm::entity::prelude::*;
     name_singular = "video",
     name_plural = "videos",
     generate_router,
-    read::one::body = get_live_one,
+    require_scope,
     delete::one::body = soft_delete_one,
     delete::many::body = soft_delete_many
 )]

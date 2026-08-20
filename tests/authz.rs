@@ -179,6 +179,63 @@ async fn test_delete_many_sites_tombstones_each() {
 }
 
 #[tokio::test]
+async fn test_delete_many_sites_reports_only_rows_that_existed() {
+    let db = setup_test_db().await;
+    let app = build_test_app_as_admin(db.clone());
+
+    let real = create_site(&app, "Harat").await;
+    let phantom = "11111111-1111-4111-8111-111111111111";
+    let (status, body) = delete_with_body(
+        &app,
+        "/api/sites/batch",
+        Some(&serde_json::json!([real, phantom])),
+        None,
+    )
+    .await;
+    assert_eq!(status, 200, "batch delete failed: {body}");
+
+    // The secure profile reports a count, never which ids existed.
+    let reported: serde_json::Value = serde_json::from_str(&body).expect("JSON body");
+    assert_eq!(
+        reported,
+        serde_json::json!({ "deleted": 1 }),
+        "a phantom id was counted as deleted"
+    );
+    let (deleted_at, _, _) = site_row(&db, &real).await.expect("row survives");
+    assert!(deleted_at.is_some(), "the real row was not tombstoned");
+}
+
+#[tokio::test]
+async fn test_delete_many_sites_accepts_an_empty_batch() {
+    let db = setup_test_db().await;
+    let app = build_test_app_as_admin(db.clone());
+
+    let (status, body) =
+        delete_with_body(&app, "/api/sites/batch", Some(&serde_json::json!([])), None).await;
+    assert_eq!(status, 200, "{body}");
+    let reported: serde_json::Value = serde_json::from_str(&body).expect("JSON body");
+    assert_eq!(reported, serde_json::json!({ "deleted": 0 }));
+}
+
+#[tokio::test]
+async fn test_delete_many_sites_refuses_an_oversized_batch() {
+    let db = setup_test_db().await;
+    let app = build_test_app_as_admin(db.clone());
+
+    let ids: Vec<String> = (0..101)
+        .map(|n| format!("{n:0>8}-1111-4111-8111-111111111111"))
+        .collect();
+    let (status, body) = delete_with_body(
+        &app,
+        "/api/sites/batch",
+        Some(&serde_json::json!(ids)),
+        None,
+    )
+    .await;
+    assert_eq!(status, 400, "an oversized batch was accepted: {body}");
+}
+
+#[tokio::test]
 async fn test_list_sites_hides_tombstones() {
     let db = setup_test_db().await;
     let app = build_test_app_as_admin(db.clone());
@@ -224,7 +281,7 @@ async fn test_get_one_site_hides_a_tombstone() {
 }
 
 #[tokio::test]
-async fn test_update_site_ignores_a_member_supplied_deleted_at() {
+async fn test_update_site_refuses_a_member_supplied_deleted_at() {
     let db = setup_test_db().await;
     let admin = build_test_app_as_admin(db.clone());
     let member = build_test_app_as_member(db.clone());
@@ -237,7 +294,7 @@ async fn test_update_site_ignores_a_member_supplied_deleted_at() {
         None,
     )
     .await;
-    assert_eq!(status, 200, "member edit refused: {body}");
+    assert_eq!(status, 422, "a server-owned field was accepted: {body}");
 
     let (deleted_at, _, _) = site_row(&db, &id).await.expect("row exists");
     assert!(
@@ -256,6 +313,7 @@ async fn test_update_site_stamps_updated_at_itself() {
     let id = create_site(&admin, "Kanton").await;
     let (_, created_stamp, _) = site_row(&db, &id).await.expect("row exists");
 
+    // Carrying the stamp is refused whole, so it cannot pin the row either way.
     let (status, body) = put(
         &admin,
         &format!("/api/sites/{id}"),
@@ -263,13 +321,18 @@ async fn test_update_site_stamps_updated_at_itself() {
         None,
     )
     .await;
+    assert_eq!(status, 422, "a server-owned field was accepted: {body}");
+
+    let (status, body) = put(
+        &admin,
+        &format!("/api/sites/{id}"),
+        &serde_json::json!({ "description": "amended" }),
+        None,
+    )
+    .await;
     assert_eq!(status, 200, "admin edit refused: {body}");
 
     let (_, stamp, _) = site_row(&db, &id).await.expect("row exists");
-    assert!(
-        !stamp.starts_with("2030"),
-        "a client set the conflict key: {stamp}"
-    );
     assert_ne!(
         stamp, created_stamp,
         "an edit left the conflict key stale, so a device's next push silently reverts it"
@@ -277,11 +340,12 @@ async fn test_update_site_stamps_updated_at_itself() {
 }
 
 #[tokio::test]
-async fn test_create_site_ignores_a_client_supplied_provenance() {
+async fn test_create_site_refuses_a_client_supplied_provenance() {
     let db = setup_test_db().await;
     let app = build_test_app_as_member(db.clone());
 
-    let (status, body) = post_json(
+    // The refusal is the deserialiser's, so the body is text naming the field.
+    let (status, body) = post(
         &app,
         "/api/sites",
         &serde_json::json!({
@@ -293,9 +357,14 @@ async fn test_create_site_ignores_a_client_supplied_provenance() {
         None,
     )
     .await;
-    assert_eq!(status, 201, "site create failed: {body}");
-    assert!(body["deleted_at"].is_null(), "born tombstoned: {body}");
-    assert!(body["device_id"].is_null(), "forged device: {body}");
+    assert_eq!(status, 422, "a server-owned field was accepted: {body}");
+    assert!(
+        body.contains("unknown field"),
+        "an unhelpful refusal: {body}"
+    );
+
+    let rows: i64 = one_value(&db, "SELECT COUNT(*)::BIGINT FROM site").await;
+    assert_eq!(rows, 0, "the refused create landed anyway");
 }
 
 #[tokio::test]

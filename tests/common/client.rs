@@ -102,6 +102,22 @@ pub async fn get_json(app: &Router, uri: &str, token: Option<&str>) -> (u16, ser
     (status, json)
 }
 
+/// A GET returning the response headers too, for assertions on `Content-Range`.
+///
+/// # Panics
+///
+/// Panics when the response is not JSON.
+pub async fn get_json_with_headers(
+    app: &Router,
+    uri: &str,
+    token: Option<&str>,
+) -> (u16, HeaderMap, serde_json::Value) {
+    let (status, headers, body) = get_declaring(app, uri, token, &negotiation()).await;
+    let json = serde_json::from_str(&body)
+        .unwrap_or_else(|e| panic!("GET {uri} returned non-JSON: {e}\nBody: {body}"));
+    (status, headers, json)
+}
+
 /// # Panics
 ///
 /// Panics when the request cannot be built.

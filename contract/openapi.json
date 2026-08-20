@@ -46,6 +46,7 @@
         "type": "object"
       },
       "CampaignCreate": {
+        "additionalProperties": false,
         "properties": {
           "begin_date": {
             "format": "date",
@@ -214,6 +215,7 @@
         "type": "object"
       },
       "CampaignUpdate": {
+        "additionalProperties": false,
         "properties": {
           "begin_date": {
             "format": "date",
@@ -633,9 +635,6 @@
               "string",
               "null"
             ]
-          },
-          "system_profile": {
-            "description": "Hardware and driver survey the device reports about itself, stored as sent."
           }
         },
         "required": [
@@ -708,7 +707,7 @@
             ]
           },
           "system_profile": {
-            "description": "Hardware and driver survey the device reports about itself, stored as sent."
+            "description": "Hardware and driver survey the device reports about itself, stored as sent.\nDetail view only."
           }
         },
         "required": [
@@ -1094,6 +1093,7 @@
         "type": "object"
       },
       "PassCreate": {
+        "additionalProperties": false,
         "properties": {
           "begin_s": {
             "format": "double",
@@ -1163,6 +1163,7 @@
         "type": "object"
       },
       "PassGroupCreate": {
+        "additionalProperties": false,
         "properties": {
           "description": {
             "type": "string"
@@ -1281,6 +1282,7 @@
         "type": "object"
       },
       "PassGroupUpdate": {
+        "additionalProperties": false,
         "properties": {
           "description": {
             "type": [
@@ -1512,6 +1514,7 @@
         "type": "object"
       },
       "PassUpdate": {
+        "additionalProperties": false,
         "properties": {
           "begin_s": {
             "format": "double",
@@ -1582,6 +1585,7 @@
         "type": "object"
       },
       "PassVideoCreate": {
+        "additionalProperties": false,
         "properties": {
           "id": {
             "format": "uuid",
@@ -1731,6 +1735,7 @@
         "type": "object"
       },
       "PassVideoUpdate": {
+        "additionalProperties": false,
         "properties": {
           "ordinal": {
             "format": "int32",
@@ -1806,6 +1811,7 @@
         "type": "object"
       },
       "PresetCreate": {
+        "additionalProperties": false,
         "properties": {
           "description": {
             "type": "string"
@@ -1870,9 +1876,6 @@
             "format": "int64",
             "type": "integer"
           },
-          "settings": {
-            "description": "The settings document itself, opaque to the registry."
-          },
           "updated_at": {
             "description": "The conflict key last-write-wins resolves on. Server-stamped: `on_update` only\nfires for a field the update model excludes, and a client-set stamp could pin a\nrow against every later push. `/api/sync/push` writes it directly instead.",
             "format": "date-time",
@@ -1887,7 +1890,6 @@
           "id",
           "name",
           "version",
-          "settings",
           "description",
           "created_at",
           "updated_at",
@@ -1932,7 +1934,7 @@
             "type": "integer"
           },
           "settings": {
-            "description": "The settings document itself, opaque to the registry."
+            "description": "The settings document itself, opaque to the registry. Detail view only: a page\nof presets does not carry every document."
           },
           "updated_at": {
             "description": "The conflict key last-write-wins resolves on. Server-stamped: `on_update` only\nfires for a field the update model excludes, and a client-set stamp could pin a\nrow against every later push. `/api/sync/push` writes it directly instead.",
@@ -1957,6 +1959,7 @@
         "type": "object"
       },
       "PresetUpdate": {
+        "additionalProperties": false,
         "properties": {
           "description": {
             "type": [
@@ -2351,9 +2354,6 @@
               "null"
             ]
           },
-          "model_revisions": {
-            "description": "Repository to upstream revision present at launch. Best-effort: the version\navailable, not proof it was loaded."
-          },
           "pass_id": {
             "format": "uuid",
             "type": "string"
@@ -2402,12 +2402,6 @@
           "server_seq": {
             "format": "int64",
             "type": "integer"
-          },
-          "stage_durations": {
-            "description": "Stage name to wall-clock seconds, so a slow run names its slow stage."
-          },
-          "stage_peaks": {
-            "description": "Stage name to peak resource use, so an out-of-memory run stays explicable."
           },
           "started_at": {
             "format": "date-time",
@@ -2506,7 +2500,7 @@
             ]
           },
           "model_revisions": {
-            "description": "Repository to upstream revision present at launch. Best-effort: the version\navailable, not proof it was loaded."
+            "description": "Repository to upstream revision present at launch. Best-effort: the version\navailable, not proof it was loaded. Detail view only."
           },
           "pass_id": {
             "format": "uuid",
@@ -2558,10 +2552,10 @@
             "type": "integer"
           },
           "stage_durations": {
-            "description": "Stage name to wall-clock seconds, so a slow run names its slow stage."
+            "description": "Stage name to wall-clock seconds, so a slow run names its slow stage. Detail\nview only."
           },
           "stage_peaks": {
-            "description": "Stage name to peak resource use, so an out-of-memory run stays explicable."
+            "description": "Stage name to peak resource use, so an out-of-memory run stays explicable.\nDetail view only."
           },
           "started_at": {
             "format": "date-time",
@@ -2726,6 +2720,7 @@
         "type": "object"
       },
       "SiteCreate": {
+        "additionalProperties": false,
         "properties": {
           "country": {
             "type": [
@@ -2934,6 +2929,7 @@
         "type": "object"
       },
       "SiteUpdate": {
+        "additionalProperties": false,
         "properties": {
           "country": {
             "type": [
@@ -3157,6 +3153,7 @@
         "type": "object"
       },
       "TransectCreate": {
+        "additionalProperties": false,
         "properties": {
           "depth_m": {
             "format": "double",
@@ -3452,6 +3449,7 @@
         "type": "object"
       },
       "TransectUpdate": {
+        "additionalProperties": false,
         "properties": {
           "depth_m": {
             "format": "double",

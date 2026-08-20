@@ -39,8 +39,9 @@ pub struct Model {
     #[crudcrate(filterable, exclude(update))]
     pub library_version: Option<String>,
     /// Hardware and driver survey the device reports about itself, stored as sent.
+    /// Detail view only.
     #[sea_orm(column_type = "JsonBinary", nullable)]
-    #[crudcrate(exclude(create, update))]
+    #[crudcrate(exclude(create, update, list))]
     pub system_profile: Option<serde_json::Value>,
     /// When the device last reported on itself, so a stale profile reads as stale.
     #[crudcrate(exclude(create, update), sortable)]

@@ -12,7 +12,8 @@ use sea_orm::entity::prelude::*;
     name_singular = "campaign",
     name_plural = "campaigns",
     generate_router,
-    read::one::body = get_live_one,
+    require_scope,
+    deny_unknown_fields,
     delete::one::body = soft_delete_one,
     delete::many::body = soft_delete_many
 )]
@@ -61,5 +62,20 @@ impl Related<crate::routes::private::passes::model::Entity> for Entity {
 }
 
 impl ActiveModelBehavior for ActiveModel {}
+
+impl crudcrate::validation::Validatable for CampaignCreate {
+    fn validate(&self) -> Result<(), crudcrate::validation::ValidationError> {
+        crudcrate::validation::validators::validate_required("name", &self.name)
+    }
+}
+
+impl crudcrate::validation::Validatable for CampaignUpdate {
+    fn validate(&self) -> Result<(), crudcrate::validation::ValidationError> {
+        if let Some(Some(name)) = &self.name {
+            crudcrate::validation::validators::validate_required("name", name)?;
+        }
+        Ok(())
+    }
+}
 
 crate::soft_delete_hooks!(Campaign);

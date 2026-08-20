@@ -6,81 +6,64 @@ use axum::{
     middleware::Next,
     response::Response,
 };
+use crudcrate::ScopeCondition;
+use sea_orm::Condition;
+use sea_orm::sea_query::{Alias, Expr, ExprTrait};
 
-/// Force `deleted_at: null` into a list request's filter.
+/// Scope every read to live rows.
 ///
-/// The generated list handler derives both the page and its `Content-Range` total from
-/// the parsed filter, so rewriting the query is the one place that keeps the two
-/// agreeing. Overwrites any `deleted_at` the caller sent: `/api/sync/pull` is the only
-/// route that hands out tombstones.
+/// The generated handlers merge the scope into the page, its `Content-Range` total and
+/// get-one, so the two cannot disagree. Safe methods only: crudcrate refuses any write
+/// carrying a scope, and deletes must stay unscoped so `soft_delete_one` can restate an
+/// existing tombstone.
 pub async fn hide_tombstones(mut request: Request, next: Next) -> Response {
-    if request.method().is_safe()
-        && let Some(uri) = live_rows_only(request.uri())
-    {
-        *request.uri_mut() = uri;
+    if request.method().is_safe() {
+        if let Some(uri) = strip_deleted_at_filter(request.uri()) {
+            *request.uri_mut() = uri;
+        }
+        // Unqualified column, since every query behind this layer is single-table.
+        // Revisit before adopting dot-notation joined filters.
+        request.extensions_mut().insert(ScopeCondition::new(
+            Condition::all().add(Expr::col(Alias::new("deleted_at")).is_null()),
+        ));
     }
     next.run(request).await
 }
 
-fn live_rows_only(uri: &Uri) -> Option<Uri> {
-    let mut filter: serde_json::Map<String, serde_json::Value> = uri
-        .query()
-        .and_then(|query| {
-            form_urlencoded::parse(query.as_bytes())
-                .find(|(key, _)| key == "filter")
-                .and_then(|(_, value)| serde_json::from_str(&value).ok())
-        })
-        .unwrap_or_default();
-    filter.insert("deleted_at".to_string(), serde_json::Value::Null);
+/// Drop any caller-sent `deleted_at` filter: `/api/sync/pull` is the only route that
+/// hands out tombstones. A filter that does not parse is dropped whole.
+fn strip_deleted_at_filter(uri: &Uri) -> Option<Uri> {
+    let query = uri.query()?;
+    let raw = form_urlencoded::parse(query.as_bytes())
+        .find(|(key, _)| key == "filter")?
+        .1
+        .into_owned();
 
-    let mut query = form_urlencoded::Serializer::new(String::new());
-    for (key, value) in form_urlencoded::parse(uri.query().unwrap_or("").as_bytes()) {
+    let mut rebuilt = form_urlencoded::Serializer::new(String::new());
+    for (key, value) in form_urlencoded::parse(query.as_bytes()) {
         if key != "filter" {
-            query.append_pair(&key, &value);
+            rebuilt.append_pair(&key, &value);
         }
     }
-    query.append_pair("filter", &serde_json::Value::Object(filter).to_string());
+    if let Ok(mut filter) = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(&raw)
+    {
+        filter.remove("deleted_at");
+        rebuilt.append_pair("filter", &serde_json::Value::Object(filter).to_string());
+    }
 
     let mut parts = uri.clone().into_parts();
     parts.path_and_query =
-        Some(PathAndQuery::try_from(format!("{}?{}", uri.path(), query.finish())).ok()?);
+        Some(PathAndQuery::try_from(format!("{}?{}", uri.path(), rebuilt.finish())).ok()?);
     Uri::from_parts(parts).ok()
 }
 
-/// Generate the delete and read hooks a syncable entity needs.
+/// Generate the delete hooks a syncable entity needs. Reads are filtered by the scope
+/// [`hide_tombstones`] injects, so no read hook exists.
 ///
 /// Invoke in the model module, beside the `DeriveEntityModel` and the api struct it names.
 #[macro_export]
 macro_rules! soft_delete_hooks {
     ($api_struct:ident) => {
-        /// Fetch one live row, treating a tombstone as absent.
-        ///
-        /// Tombstones exist for `/api/sync/pull` to hand back, not for the console to
-        /// show, so this is 404 rather than a deleted row.
-        ///
-        /// # Errors
-        ///
-        /// Returns `ApiError::NotFound` when the row is missing or tombstoned.
-        pub async fn get_live_one(
-            db: &sea_orm::DatabaseConnection,
-            id: uuid::Uuid,
-        ) -> Result<$api_struct, crudcrate::ApiError> {
-            use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
-
-            Entity::find_by_id(id)
-                .filter(Column::DeletedAt.is_null())
-                .one(db)
-                .await
-                .map_err(crudcrate::ApiError::database)?
-                .map($api_struct::from)
-                .ok_or_else(|| {
-                    crudcrate::ApiError::not_found(
-                        <$api_struct as crudcrate::CRUDResource>::RESOURCE_NAME_SINGULAR,
-                        Some(id.to_string()),
-                    )
-                })
-        }
-
         /// Tombstone one row, returning its id.
         ///
         /// A client that already holds a row learns of its deletion only by pulling the row

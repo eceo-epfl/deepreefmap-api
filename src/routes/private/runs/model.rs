@@ -16,7 +16,7 @@ use sea_orm::entity::prelude::*;
     name_singular = "run",
     name_plural = "runs",
     generate_router,
-    read::one::body = get_live_one,
+    require_scope,
     delete::one::body = soft_delete_one,
     delete::many::body = soft_delete_many
 )]
@@ -48,8 +48,9 @@ pub struct Model {
     /// Digest of the class-groups definition, so a claimed version can be checked.
     pub taxonomy_hash: Option<String>,
     /// Repository to upstream revision present at launch. Best-effort: the version
-    /// available, not proof it was loaded.
+    /// available, not proof it was loaded. Detail view only.
     #[sea_orm(column_type = "JsonBinary", nullable)]
+    #[crudcrate(exclude(list))]
     pub model_revisions: Option<serde_json::Value>,
     #[crudcrate(filterable)]
     pub preset_name: Option<String>,
@@ -63,11 +64,15 @@ pub struct Model {
     /// Wall-clock seconds for the whole run.
     #[crudcrate(sortable)]
     pub run_duration_s: Option<f64>,
-    /// Stage name to wall-clock seconds, so a slow run names its slow stage.
+    /// Stage name to wall-clock seconds, so a slow run names its slow stage. Detail
+    /// view only.
     #[sea_orm(column_type = "JsonBinary", nullable)]
+    #[crudcrate(exclude(list))]
     pub stage_durations: Option<serde_json::Value>,
     /// Stage name to peak resource use, so an out-of-memory run stays explicable.
+    /// Detail view only.
     #[sea_orm(column_type = "JsonBinary", nullable)]
+    #[crudcrate(exclude(list))]
     pub stage_peaks: Option<serde_json::Value>,
     #[crudcrate(exclude(create, update), sortable, on_create = chrono::Utc::now())]
     pub created_at: chrono::DateTime<chrono::Utc>,

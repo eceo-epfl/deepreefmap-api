@@ -11,7 +11,8 @@ use sea_orm::entity::prelude::*;
     name_singular = "site",
     name_plural = "sites",
     generate_router,
-    read::one::body = get_live_one,
+    require_scope,
+    deny_unknown_fields,
     delete::one::body = soft_delete_one,
     delete::many::body = soft_delete_many
 )]
@@ -64,5 +65,33 @@ impl Related<crate::routes::private::transects::model::Entity> for Entity {
 }
 
 impl ActiveModelBehavior for ActiveModel {}
+
+impl crudcrate::validation::Validatable for SiteCreate {
+    fn validate(&self) -> Result<(), crudcrate::validation::ValidationError> {
+        crudcrate::validation::validators::validate_required("name", &self.name)?;
+        if let Some(latitude) = self.latitude {
+            crate::common::validate::latitude("latitude", latitude)?;
+        }
+        if let Some(longitude) = self.longitude {
+            crate::common::validate::longitude("longitude", longitude)?;
+        }
+        Ok(())
+    }
+}
+
+impl crudcrate::validation::Validatable for SiteUpdate {
+    fn validate(&self) -> Result<(), crudcrate::validation::ValidationError> {
+        if let Some(Some(name)) = &self.name {
+            crudcrate::validation::validators::validate_required("name", name)?;
+        }
+        if let Some(Some(latitude)) = self.latitude {
+            crate::common::validate::latitude("latitude", latitude)?;
+        }
+        if let Some(Some(longitude)) = self.longitude {
+            crate::common::validate::longitude("longitude", longitude)?;
+        }
+        Ok(())
+    }
+}
 
 crate::soft_delete_hooks!(Site);

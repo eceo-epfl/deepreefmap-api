@@ -14,7 +14,8 @@ use sea_orm::entity::prelude::*;
     name_singular = "pass_video",
     name_plural = "pass_videos",
     generate_router,
-    read::one::body = get_live_one,
+    require_scope,
+    deny_unknown_fields,
     delete::one::body = soft_delete_one,
     delete::many::body = soft_delete_many
 )]

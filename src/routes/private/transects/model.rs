@@ -12,7 +12,8 @@ use sea_orm::entity::prelude::*;
     name_singular = "transect",
     name_plural = "transects",
     generate_router,
-    read::one::body = get_live_one,
+    require_scope,
+    deny_unknown_fields,
     delete::one::body = soft_delete_one,
     delete::many::body = soft_delete_many
 )]
@@ -83,5 +84,37 @@ impl Related<crate::routes::private::passes::model::Entity> for Entity {
 }
 
 impl ActiveModelBehavior for ActiveModel {}
+
+impl crudcrate::validation::Validatable for TransectCreate {
+    fn validate(&self) -> Result<(), crudcrate::validation::ValidationError> {
+        crudcrate::validation::validators::validate_required("name", &self.name)?;
+        crate::common::validate::latitude("start_lat", self.start_lat)?;
+        crate::common::validate::longitude("start_lon", self.start_lon)?;
+        crate::common::validate::latitude("end_lat", self.end_lat)?;
+        crate::common::validate::longitude("end_lon", self.end_lon)?;
+        Ok(())
+    }
+}
+
+impl crudcrate::validation::Validatable for TransectUpdate {
+    fn validate(&self) -> Result<(), crudcrate::validation::ValidationError> {
+        if let Some(Some(name)) = &self.name {
+            crudcrate::validation::validators::validate_required("name", name)?;
+        }
+        if let Some(Some(start_lat)) = self.start_lat {
+            crate::common::validate::latitude("start_lat", start_lat)?;
+        }
+        if let Some(Some(start_lon)) = self.start_lon {
+            crate::common::validate::longitude("start_lon", start_lon)?;
+        }
+        if let Some(Some(end_lat)) = self.end_lat {
+            crate::common::validate::latitude("end_lat", end_lat)?;
+        }
+        if let Some(Some(end_lon)) = self.end_lon {
+            crate::common::validate::longitude("end_lon", end_lon)?;
+        }
+        Ok(())
+    }
+}
 
 crate::soft_delete_hooks!(Transect);

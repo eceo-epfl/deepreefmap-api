@@ -14,7 +14,7 @@ use sea_orm::entity::prelude::*;
     name_singular = "cover_row",
     name_plural = "cover_rows",
     generate_router,
-    read::one::body = get_live_one,
+    require_scope,
     delete::one::body = soft_delete_one,
     delete::many::body = soft_delete_many
 )]
