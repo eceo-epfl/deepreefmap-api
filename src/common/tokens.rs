@@ -70,17 +70,15 @@ pub fn mint_connect_code(base_url: &str) -> MintedConnectCode {
 #[must_use]
 pub fn parse_connect_code(input: &str) -> Option<String> {
     let trimmed = input.trim();
-    match trimmed.strip_prefix(CONNECT_CODE_PREFIX) {
+    let secret = match trimmed.strip_prefix(CONNECT_CODE_PREFIX) {
         Some(encoded) => {
             let decoded = URL_SAFE_NO_PAD.decode(encoded).ok()?;
             let json: serde_json::Value = serde_json::from_slice(&decoded).ok()?;
-            let secret = json.get("code")?.as_str()?;
-            is_lower_hex(secret).then(|| secret.to_string())
+            json.get("code")?.as_str()?.to_string()
         }
-        None => {
-            (is_lower_hex(trimmed) && trimmed.len() == SECRET_HEX_LEN).then(|| trimmed.to_string())
-        }
-    }
+        None => trimmed.to_string(),
+    };
+    (is_lower_hex(&secret) && secret.len() == SECRET_HEX_LEN).then_some(secret)
 }
 
 /// A minted device token. `raw_token` reaches the device once; only the prefix and
@@ -183,6 +181,16 @@ mod tests {
         for input in ["", "drm1.", "drm1.!!!!", "not-a-code", "drm1.YWJj"] {
             assert_eq!(parse_connect_code(input), None, "accepted {input:?}");
         }
+    }
+
+    #[test]
+    fn test_parse_connect_code_rejects_short_secret_in_envelope() {
+        let payload = serde_json::json!({ "url": "https://example.org", "code": "abc123" });
+        let code = format!(
+            "{CONNECT_CODE_PREFIX}{}",
+            URL_SAFE_NO_PAD.encode(payload.to_string())
+        );
+        assert_eq!(parse_connect_code(&code), None);
     }
 
     #[test]
