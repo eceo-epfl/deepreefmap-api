@@ -14,7 +14,7 @@ use uuid::Uuid;
 use crate::common::AppState;
 use crate::common::tokens::{sha256_hex, split_device_token, verify_secret};
 use crate::error::AppError;
-use crate::routes::devices::model as device_model;
+use crate::routes::private::devices::model as device_model;
 
 type KcStatus =
     axum_keycloak_auth::KeycloakAuthStatus<Role, axum_keycloak_auth::decode::ProfileAndEmail>;

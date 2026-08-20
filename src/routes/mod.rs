@@ -1,50 +1,24 @@
-pub mod admin;
-pub mod archive;
-pub mod campaigns;
-pub mod config;
-pub mod cover;
-pub mod devices;
-pub mod pass_groups;
-pub mod passes;
-pub mod presets;
-pub mod runs;
-pub mod sites;
-pub mod sync;
-pub mod transects;
-pub mod videos;
+pub mod private;
+pub mod public;
 
 use axum::{
-    Router,
-    extract::connect_info::IntoMakeServiceWithConnectInfo,
-    http::StatusCode,
-    middleware,
-    routing::{get, post},
+    Router, extract::connect_info::IntoMakeServiceWithConnectInfo, http::StatusCode, middleware,
+    routing::get,
 };
 use std::net::SocketAddr;
 use std::time::Duration;
 use tower::ServiceBuilder;
-use tower_governor::{
-    GovernorLayer, governor::GovernorConfigBuilder, key_extractor::SmartIpKeyExtractor,
-};
-use tower_http::{
-    compression::CompressionLayer, cors::CorsLayer, limit::RequestBodyLimitLayer, trace::TraceLayer,
-};
+use tower_http::{compression::CompressionLayer, cors::CorsLayer, trace::TraceLayer};
 use utoipa::OpenApi;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_scalar::{Scalar, Servable};
 
 use crate::common::AppState;
-use crate::common::auth::{
-    AuthContext, Role, auth_middleware, deny_device_crud, require_admin_delete, require_device,
-    require_human,
-};
+use crate::common::auth::{AuthContext, Role, auth_middleware};
 use crate::common::contract::{CONTRACT_HEADER, SECTIONS_HEADER, contract_gate, stamp_contract};
-use crate::common::soft_delete::hide_tombstones;
 
 /// Body ceiling on ordinary CRUD. Rows here are small.
-const CRUD_BODY_LIMIT: usize = 1024 * 1024;
-/// Body ceiling on enrolment, which takes a code and two short strings.
-const ENROL_BODY_LIMIT: usize = 8 * 1024;
+pub(crate) const CRUD_BODY_LIMIT: usize = 1024 * 1024;
 
 /// Liveness: the process is up.
 #[utoipa::path(get, path = "/healthz", responses((status = 200)), tag = "health")]
@@ -56,64 +30,64 @@ async fn healthz() -> StatusCode {
 #[openapi(
     paths(
         healthz,
-        config::get_keycloak_config,
-        config::get_me,
-        devices::views::mint_code,
-        devices::views::enrol,
-        devices::views::revoke,
-        devices::views::rename,
-        devices::heartbeat::heartbeat,
-        sync::push::push,
-        sync::pull::pull,
-        cover::pooled::pooled_cover,
-        cover::series::cover_series,
-        videos::runs::runs_for_video,
-        config::get_class_groups,
-        archive::views::initiate,
-        archive::views::complete,
-        archive::views::download,
-        archive::views::by_hash,
-        archive::views::probe,
-        archive::views::runs_probe,
-        admin::erase_subject,
+        public::config::get_keycloak_config,
+        private::me::get_me,
+        private::devices::views::mint_code,
+        public::enrol::enrol,
+        private::devices::views::revoke,
+        private::devices::views::rename,
+        private::devices::heartbeat::heartbeat,
+        private::sync::push::push,
+        private::sync::pull::pull,
+        private::cover::pooled::pooled_cover,
+        private::cover::series::cover_series,
+        private::videos::runs::runs_for_video,
+        private::class_groups::get_class_groups,
+        private::archive::views::initiate,
+        private::archive::views::complete,
+        private::archive::views::download,
+        private::archive::views::by_hash,
+        private::archive::views::probe,
+        private::archive::views::runs_probe,
+        private::admin::erase_subject,
     ),
     components(schemas(
-        config::KeycloakConfigResponse,
-        config::MeResponse,
-        devices::views::MintConnectCodeRequest,
-        devices::views::MintConnectCodeResponse,
-        devices::views::EnrolRequest,
-        devices::views::EnrolResponse,
-        devices::views::RevokeResponse,
-        devices::views::RenameDeviceRequest,
-        devices::views::RenameDeviceResponse,
-        devices::heartbeat::HeartbeatRequest,
-        sync::push::PushRequest,
-        sync::push::PushResponse,
-        sync::push::SectionOutcome,
-        sync::pull::PullResponse,
-        cover::pooled::PooledCover,
-        cover::pooled::GroupCover,
-        cover::series::CoverSeries,
-        cover::series::CoverSeriesEntry,
-        cover::series::SeriesGroupCover,
+        public::config::KeycloakConfigResponse,
+        private::me::MeResponse,
+        private::devices::views::MintConnectCodeRequest,
+        private::devices::views::MintConnectCodeResponse,
+        public::enrol::EnrolRequest,
+        public::enrol::EnrolResponse,
+        private::devices::views::RevokeResponse,
+        private::devices::views::RenameDeviceRequest,
+        private::devices::views::RenameDeviceResponse,
+        private::devices::heartbeat::HeartbeatRequest,
+        private::sync::push::PushRequest,
+        private::sync::push::PushResponse,
+        private::sync::push::SectionOutcome,
+        private::sync::pull::PullResponse,
+        private::cover::pooled::PooledCover,
+        private::cover::pooled::GroupCover,
+        private::cover::series::CoverSeries,
+        private::cover::series::CoverSeriesEntry,
+        private::cover::series::SeriesGroupCover,
         crate::contract::classes::ClassGroup,
-        archive::views::InitiateRequest,
-        archive::views::InitiateResponse,
-        archive::views::PartUrl,
-        archive::views::CompleteRequest,
-        archive::views::CompletedPartBody,
-        archive::views::CompleteResponse,
-        archive::views::DownloadResponse,
-        archive::views::ByHashResponse,
-        archive::views::ProbeRequest,
-        archive::views::ProbeState,
-        archive::views::ProbeResponse,
-        archive::views::RunsProbeRequest,
-        archive::views::RunArchiveState,
-        archive::views::RunsProbeResponse,
-        admin::EraseSubjectRequest,
-        admin::EraseSubjectResponse,
+        private::archive::views::InitiateRequest,
+        private::archive::views::InitiateResponse,
+        private::archive::views::PartUrl,
+        private::archive::views::CompleteRequest,
+        private::archive::views::CompletedPartBody,
+        private::archive::views::CompleteResponse,
+        private::archive::views::DownloadResponse,
+        private::archive::views::ByHashResponse,
+        private::archive::views::ProbeRequest,
+        private::archive::views::ProbeState,
+        private::archive::views::ProbeResponse,
+        private::archive::views::RunsProbeRequest,
+        private::archive::views::RunArchiveState,
+        private::archive::views::RunsProbeResponse,
+        private::admin::EraseSubjectRequest,
+        private::admin::EraseSubjectResponse,
     )),
     tags(
         (name = "health", description = "Liveness probe"),
@@ -173,140 +147,11 @@ impl utoipa::Modify for SecurityAddon {
     }
 }
 
-/// Every CRUD and sync route, behind one authentication gate.
-///
-/// Generated CRUD routers carry their own database handle; hand-written handlers bind
-/// `AppState` here. Both end up `OpenApiRouter<()>` so they compose.
-fn protected_router(state: &AppState) -> OpenApiRouter {
-    use crate::routes::{
-        archive::StoredObject, archive::run_artifact::RunArtifact, campaigns::Campaign,
-        cover::CoverRow, devices::Device, pass_groups::PassGroup, passes::Pass,
-        passes::pass_video::PassVideo, presets::Preset, runs::Run, sites::Site,
-        transects::Transect, videos::Video,
-    };
-
-    let db = &state.db;
-
-    // Per nest, so no route inside one escapes its guard whatever the ordering.
-    let admin_delete = || middleware::from_fn(require_admin_delete);
-
-    // Generated routers ship unauthenticated and unbounded.
-    let entities = OpenApiRouter::new()
-        .nest("/sites", Site::router(db).layer(admin_delete()))
-        .nest("/campaigns", Campaign::router(db).layer(admin_delete()))
-        .nest("/transects", Transect::router(db).layer(admin_delete()))
-        .nest("/passes", Pass::router(db).layer(admin_delete()))
-        .nest("/pass_videos", PassVideo::router(db).layer(admin_delete()))
-        // Console-authored curation: survey events over passes, and the presets
-        // devices download through sync pull.
-        .nest("/pass_groups", PassGroup::router(db).layer(admin_delete()))
-        .nest("/presets", Preset::router(db).layer(admin_delete()))
-        // Devices report these, so the registry only records them. Footage metadata,
-        // provenance and measurements are not things a person types.
-        .nest("/videos", Video::read_only_router(db))
-        .nest("/runs", Run::read_only_router(db))
-        .nest("/cover_rows", CoverRow::read_only_router(db))
-        // Every syncable list, since a tombstone is a sync signal and not a row to show.
-        // Get-one is filtered per entity by the `read::one::body` hook instead.
-        .layer(middleware::from_fn(hide_tombstones))
-        // Devices are created by enrolment and retired by revoke, never by CRUD.
-        .nest("/devices", Device::read_only_router(db))
-        // Archive state, for the console to browse. No delete route exists anywhere:
-        // the only delete in the system is the verifier's own hygiene delete.
-        // Outside `hide_tombstones`, since neither table has a tombstone column.
-        .nest("/stored_objects", StoredObject::read_only_router(db))
-        .nest("/run_artifacts", RunArtifact::read_only_router(db))
-        .layer(RequestBodyLimitLayer::new(CRUD_BODY_LIMIT))
-        // Outermost, so no nest inside can be reached with a device token.
-        .layer(middleware::from_fn(deny_device_crud));
-
-    // Ingest is device-only. A push binds provenance from the credential and resolves
-    // conflicts on the client's clock, so a member reaching it would hold write and delete
-    // over every console-authored row without touching a guarded CRUD route.
-    let sync_push = OpenApiRouter::new()
-        .routes(utoipa_axum::routes!(sync::push::push))
-        .layer(middleware::from_fn(require_device))
-        .layer(RequestBodyLimitLayer::new(
-            state.config.sync_body_limit_bytes,
-        ))
-        .with_state(state.clone());
-
-    // A device's own report of what it runs. Identity binds from the credential, so no
-    // body field can name a sibling.
-    let heartbeat = OpenApiRouter::new()
-        .routes(utoipa_axum::routes!(devices::heartbeat::heartbeat))
-        .layer(middleware::from_fn(require_device))
-        .layer(RequestBodyLimitLayer::new(CRUD_BODY_LIMIT))
-        .with_state(state.clone());
-
-    // A cover figure the console and the desktop application both read, so neither
-    // computes its own and reports a different number.
-    let cover_views = OpenApiRouter::new()
-        .routes(utoipa_axum::routes!(cover::pooled::pooled_cover))
-        .routes(utoipa_axum::routes!(cover::series::cover_series))
-        .routes(utoipa_axum::routes!(config::get_class_groups))
-        // The processing history of one clip, joined server side for the same reason.
-        .routes(utoipa_axum::routes!(videos::runs::runs_for_video))
-        .layer(middleware::from_fn(deny_device_crud))
-        .layer(RequestBodyLimitLayer::new(CRUD_BODY_LIMIT))
-        .with_state(state.clone());
-
-    let sync_read = OpenApiRouter::new()
-        .routes(utoipa_axum::routes!(sync::pull::pull))
-        .layer(RequestBodyLimitLayer::new(CRUD_BODY_LIMIT))
-        .with_state(state.clone());
-
-    // Credential operations, so a device cannot invite or retire its siblings.
-    let device_admin = OpenApiRouter::new()
-        .routes(utoipa_axum::routes!(devices::views::mint_code))
-        .routes(utoipa_axum::routes!(devices::views::revoke))
-        .routes(utoipa_axum::routes!(devices::views::rename))
-        .layer(middleware::from_fn(require_human))
-        .layer(RequestBodyLimitLayer::new(CRUD_BODY_LIMIT))
-        .with_state(state.clone());
-
-    let me = OpenApiRouter::new()
-        .routes(utoipa_axum::routes!(config::get_me))
-        .with_state(state.clone());
-
-    // Blob upload negotiation. Both principals upload: laptops push footage under
-    // their device token, people upload through the console. No extra guard, so any
-    // authenticated identity passes; anonymous callers stop at `auth_middleware`.
-    let archive_views = OpenApiRouter::new()
-        .routes(utoipa_axum::routes!(archive::views::initiate))
-        .routes(utoipa_axum::routes!(archive::views::complete))
-        .routes(utoipa_axum::routes!(archive::views::download))
-        .routes(utoipa_axum::routes!(archive::views::by_hash))
-        .routes(utoipa_axum::routes!(archive::views::probe))
-        .routes(utoipa_axum::routes!(archive::views::runs_probe))
-        .layer(RequestBodyLimitLayer::new(CRUD_BODY_LIMIT))
-        .with_state(state.clone());
-
-    // Admin-only, checked in the handler: the role gate needs the parsed identity,
-    // not just its kind.
-    let admin_views = OpenApiRouter::new()
-        .routes(utoipa_axum::routes!(admin::erase_subject))
-        .layer(middleware::from_fn(deny_device_crud))
-        .layer(RequestBodyLimitLayer::new(CRUD_BODY_LIMIT))
-        .with_state(state.clone());
-
-    OpenApiRouter::new()
-        .merge(entities)
-        .merge(sync_push)
-        .merge(heartbeat)
-        .merge(sync_read)
-        .merge(cover_views)
-        .merge(device_admin)
-        .merge(me)
-        .merge(archive_views)
-        .merge(admin_views)
-}
-
 /// The hand-written paths and the generated CRUD ones, split into a service and its
 /// document.
 fn split_protected(state: &AppState) -> (Router, utoipa::openapi::OpenApi) {
     let (router, mut openapi) = OpenApiRouter::with_openapi(ApiDoc::openapi())
-        .merge(protected_router(state))
+        .merge(private::protected_router(state))
         .split_for_parts();
     openapi.info.version = env!("CARGO_PKG_VERSION").to_string();
     (router, openapi)
@@ -391,41 +236,13 @@ fn build(state: &AppState, forced_identity: Option<AuthContext>) -> Router {
         router
     };
 
-    // Unauthenticated, since the connect code is the credential. Rate limited per
-    // IP: each attempt costs an argon2 verification.
-    let enrol = {
-        let router = Router::new()
-            .route("/enrol", post(devices::views::enrol))
-            .layer(RequestBodyLimitLayer::new(ENROL_BODY_LIMIT));
-        if config.disable_rate_limiting {
-            tracing::warn!("Rate limiting DISABLED, including on enrolment");
-            router
-        } else {
-            // Keys on the forwarded client address, since the peer is our own proxy and
-            // every enrolling laptop would otherwise share one bucket.
-            let limiter = GovernorConfigBuilder::default()
-                .period(Duration::from_secs(config.enrol_rate_limit_period_secs))
-                .burst_size(config.enrol_rate_limit_burst)
-                .key_extractor(SmartIpKeyExtractor)
-                .finish()
-                .expect("enrolment rate limiter configuration is valid");
-            router.layer(GovernorLayer::new(limiter))
-        }
-    };
-
-    // What a client needs before it can authenticate at all.
-    let bootstrap = Router::new()
-        .route("/config/keycloak", get(config::get_keycloak_config))
-        .layer(RequestBodyLimitLayer::new(CRUD_BODY_LIMIT));
-
     // Across the whole of `/api`, so enrolment and bootstrap negotiate too. Outside the
     // enrolment rate limiter, so a disjoint client is refused without spending a token from
     // a shared field-wifi bucket. A layer rather than an extractor, so no route can be added
     // without it.
     let api = Router::new()
         .merge(protected)
-        .merge(enrol.with_state(state.clone()))
-        .merge(bootstrap.with_state(state.clone()))
+        .merge(public::router(state))
         .layer(middleware::from_fn(contract_gate));
 
     let health = Router::new()

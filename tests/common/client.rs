@@ -14,7 +14,7 @@ pub fn negotiation() -> Vec<(String, String)> {
         (CONTRACT_HEADER.to_string(), "1-1".to_string()),
         (
             SECTIONS_HEADER.to_string(),
-            deepreefmap_api::routes::sync::schema::sections().join(","),
+            deepreefmap_api::routes::private::sync::schema::sections().join(","),
         ),
     ]
 }

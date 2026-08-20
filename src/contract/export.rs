@@ -13,7 +13,7 @@ use serde_json::{Value, json};
 use crate::common::AppState;
 use crate::config::Config;
 use crate::contract::vocab;
-use crate::routes::sync::schema::{self, CONTRACT_VERSION};
+use crate::routes::private::sync::schema::{self, CONTRACT_VERSION};
 
 /// Where the artefacts live, relative to the repository root.
 pub const CONTRACT_DIR: &str = "contract";

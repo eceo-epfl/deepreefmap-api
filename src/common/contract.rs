@@ -20,7 +20,7 @@ use axum::{
 };
 
 use crate::error::AppError;
-use crate::routes::sync::schema::{CONTRACT_VERSION, MIN_CONTRACT_VERSION};
+use crate::routes::private::sync::schema::{CONTRACT_VERSION, MIN_CONTRACT_VERSION};
 
 /// Versions the client can read: digits, or `min-max`.
 pub const CONTRACT_HEADER: &str = "deepreefmap-contract";

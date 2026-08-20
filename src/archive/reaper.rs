@@ -8,7 +8,7 @@ use std::time::Duration;
 use crate::archive::store::ArchiveStore;
 use crate::common::AppState;
 use crate::error::AppResult;
-use crate::routes::archive::model as stored_object;
+use crate::routes::private::archive::model as stored_object;
 
 /// Sweep on an interval for as long as the process runs.
 pub fn spawn(state: AppState) {

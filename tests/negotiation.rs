@@ -7,7 +7,7 @@ mod common;
 use common::*;
 
 use deepreefmap_api::common::contract::{CONTRACT_HEADER, SECTIONS_HEADER};
-use deepreefmap_api::routes::sync::schema::{CONTRACT_VERSION, MIN_CONTRACT_VERSION};
+use deepreefmap_api::routes::private::sync::schema::{CONTRACT_VERSION, MIN_CONTRACT_VERSION};
 
 fn declaring(pairs: &[(&str, &str)]) -> Vec<(String, String)> {
     pairs

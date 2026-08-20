@@ -18,7 +18,7 @@ use sea_orm::{ConnectionTrait, DatabaseBackend, DatabaseConnection, Statement};
 use deepreefmap_api::common::AppState;
 use deepreefmap_api::contract::export;
 use deepreefmap_api::contract::vocab::{self, Vocabulary};
-use deepreefmap_api::routes::sync::schema::{self, ColumnKind, TableSpec};
+use deepreefmap_api::routes::private::sync::schema::{self, ColumnKind, TableSpec};
 
 /// Stamped by a trigger, so it is in every syncable table and in no client-facing
 /// contract.
