@@ -41,13 +41,6 @@ pub struct ArchiveConfig {
     /// Endpoint with a scheme. `S3_URL` may omit it, in which case localhost gets
     /// `http` and everything else `https`.
     pub endpoint_url: String,
-    /// `S3_PUBLIC_URL`, the endpoint presigned URLs are signed against, when set.
-    ///
-    /// For a store clients reach at a different name than the API uses internally:
-    /// a host-preserving proxy in front of an intranet-only Scality, or compose
-    /// `MinIO` advertised as localhost. Server-side operations (create, complete,
-    /// list, abort, verify) stay on `endpoint_url`.
-    pub public_endpoint_url: Option<String>,
     pub bucket: String,
     pub access_key: String,
     pub secret_key: String,
@@ -86,7 +79,6 @@ impl ArchiveConfig {
         let mut values = values.into_iter().flatten();
         Some(Self {
             endpoint_url: with_scheme(&values.next()?),
-            public_endpoint_url: optional("S3_PUBLIC_URL").map(|url| with_scheme(&url)),
             bucket: values.next()?,
             access_key: values.next()?,
             secret_key: values.next()?,

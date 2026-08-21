@@ -76,19 +76,25 @@ amends only rows its own origin authored, and refuses anything else row by row.
 ## Archive
 
 `/api/archive/*` catalogues footage and run outputs held in S3-compatible storage.
-Without the `S3_*` variables it answers 503 and nothing else changes. Initiate, PUT
-each part to its presigned URL, then complete:
+Without the `S3_*` variables it answers 503 and nothing else changes. Clients never
+talk to the store: every byte flows through the API under the caller's credential,
+and the store stays on its internal network. Initiate, PUT each missing part, then
+complete:
 
 ```bash
-POST /api/archive/initiate         # presigned parts, or an object that already exists
+POST /api/archive/initiate                       # part size and parts already stored
+PUT  /api/archive/{id}/parts/{n}                 # one part's raw bytes
 POST /api/archive/{id}/complete
+GET  /api/archive/{id}/download                  # a signed fetch link on this API
 GET  /api/archive/by-hash/{content_hash}
 ```
 
 Keys are content-addressed, `{S3_PREFIX}/videos/imohash/{hex}` and
 `{S3_PREFIX}/runs/{run_id}/{relpath}`, so re-uploading a clip is a no-op. Upload state
-lives in Postgres, so a 4 GB transfer resumes after a restart. The presigning
-credentials carry `PutObject` and `GetObject` only. Nothing here deletes or overwrites.
+lives in Postgres, so a 4 GB transfer resumes after a restart. Downloads redeem a
+short-lived HMAC-signed link at `/api/archive/{id}/fetch`, minted only to
+authenticated callers and bound to one object, so a plain browser navigation works
+without exposing anything. Nothing here deletes or overwrites.
 
 ## Entities
 

@@ -79,8 +79,18 @@ base64 = "0.22"
 moka = { version = "0.12.16", features = ["future"] }
 
 # Archive blob store. Path-style requests, because MinIO serves no virtual-host buckets.
+# `http-body-1-x` lets an axum request body stream into UploadPart unbuffered;
+# sync_wrapper, http-body and bytes glue the two body traits together.
 aws-config = { version = "1.10", default-features = false }
 aws-sdk-s3 = "1.142"
+aws-smithy-types = { version = "1.6", features = ["http-body-1-x"] }
+tokio-util = { version = "0.7", features = ["io"] }
+sync_wrapper = "1"
+http-body = "1"
+bytes = "1"
+
+# Signs the archive fetch links, the API-terminated stand-in for presigned URLs
+hmac = "0.12"
 
 # Server-side imohash verification, matching the desktop app's Python package
 murmur3 = "0.5"

@@ -869,7 +869,7 @@
       "DownloadResponse": {
         "properties": {
           "url": {
-            "description": "Presigned `GetObject` URL, good for `PRESIGN_TTL_SECONDS`.",
+            "description": "A fetch link on this registry itself, signed for one object and a few\nminutes. The object store is never addressed by a client.",
             "type": "string"
           }
         },
@@ -1112,28 +1112,16 @@
               "null"
             ]
           },
-          "part_urls": {
-            "items": {
-              "$ref": "#/components/schemas/PartUrl"
-            },
-            "type": "array"
-          },
           "parts_done": {
-            "description": "Part numbers already stored, which a resuming client skips.",
+            "description": "Part numbers already stored, which a resuming client skips. The rest are\nPUT to `/archive/{object_id}/parts/{part_number}` in any order.",
             "items": {
               "format": "int32",
               "type": "integer"
             },
             "type": "array"
           },
-          "presign_ttl_seconds": {
-            "description": "How long the part URLs stay valid. A client uploading for longer than this\nre-initiates to mint fresh ones, so the lifetime is told, never guessed.",
-            "format": "int64",
-            "minimum": 0,
-            "type": "integer"
-          },
           "status": {
-            "description": "`pending` with URLs to upload, or `complete` when the content is already\narchived and nothing need be sent.",
+            "description": "`pending` with parts to upload, or `complete` when the content is already\narchived and nothing need be sent.",
             "type": "string"
           },
           "upload_id": {
@@ -1146,9 +1134,7 @@
         "required": [
           "object_id",
           "status",
-          "presign_ttl_seconds",
-          "parts_done",
-          "part_urls"
+          "parts_done"
         ],
         "type": "object"
       },
@@ -1257,23 +1243,6 @@
         "required": [
           "code",
           "expires_at"
-        ],
-        "type": "object"
-      },
-      "PartUrl": {
-        "properties": {
-          "part_number": {
-            "format": "int32",
-            "type": "integer"
-          },
-          "url": {
-            "description": "Presigned `UploadPart` URL, good for `presign_ttl_seconds`.",
-            "type": "string"
-          }
-        },
-        "required": [
-          "part_number",
-          "url"
         ],
         "type": "object"
       },
@@ -3714,6 +3683,23 @@
         },
         "type": "object"
       },
+      "UploadPartResponse": {
+        "properties": {
+          "etag": {
+            "description": "The `ETag` the store recorded, which is the part's MD5 on every store this\nregistry deploys against, so the sender can verify what landed.",
+            "type": "string"
+          },
+          "part_number": {
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "part_number",
+          "etag"
+        ],
+        "type": "object"
+      },
       "VideoList": {
         "properties": {
           "captured_at": {
@@ -4233,6 +4219,7 @@
     },
     "/archive/{object_id}/download": {
       "get": {
+        "description": "The URL points back at this registry's own `/archive/{id}/fetch` route with an\nHMAC signature in the query, so a browser navigation needs no bearer header\nwhile the object store stays unreachable.",
         "operationId": "download",
         "parameters": [
           {
@@ -4255,7 +4242,7 @@
                 }
               }
             },
-            "description": "Presigned download URL"
+            "description": "Signed fetch URL on this registry"
           },
           "404": {
             "description": "No such object"
@@ -4268,6 +4255,135 @@
           }
         },
         "summary": "A short-lived download URL for a verified object.",
+        "tags": [
+          "archive"
+        ]
+      }
+    },
+    "/archive/{object_id}/fetch": {
+      "get": {
+        "operationId": "fetch",
+        "parameters": [
+          {
+            "description": "Object to stream",
+            "in": "path",
+            "name": "object_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Unix timestamp the signature lapses at.",
+            "in": "query",
+            "name": "expires",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "HMAC over the object id and expiry, from `/archive/{id}/download`.",
+            "in": "query",
+            "name": "sig",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The object's bytes, as an attachment"
+          },
+          "403": {
+            "description": "The signature is wrong or has lapsed"
+          },
+          "404": {
+            "description": "No such object"
+          },
+          "503": {
+            "description": "The archive is not configured"
+          }
+        },
+        "summary": "Stream a verified object against a signed fetch link.",
+        "tags": [
+          "archive"
+        ]
+      }
+    },
+    "/archive/{object_id}/parts/{part_number}": {
+      "put": {
+        "description": "The body streams through to the object store under the registry's own\ncredential: clients never reach the store themselves, so every byte arrives\nunder the caller's authenticated identity. Parts may arrive in any order and\nre-sending one overwrites it, which is how a retry works.",
+        "operationId": "upload_part",
+        "parameters": [
+          {
+            "description": "Pending object the part belongs to",
+            "in": "path",
+            "name": "object_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "1-based part number",
+            "in": "path",
+            "name": "part_number",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "items": {
+                  "format": "int32",
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "description": "The part's raw bytes",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadPartResponse"
+                }
+              }
+            },
+            "description": "Part stored"
+          },
+          "400": {
+            "description": "Part number out of range"
+          },
+          "409": {
+            "description": "The object is not pending"
+          },
+          "411": {
+            "description": "Content-Length is required"
+          },
+          "413": {
+            "description": "Larger than the negotiated part size"
+          },
+          "503": {
+            "description": "The archive is not configured"
+          }
+        },
+        "summary": "Store one part's raw bytes.",
         "tags": [
           "archive"
         ]

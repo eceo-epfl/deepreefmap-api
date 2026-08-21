@@ -146,6 +146,47 @@ pub async fn post_json(
     (status, json)
 }
 
+/// A raw-body PUT, as an archive part upload sends one.
+///
+/// # Panics
+///
+/// Panics when the request cannot be built.
+pub async fn put_bytes(
+    app: &Router,
+    uri: &str,
+    bytes: Vec<u8>,
+    token: Option<&str>,
+) -> (u16, String) {
+    let req = build("PUT", uri, token, &negotiation())
+        .header("Content-Type", "application/octet-stream")
+        .header("Content-Length", bytes.len())
+        .body(Body::from(bytes))
+        .expect("request builds");
+    let (status, _, text) = send(app, req).await;
+    (status, text)
+}
+
+/// A GET returning the raw body bytes, for binary downloads.
+///
+/// # Panics
+///
+/// Panics when the request cannot be built.
+pub async fn get_bytes(app: &Router, uri: &str, token: Option<&str>) -> (u16, HeaderMap, Vec<u8>) {
+    let req = build("GET", uri, token, &negotiation())
+        .body(Body::empty())
+        .expect("request builds");
+    let response = app.clone().oneshot(req).await.expect("router responds");
+    let status = response.status().as_u16();
+    let headers = response.headers().clone();
+    let bytes = response
+        .into_body()
+        .collect()
+        .await
+        .expect("body reads")
+        .to_bytes();
+    (status, headers, bytes.to_vec())
+}
+
 /// # Panics
 ///
 /// Panics when the request cannot be built.

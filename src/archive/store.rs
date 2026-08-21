@@ -5,18 +5,12 @@
 //! call site assembles its own bucket or key.
 
 use aws_sdk_s3::error::DisplayErrorContext;
-use aws_sdk_s3::presigning::PresigningConfig;
+use aws_sdk_s3::primitives::ByteStream;
 use aws_sdk_s3::types::{CompletedMultipartUpload, CompletedPart};
-use std::time::Duration;
 
 use crate::archive::imohash;
 use crate::config::ArchiveConfig;
 use crate::error::{AppError, AppResult};
-
-/// How long a presigned URL stays valid. Short: the client asked seconds ago, and a
-/// client still uploading when it lapses re-initiates for fresh ones.
-pub const PRESIGN_TTL_SECONDS: u64 = 15 * 60;
-const PRESIGN_TTL: Duration = Duration::from_secs(PRESIGN_TTL_SECONDS);
 
 /// Fixed part size for multipart uploads. The last part may be smaller.
 pub const PART_SIZE_BYTES: i64 = 32 * 1024 * 1024;
@@ -30,29 +24,29 @@ pub struct OpenUpload {
 
 pub struct ArchiveStore {
     client: aws_sdk_s3::Client,
-    /// Signs the URLs handed to clients. The same client as `client` unless a public
-    /// endpoint is configured: a presigned URL embeds its endpoint, and the address a
-    /// client reaches the store at need not be the one this server uses.
-    presign_client: aws_sdk_s3::Client,
     bucket: String,
     /// Leading segment of every key this store writes.
     pub prefix: String,
+    /// Keys the archive fetch links. The S3 secret, because it is already secret and
+    /// already shared by every replica, so signing needs no extra deployment secret.
+    fetch_secret: Vec<u8>,
 }
 
 impl ArchiveStore {
     #[must_use]
     pub fn new(config: &ArchiveConfig) -> Self {
-        let client = client_against(config, &config.endpoint_url);
-        let presign_client = match config.public_endpoint_url.as_deref() {
-            Some(public) => client_against(config, public),
-            None => client.clone(),
-        };
         Self {
-            client,
-            presign_client,
+            client: client_against(config, &config.endpoint_url),
             bucket: config.bucket.clone(),
             prefix: config.prefix.clone(),
+            fetch_secret: config.secret_key.as_bytes().to_vec(),
         }
+    }
+
+    /// The key archive fetch links are signed with.
+    #[must_use]
+    pub fn fetch_secret(&self) -> &[u8] {
+        &self.fetch_secret
     }
 
     pub async fn create_multipart(&self, key: &str) -> AppResult<String> {
@@ -132,35 +126,52 @@ impl ArchiveStore {
         Ok(parts)
     }
 
-    pub async fn presign_upload_part(
+    /// Stream one part's bytes into the upload, answering the `ETag` S3 stored it
+    /// under (bare, without quotes). The body passes through unbuffered, so memory
+    /// stays bounded by the transport's own chunks, not the part size.
+    ///
+    /// `content_length` is required: a streamed body is unsized and S3 will not
+    /// take an `UploadPart` without a length.
+    pub async fn upload_part(
         &self,
         key: &str,
         upload_id: &str,
         part_number: i32,
+        content_length: i64,
+        body: ByteStream,
     ) -> AppResult<String> {
-        let presigned = self
-            .presign_client
+        let uploaded = self
+            .client
             .upload_part()
             .bucket(&self.bucket)
             .key(key)
             .upload_id(upload_id)
             .part_number(part_number)
-            .presigned(presign_config()?)
+            .content_length(content_length)
+            .body(body)
+            .send()
             .await
-            .map_err(|e| internal("presign UploadPart", &e))?;
-        Ok(presigned.uri().to_string())
+            .map_err(|e| internal("UploadPart", &e))?;
+        uploaded
+            .e_tag()
+            .map(|etag| etag.trim_matches('"').to_string())
+            .ok_or_else(|| AppError::Internal("S3 answered a part without an ETag".to_string()))
     }
 
-    pub async fn presign_get(&self, key: &str) -> AppResult<String> {
-        let presigned = self
-            .presign_client
+    /// The stored object as a stream, with its size, for handing to a response body.
+    pub async fn download(&self, key: &str) -> AppResult<(i64, ByteStream)> {
+        let got = self
+            .client
             .get_object()
             .bucket(&self.bucket)
             .key(key)
-            .presigned(presign_config()?)
+            .send()
             .await
-            .map_err(|e| internal("presign GetObject", &e))?;
-        Ok(presigned.uri().to_string())
+            .map_err(|e| internal("GetObject", &e))?;
+        let size = got
+            .content_length()
+            .ok_or_else(|| AppError::Internal("GetObject answered no size".to_string()))?;
+        Ok((size, got.body))
     }
 
     /// Assemble the upload from S3's own part list, never a client's.
@@ -342,54 +353,8 @@ fn client_against(config: &ArchiveConfig, endpoint_url: &str) -> aws_sdk_s3::Cli
     aws_sdk_s3::Client::from_conf(s3_config)
 }
 
-fn presign_config() -> AppResult<PresigningConfig> {
-    PresigningConfig::expires_in(PRESIGN_TTL)
-        .map_err(|e| AppError::Internal(format!("presigning config: {e}")))
-}
-
 /// SDK error with its full source chain, logged by [`AppError::Internal`] and never
 /// shown to the caller.
 fn internal<E: std::error::Error>(operation: &str, error: &E) -> AppError {
     AppError::Internal(format!("{operation}: {}", DisplayErrorContext(error)))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn config(public_endpoint_url: Option<&str>) -> ArchiveConfig {
-        ArchiveConfig {
-            endpoint_url: "http://minio.internal:9000".to_string(),
-            public_endpoint_url: public_endpoint_url.map(String::from),
-            bucket: "reef".to_string(),
-            access_key: "key".to_string(),
-            secret_key: "secret".to_string(),
-            prefix: "test".to_string(),
-        }
-    }
-
-    /// Presigned URLs are all a client ever touches, so they carry the public
-    /// address. Presigning is local computation: no endpoint is contacted here.
-    #[tokio::test]
-    async fn test_presigned_urls_carry_the_public_endpoint() {
-        let store = ArchiveStore::new(&config(Some("http://localhost:9000")));
-        let get = store.presign_get("test/videos/imohash/abc").await.unwrap();
-        assert!(
-            get.starts_with("http://localhost:9000/reef/test/videos/imohash/abc?"),
-            "{get}"
-        );
-        let part = store
-            .presign_upload_part("test/videos/imohash/abc", "upload-1", 2)
-            .await
-            .unwrap();
-        assert!(part.starts_with("http://localhost:9000/reef/"), "{part}");
-        assert!(part.contains("partNumber=2"), "{part}");
-    }
-
-    #[tokio::test]
-    async fn test_presigning_defaults_to_the_primary_endpoint() {
-        let store = ArchiveStore::new(&config(None));
-        let url = store.presign_get("test/videos/imohash/abc").await.unwrap();
-        assert!(url.starts_with("http://minio.internal:9000/reef/"), "{url}");
-    }
 }

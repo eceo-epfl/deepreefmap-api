@@ -4,6 +4,7 @@
 //! client claims is re-computed from the stored bytes before an object counts as
 //! `complete`, so nothing wrong can sit at a content-addressed key.
 
+pub mod fetch_token;
 pub mod imohash;
 pub mod keys;
 pub mod reaper;

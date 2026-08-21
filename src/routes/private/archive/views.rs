@@ -1,8 +1,9 @@
-//! Upload negotiation for the blob archive.
+//! Upload negotiation and byte transfer for the blob archive.
 //!
 //! Devices and people both upload, but neither is trusted: no route here deletes or
-//! overwrites, presigned URLs are the only write path into the bucket, and a claimed
-//! hash is verified server-side before the object counts as stored.
+//! overwrites, every byte flows through the API under the caller's own credential
+//! (the object store is never reachable by a client), and a claimed hash is verified
+//! server-side before the object counts as stored.
 
 use axum::{
     Json,
@@ -17,8 +18,9 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use super::{model as stored_object, run_artifact};
+use crate::archive::fetch_token;
 use crate::archive::keys::{artifact_key, is_content_hash, video_key};
-use crate::archive::store::{ArchiveStore, PART_SIZE_BYTES, PRESIGN_TTL_SECONDS};
+use crate::archive::store::{ArchiveStore, PART_SIZE_BYTES};
 use crate::common::AppState;
 use crate::common::auth::{AuthContext, Origin};
 use crate::error::{AppError, AppResult};
@@ -52,26 +54,16 @@ pub struct InitiateRequest {
 }
 
 #[derive(Debug, serde::Serialize, ToSchema)]
-pub struct PartUrl {
-    pub part_number: i32,
-    /// Presigned `UploadPart` URL, good for `presign_ttl_seconds`.
-    pub url: String,
-}
-
-#[derive(Debug, serde::Serialize, ToSchema)]
 pub struct InitiateResponse {
     pub object_id: Uuid,
-    /// `pending` with URLs to upload, or `complete` when the content is already
+    /// `pending` with parts to upload, or `complete` when the content is already
     /// archived and nothing need be sent.
     pub status: String,
     pub upload_id: Option<String>,
     pub part_size_bytes: Option<i64>,
-    /// How long the part URLs stay valid. A client uploading for longer than this
-    /// re-initiates to mint fresh ones, so the lifetime is told, never guessed.
-    pub presign_ttl_seconds: u64,
-    /// Part numbers already stored, which a resuming client skips.
+    /// Part numbers already stored, which a resuming client skips. The rest are
+    /// PUT to `/archive/{object_id}/parts/{part_number}` in any order.
     pub parts_done: Vec<i32>,
-    pub part_urls: Vec<PartUrl>,
 }
 
 /// Begin or resume an upload, deduplicated by content hash.
@@ -186,12 +178,12 @@ async fn negotiate(
             if let Some(old_upload) = row.s3_upload_id.as_deref() {
                 store.abort_multipart(&row.s3_key, old_upload).await;
             }
-            let (key, size) = (row.s3_key.clone(), body.size_bytes);
+            let size = body.size_bytes;
             let mut restart: stored_object::ActiveModel = row.into();
             restart.size_bytes = Set(size);
             attribute(&mut restart, auth);
             let restarted = restart.update(&state.db).await?;
-            fresh_upload(state, store, restarted, &key).await
+            fresh_upload(state, store, restarted).await
         }
         None => {
             let mut new_row = stored_object::ActiveModel {
@@ -226,7 +218,7 @@ async fn negotiate(
                 }
                 Err(e) => return Err(e.into()),
             };
-            fresh_upload(state, store, inserted, &key).await
+            fresh_upload(state, store, inserted).await
         }
     }
 }
@@ -251,13 +243,18 @@ fn answer(object_id: Uuid, status: &str) -> InitiateResponse {
         status: status.to_string(),
         upload_id: None,
         part_size_bytes: None,
-        presign_ttl_seconds: PRESIGN_TTL_SECONDS,
         parts_done: Vec::new(),
-        part_urls: Vec::new(),
     }
 }
 
-/// Resume a pending upload: report the parts S3 already holds and presign the rest.
+/// How many parts a `size_bytes` upload takes at `part_size`.
+fn part_count(size_bytes: i64, part_size: i64) -> AppResult<i32> {
+    i32::try_from((size_bytes + part_size - 1) / part_size)
+        .map_err(|_| AppError::BadRequest("size_bytes needs too many parts".to_string()))
+}
+
+/// Resume a pending upload: report the parts S3 already holds, so the client sends
+/// only the rest.
 ///
 /// An upload S3 no longer knows starts over, losing progress rather than wedging.
 async fn resume(
@@ -273,48 +270,37 @@ async fn resume(
         None => None,
     };
     let Some(parts_done) = done else {
-        let key = row.s3_key.clone();
-        return fresh_upload(state, store, row, &key).await;
+        return fresh_upload(state, store, row).await;
     };
     let upload_id = row.s3_upload_id.clone().expect("checked above");
     let part_size = row.part_size_bytes.unwrap_or(PART_SIZE_BYTES);
+    let object_id = row.id;
 
     // Resume counts as part activity, so the reaper's idle clock restarts.
-    let mut touch: stored_object::ActiveModel = row.clone().into();
+    let mut touch: stored_object::ActiveModel = row.into();
     touch.last_part_at = Set(Some(Utc::now()));
     touch.updated_at = Set(Utc::now());
     touch.update(&state.db).await?;
 
-    let part_urls = presign_missing(
-        store,
-        &row.s3_key,
-        &upload_id,
-        row.size_bytes,
-        part_size,
-        &parts_done,
-    )
-    .await?;
     Ok(InitiateResponse {
-        object_id: row.id,
+        object_id,
         status: stored_object::STATUS_PENDING.to_string(),
         upload_id: Some(upload_id),
         part_size_bytes: Some(part_size),
-        presign_ttl_seconds: PRESIGN_TTL_SECONDS,
         parts_done,
-        part_urls,
     })
 }
 
-/// Open a new multipart upload for a pending row and presign every part.
+/// Open a new multipart upload for a pending row.
 async fn fresh_upload(
     state: &AppState,
     store: &ArchiveStore,
     row: stored_object::Model,
-    key: &str,
 ) -> AppResult<InitiateResponse> {
-    let upload_id = store.create_multipart(key).await?;
+    part_count(row.size_bytes, PART_SIZE_BYTES)?;
+    let upload_id = store.create_multipart(&row.s3_key).await?;
 
-    let (object_id, size_bytes) = (row.id, row.size_bytes);
+    let object_id = row.id;
     let mut update: stored_object::ActiveModel = row.into();
     update.status = Set(stored_object::STATUS_PENDING.to_string());
     update.s3_upload_id = Set(Some(upload_id.clone()));
@@ -325,42 +311,125 @@ async fn fresh_upload(
     update.failure = Set(None);
     update.update(&state.db).await?;
 
-    let part_urls =
-        presign_missing(store, key, &upload_id, size_bytes, PART_SIZE_BYTES, &[]).await?;
     Ok(InitiateResponse {
         object_id,
         status: stored_object::STATUS_PENDING.to_string(),
         upload_id: Some(upload_id),
         part_size_bytes: Some(PART_SIZE_BYTES),
-        presign_ttl_seconds: PRESIGN_TTL_SECONDS,
         parts_done: Vec::new(),
-        part_urls,
     })
 }
 
-async fn presign_missing(
-    store: &ArchiveStore,
-    key: &str,
-    upload_id: &str,
-    size_bytes: i64,
-    part_size: i64,
-    parts_done: &[i32],
-) -> AppResult<Vec<PartUrl>> {
-    let count = i32::try_from((size_bytes + part_size - 1) / part_size)
-        .map_err(|_| AppError::BadRequest("size_bytes needs too many parts".to_string()))?;
-    let mut urls = Vec::new();
-    for part_number in 1..=count {
-        if parts_done.contains(&part_number) {
-            continue;
-        }
-        urls.push(PartUrl {
-            part_number,
-            url: store
-                .presign_upload_part(key, upload_id, part_number)
-                .await?,
-        });
+/// An axum request body made `Sync` for the S3 SDK's streaming bound. Sound:
+/// `poll_frame` takes `&mut self`, so the body is only ever moved, never shared.
+struct SyncBody(sync_wrapper::SyncWrapper<axum::body::Body>);
+
+impl http_body::Body for SyncBody {
+    type Data = bytes::Bytes;
+    type Error = axum::Error;
+
+    fn poll_frame(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Result<http_body::Frame<Self::Data>, Self::Error>>> {
+        std::pin::Pin::new(self.0.get_mut()).poll_frame(cx)
     }
-    Ok(urls)
+}
+
+#[derive(Debug, serde::Serialize, ToSchema)]
+pub struct UploadPartResponse {
+    pub part_number: i32,
+    /// The `ETag` the store recorded, which is the part's MD5 on every store this
+    /// registry deploys against, so the sender can verify what landed.
+    pub etag: String,
+}
+
+/// Store one part's raw bytes.
+///
+/// The body streams through to the object store under the registry's own
+/// credential: clients never reach the store themselves, so every byte arrives
+/// under the caller's authenticated identity. Parts may arrive in any order and
+/// re-sending one overwrites it, which is how a retry works.
+#[utoipa::path(
+    put,
+    path = "/archive/{object_id}/parts/{part_number}",
+    request_body(content = Vec<u8>, content_type = "application/octet-stream", description = "The part's raw bytes"),
+    params(
+        ("object_id" = Uuid, Path, description = "Pending object the part belongs to"),
+        ("part_number" = i32, Path, description = "1-based part number"),
+    ),
+    responses(
+        (status = 200, description = "Part stored", body = UploadPartResponse),
+        (status = 400, description = "Part number out of range"),
+        (status = 409, description = "The object is not pending"),
+        (status = 411, description = "Content-Length is required"),
+        (status = 413, description = "Larger than the negotiated part size"),
+        (status = 503, description = "The archive is not configured"),
+    ),
+    tag = "archive"
+)]
+pub async fn upload_part(
+    State(state): State<AppState>,
+    Path((object_id, part_number)): Path<(Uuid, i32)>,
+    headers: axum::http::HeaderMap,
+    body: axum::body::Body,
+) -> AppResult<Json<UploadPartResponse>> {
+    let store = archive(&state)?.clone();
+    let row = stored_object::Entity::find_by_id(object_id)
+        .one(&state.db)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("No object {object_id}")))?;
+    if row.status != stored_object::STATUS_PENDING {
+        return Err(AppError::Conflict(format!(
+            "Object is {}, not pending: initiate before uploading",
+            row.status
+        )));
+    }
+    let Some(upload_id) = row.s3_upload_id.clone() else {
+        return Err(AppError::Conflict(
+            "This object has no open upload: re-initiate".to_string(),
+        ));
+    };
+    let part_size = row.part_size_bytes.unwrap_or(PART_SIZE_BYTES);
+    let count = part_count(row.size_bytes, part_size)?;
+    if part_number < 1 || part_number > count {
+        return Err(AppError::BadRequest(format!(
+            "part_number must be between 1 and {count}"
+        )));
+    }
+
+    // A streamed body is unsized and S3 will not take a part without a length, so
+    // the client must declare it. The transport enforces it as a ceiling too.
+    let content_length: i64 = headers
+        .get(axum::http::header::CONTENT_LENGTH)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.parse().ok())
+        .ok_or_else(|| AppError::LengthRequired("Content-Length is required".to_string()))?;
+    if content_length < 1 || content_length > part_size {
+        return Err(AppError::PayloadTooLarge(format!(
+            "A part is between 1 and {part_size} bytes, not {content_length}"
+        )));
+    }
+
+    let etag = store
+        .upload_part(
+            &row.s3_key,
+            &upload_id,
+            part_number,
+            content_length,
+            aws_sdk_s3::primitives::ByteStream::from_body_1_x(SyncBody(
+                sync_wrapper::SyncWrapper::new(body),
+            )),
+        )
+        .await?;
+
+    // Part activity restarts the reaper's idle clock.
+    let mut touch: stored_object::ActiveModel = row.into();
+    touch.last_part_at = Set(Some(Utc::now()));
+    touch.updated_at = Set(Utc::now());
+    touch.update(&state.db).await?;
+
+    Ok(Json(UploadPartResponse { part_number, etag }))
 }
 
 /// Record which blob a run directory path holds.
@@ -577,17 +646,22 @@ async fn fail_verification(
 
 #[derive(Debug, serde::Serialize, ToSchema)]
 pub struct DownloadResponse {
-    /// Presigned `GetObject` URL, good for `PRESIGN_TTL_SECONDS`.
+    /// A fetch link on this registry itself, signed for one object and a few
+    /// minutes. The object store is never addressed by a client.
     pub url: String,
 }
 
 /// A short-lived download URL for a verified object.
+///
+/// The URL points back at this registry's own `/archive/{id}/fetch` route with an
+/// HMAC signature in the query, so a browser navigation needs no bearer header
+/// while the object store stays unreachable.
 #[utoipa::path(
     get,
     path = "/archive/{object_id}/download",
     params(("object_id" = Uuid, Path, description = "Object to download")),
     responses(
-        (status = 200, description = "Presigned download URL", body = DownloadResponse),
+        (status = 200, description = "Signed fetch URL on this registry", body = DownloadResponse),
         (status = 404, description = "No such object"),
         (status = 409, description = "The object is not complete yet"),
         (status = 503, description = "The archive is not configured"),
@@ -609,9 +683,17 @@ pub async fn download(
             row.status
         )));
     }
-    Ok(Json(DownloadResponse {
-        url: store.presign_get(&row.s3_key).await?,
-    }))
+
+    let expires = Utc::now().timestamp() + fetch_token::FETCH_TTL_SECONDS;
+    let sig = fetch_token::sign(store.fetch_secret(), object_id, expires);
+    // `PUBLIC_BASE_URL` carries the `/api` prefix, like the address in a connect
+    // code. Relative when unset; the desktop client joins it onto its base URL.
+    let path = format!("/archive/{object_id}/fetch?expires={expires}&sig={sig}");
+    let url = match state.config.public_base_url.as_deref() {
+        Some(base) => format!("{}{path}", base.trim_end_matches('/')),
+        None => path,
+    };
+    Ok(Json(DownloadResponse { url }))
 }
 
 #[derive(Debug, serde::Serialize, ToSchema)]

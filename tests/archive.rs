@@ -13,13 +13,13 @@ use deepreefmap_api::config::{ArchiveConfig, Config};
 use sha2::Digest;
 
 const HASH: &str = "0123456789abcdef0123456789abcdef";
+const OTHER_HASH: &str = "fedcba9876543210fedcba9876543210";
 
 /// An archive pointing at a dead endpoint: configured, but any S3 call errors.
 fn dead_archive_config() -> Config {
     Config {
         archive: Some(ArchiveConfig {
             endpoint_url: "http://127.0.0.1:9".to_string(),
-            public_endpoint_url: None,
             bucket: "unreachable".to_string(),
             access_key: "nobody".to_string(),
             secret_key: "nothing".to_string(),
@@ -51,6 +51,25 @@ async fn seed_object(db: &sea_orm::DatabaseConnection, content_hash: &str, statu
 
 async fn seed_complete_object(db: &sea_orm::DatabaseConnection, content_hash: &str) -> String {
     seed_object(db, content_hash, "complete").await
+}
+
+/// A pending two-part upload, so part validation runs without any S3 call.
+async fn seed_pending_upload(db: &sea_orm::DatabaseConnection, content_hash: &str) -> String {
+    let id = uuid::Uuid::new_v4();
+    exec(
+        db,
+        &format!(
+            "INSERT INTO stored_object \
+             (id, content_hash, size_bytes, kind, status, s3_key, s3_upload_id, \
+              part_size_bytes, created_at, updated_at) \
+             VALUES ('{id}', '{content_hash}', {}, 'video', 'pending', \
+             'test/videos/imohash/{content_hash}', 'upload-1', {}, NOW(), NOW())",
+            48 * 1024 * 1024,
+            32 * 1024 * 1024,
+        ),
+    )
+    .await;
+    id.to_string()
 }
 
 async fn seed_run_artifact(
@@ -149,6 +168,14 @@ async fn test_archive_routes_require_authentication() {
     )
     .await;
     assert_eq!(status, 401);
+    let (status, _) = put_bytes(
+        &app,
+        &format!("/api/archive/{object_id}/parts/1"),
+        vec![0u8; 16],
+        None,
+    )
+    .await;
+    assert_eq!(status, 401);
     let (status, _) = get(&app, &format!("/api/archive/{object_id}/download"), None).await;
     assert_eq!(status, 401);
     let (status, _) = get(&app, &format!("/api/archive/by-hash/{HASH}"), None).await;
@@ -206,7 +233,7 @@ async fn test_both_principals_may_initiate_and_download() {
     assert_eq!(status, 200, "{body}");
     let object_id = body["object_id"].as_str().unwrap().to_string();
 
-    // Presigning is local computation, so download works against a dead endpoint too.
+    // Signing is local computation, so download works against a dead endpoint too.
     for (who, app, token) in [
         ("member", &member_app, None),
         ("device", &device_app, Some(token.as_str())),
@@ -214,7 +241,12 @@ async fn test_both_principals_may_initiate_and_download() {
         let (status, body) =
             get_json(app, &format!("/api/archive/{object_id}/download"), token).await;
         assert_eq!(status, 200, "{who}: {body}");
-        assert!(body["url"].as_str().unwrap().contains(HASH));
+        let url = body["url"].as_str().unwrap();
+        assert!(
+            url.contains(&format!("/api/archive/{object_id}/fetch?")),
+            "{url}"
+        );
+        assert!(url.contains("sig="), "{url}");
     }
 }
 
@@ -238,8 +270,8 @@ async fn test_dedup_short_circuits_without_s3() {
     assert_eq!(status, 200, "{body}");
     assert_eq!(body["object_id"], object_id.as_str());
     assert_eq!(body["status"], "complete");
-    assert!(body["part_urls"].as_array().unwrap().is_empty());
     assert!(body["upload_id"].is_null());
+    assert!(body["parts_done"].as_array().unwrap().is_empty());
 
     let (status, body) =
         get_json(&app, &format!("/api/archive/by-hash/{HASH}"), Some(&token)).await;
@@ -461,6 +493,95 @@ async fn seed_run(db: &sea_orm::DatabaseConnection, run_id: &str) {
     .await;
 }
 
+/// Everything the part route refuses before it would touch S3: the endpoint here
+/// is dead, so reaching S3 would answer 500, never these statuses.
+#[tokio::test]
+async fn test_upload_part_validates_before_touching_s3() {
+    let db = setup_test_db().await;
+    let app = build_test_app_with_config(db.clone(), dead_archive_config());
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&app, &code).await;
+
+    let missing = uuid::Uuid::new_v4();
+    let (status, _) = put_bytes(
+        &app,
+        &format!("/api/archive/{missing}/parts/1"),
+        vec![1u8; 16],
+        Some(&token),
+    )
+    .await;
+    assert_eq!(status, 404);
+
+    let complete_id = seed_complete_object(&db, HASH).await;
+    let (status, body) = put_bytes(
+        &app,
+        &format!("/api/archive/{complete_id}/parts/1"),
+        vec![1u8; 16],
+        Some(&token),
+    )
+    .await;
+    assert_eq!(status, 409, "{body}");
+
+    let pending_id = seed_pending_upload(&db, OTHER_HASH).await;
+    for bad_number in [0, 3] {
+        let (status, body) = put_bytes(
+            &app,
+            &format!("/api/archive/{pending_id}/parts/{bad_number}"),
+            vec![1u8; 16],
+            Some(&token),
+        )
+        .await;
+        assert_eq!(status, 400, "part {bad_number}: {body}");
+    }
+
+    let (status, body) = put_bytes(
+        &app,
+        &format!("/api/archive/{pending_id}/parts/1"),
+        Vec::new(),
+        Some(&token),
+    )
+    .await;
+    assert_eq!(status, 413, "an empty part is refused: {body}");
+}
+
+/// A fetch link is refused when nothing signed it: no signature, a stale expiry,
+/// or a pending object all answer without touching S3.
+#[tokio::test]
+async fn test_fetch_refuses_unsigned_and_pending() {
+    let db = setup_test_db().await;
+    let app = build_test_app_with_config(db.clone(), dead_archive_config());
+
+    let object_id = seed_complete_object(&db, HASH).await;
+    let (status, _, _) = get_bytes(
+        &app,
+        &format!("/api/archive/{object_id}/fetch?expires=9999999999&sig=abcd"),
+        None,
+    )
+    .await;
+    assert_eq!(status, 403);
+    let (status, _, _) = get_bytes(&app, &format!("/api/archive/{object_id}/fetch"), None).await;
+    assert_eq!(status, 400, "the parameters are not optional");
+
+    // A link minted while the object was complete dies with a later restart.
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&app, &code).await;
+    let (status, body) = get_json(
+        &app,
+        &format!("/api/archive/{object_id}/download"),
+        Some(&token),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    let path = fetch_path(body["url"].as_str().unwrap());
+    exec(
+        &db,
+        &format!("UPDATE stored_object SET status = 'pending' WHERE id = '{object_id}'"),
+    )
+    .await;
+    let (status, _, _) = get_bytes(&app, &path, None).await;
+    assert_eq!(status, 404, "only complete objects stream");
+}
+
 // ── The gated end-to-end path ────────────────────────────────────────────
 
 /// The archive configuration from the environment, or `None` to skip.
@@ -476,12 +597,18 @@ fn s3_archive_config() -> Option<ArchiveConfig> {
         } else {
             format!("http://{url}")
         },
-        public_endpoint_url: None,
         bucket: var("S3_BUCKET_ID")?,
         access_key: var("S3_ACCESS_KEY")?,
         secret_key: var("S3_SECRET_KEY")?,
         prefix: format!("test-{}", uuid::Uuid::new_v4()),
     })
+}
+
+/// The path and query of a fetch link, host stripped, for the in-process router.
+fn fetch_path(url: &str) -> String {
+    let after_scheme = url.split("://").nth(1).unwrap_or(url);
+    let from_path = &after_scheme[after_scheme.find('/').unwrap()..];
+    from_path.to_string()
 }
 
 fn sha256_hex_of(bytes: &[u8]) -> String {
@@ -511,36 +638,40 @@ async fn archived_status(app: &axum::Router, content_hash: &str, token: &str) ->
     body["status"].as_str().unwrap().to_string()
 }
 
+/// PUT every part `parts_done` does not list through the API, as a client would.
 async fn upload_parts(
-    client: &reqwest::Client,
+    app: &axum::Router,
+    token: &str,
     body: &serde_json::Value,
     content: &[u8],
 ) -> Vec<serde_json::Value> {
+    let object_id = body["object_id"].as_str().unwrap();
     let part_size = usize::try_from(body["part_size_bytes"].as_i64().unwrap()).unwrap();
+    let done: Vec<i64> = body["parts_done"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|n| n.as_i64().unwrap())
+        .collect();
+    let count = content.len().div_ceil(part_size);
     let mut parts = Vec::new();
-    for part in body["part_urls"].as_array().unwrap() {
-        let number = part["part_number"].as_i64().unwrap();
-        let begin = (usize::try_from(number).unwrap() - 1) * part_size;
+    for number in 1..=count {
+        if done.contains(&i64::try_from(number).unwrap()) {
+            continue;
+        }
+        let begin = (number - 1) * part_size;
         let end = (begin + part_size).min(content.len());
-        let sent = client
-            .put(part["url"].as_str().unwrap())
-            .body(content[begin..end].to_vec())
-            .send()
-            .await
-            .expect("the part uploads");
-        assert!(
-            sent.status().is_success(),
-            "part {number}: {}",
-            sent.status()
-        );
-        let etag = sent
-            .headers()
-            .get("etag")
-            .expect("S3 answers an ETag")
-            .to_str()
-            .unwrap()
-            .to_string();
-        parts.push(serde_json::json!({ "part_number": number, "etag": etag }));
+        let (status, answer) = put_bytes(
+            app,
+            &format!("/api/archive/{object_id}/parts/{number}"),
+            content[begin..end].to_vec(),
+            Some(token),
+        )
+        .await;
+        assert_eq!(status, 200, "part {number}: {answer}");
+        let answer: serde_json::Value = serde_json::from_str(&answer).unwrap();
+        assert!(!answer["etag"].as_str().unwrap().is_empty());
+        parts.push(answer);
     }
     parts
 }
@@ -560,7 +691,6 @@ async fn test_end_to_end_upload_and_download() {
     let app = build_test_app_with_config(db.clone(), config);
     let code = seed_connect_code(&db, "alice", "Field laptop").await;
     let token = enrol_device(&app, &code).await;
-    let client = reqwest::Client::new();
 
     // Two parts: one full 32 MiB, one small remainder.
     let content = patterned_bytes(32 * 1024 * 1024 + 512 * 1024);
@@ -575,11 +705,12 @@ async fn test_end_to_end_upload_and_download() {
     .await;
     assert_eq!(status, 200, "{body}");
     assert_eq!(body["status"], "pending");
-    assert_eq!(body["part_urls"].as_array().unwrap().len(), 2);
+    assert_eq!(body["part_size_bytes"], 32 * 1024 * 1024);
     assert!(body["parts_done"].as_array().unwrap().is_empty());
     let object_id = body["object_id"].as_str().unwrap().to_string();
 
-    let parts = upload_parts(&client, &body, &content).await;
+    let parts = upload_parts(&app, &token, &body, &content).await;
+    assert_eq!(parts.len(), 2);
     let (status, body) = post_json(
         &app,
         &format!("/api/archive/{object_id}/complete"),
@@ -612,14 +743,14 @@ async fn test_end_to_end_upload_and_download() {
     )
     .await;
     assert_eq!(status, 200, "{body}");
-    let fetched = client
-        .get(body["url"].as_str().unwrap())
-        .send()
-        .await
-        .expect("the download URL answers")
-        .bytes()
-        .await
-        .expect("the body reads");
+    let path = fetch_path(body["url"].as_str().unwrap());
+    // No bearer: the signature in the query is the whole credential.
+    let (status, headers, fetched) = get_bytes(&app, &path, None).await;
+    assert_eq!(status, 200);
+    assert_eq!(
+        headers["content-length"].to_str().unwrap(),
+        content.len().to_string()
+    );
     assert_eq!(
         sha256_hex_of(&fetched),
         sha256_hex_of(&content),
@@ -627,26 +758,14 @@ async fn test_end_to_end_upload_and_download() {
     );
 }
 
-/// A public endpoint signs every URL a client touches while bucket operations stay
-/// on the primary. The same `MinIO` answers under both names, so the whole path runs:
-/// uploads land through the public URLs and assembly runs through the primary.
+/// The download link terminates at the registry, is signed for one object, and
+/// refuses tampering. The store itself is never addressed by a client.
 #[tokio::test]
-async fn test_public_endpoint_signs_client_urls() {
-    let Some(mut archive_config) = s3_archive_config() else {
+async fn test_download_link_is_signed_and_api_terminated() {
+    let Some(archive_config) = s3_archive_config() else {
         eprintln!("skipping: S3_URL/S3_BUCKET_ID/S3_ACCESS_KEY/S3_SECRET_KEY not set");
         return;
     };
-    // localhost and 127.0.0.1 reach one MinIO, so the split is observable locally.
-    let public = if archive_config.endpoint_url.contains("127.0.0.1") {
-        archive_config
-            .endpoint_url
-            .replace("127.0.0.1", "localhost")
-    } else {
-        archive_config
-            .endpoint_url
-            .replace("localhost", "127.0.0.1")
-    };
-    archive_config.public_endpoint_url = Some(public.clone());
     let db = setup_test_db().await;
     let config = Config {
         archive: Some(archive_config),
@@ -655,7 +774,6 @@ async fn test_public_endpoint_signs_client_urls() {
     let app = build_test_app_with_config(db.clone(), config);
     let code = seed_connect_code(&db, "alice", "Field laptop").await;
     let token = enrol_device(&app, &code).await;
-    let client = reqwest::Client::new();
 
     let content = patterned_bytes(1024 * 1024);
     let content_hash = content_hash_of(&content);
@@ -668,28 +786,16 @@ async fn test_public_endpoint_signs_client_urls() {
     )
     .await;
     assert_eq!(status, 200, "{body}");
-    for part in body["part_urls"].as_array().unwrap() {
-        let url = part["url"].as_str().unwrap();
-        assert!(
-            url.starts_with(&public),
-            "signed against the primary: {url}"
-        );
-    }
     let object_id = body["object_id"].as_str().unwrap().to_string();
-
-    let parts = upload_parts(&client, &body, &content).await;
+    upload_parts(&app, &token, &body, &content).await;
     let (status, body) = post_json(
         &app,
         &format!("/api/archive/{object_id}/complete"),
-        &serde_json::json!({ "parts": parts }),
+        &serde_json::json!({ "parts": [] }),
         Some(&token),
     )
     .await;
     assert_eq!(status, 200, "{body}");
-    assert_eq!(
-        archived_status(&app, &content_hash, &token).await,
-        "complete"
-    );
 
     let (status, body) = get_json(
         &app,
@@ -700,18 +806,26 @@ async fn test_public_endpoint_signs_client_urls() {
     assert_eq!(status, 200, "{body}");
     let url = body["url"].as_str().unwrap();
     assert!(
-        url.starts_with(&public),
-        "signed against the primary: {url}"
+        url.starts_with("http://test.local/api/"),
+        "the link points at the registry, never the store: {url}"
     );
-    let fetched = client
-        .get(url)
-        .send()
-        .await
-        .expect("the download URL answers")
-        .bytes()
-        .await
-        .expect("the body reads");
+
+    let path = fetch_path(url);
+    let (status, headers, fetched) = get_bytes(&app, &path, None).await;
+    assert_eq!(status, 200);
     assert_eq!(sha256_hex_of(&fetched), sha256_hex_of(&content));
+    let disposition = headers["content-disposition"].to_str().unwrap();
+    assert!(disposition.contains(&content_hash), "{disposition}");
+
+    // A tampered signature or object learns nothing, not even 404 vs 403 detail.
+    let sig = path.split("sig=").nth(1).unwrap();
+    let tampered = path.replace(sig, &"0".repeat(sig.len()));
+    let (status, _, _) = get_bytes(&app, &tampered, None).await;
+    assert_eq!(status, 403);
+    let other = uuid::Uuid::new_v4();
+    let reused = path.replace(&object_id, &other.to_string());
+    let (status, _, _) = get_bytes(&app, &reused, None).await;
+    assert_eq!(status, 403, "a signature never transfers to another object");
 }
 
 /// Wrong bytes under a claimed hash are refused at `complete`: the object is
@@ -732,7 +846,6 @@ async fn test_complete_refuses_content_that_is_not_the_claimed_hash() {
     let app = build_test_app_with_config(db.clone(), config);
     let code = seed_connect_code(&db, "alice", "Field laptop").await;
     let token = enrol_device(&app, &code).await;
-    let client = reqwest::Client::new();
 
     let real = patterned_bytes(1024 * 1024);
     let claimed_hash = content_hash_of(&real);
@@ -748,7 +861,7 @@ async fn test_complete_refuses_content_that_is_not_the_claimed_hash() {
     assert_eq!(status, 200, "{body}");
     let object_id = body["object_id"].as_str().unwrap().to_string();
 
-    upload_parts(&client, &body, &wrong).await;
+    upload_parts(&app, &token, &body, &wrong).await;
     let (status, body) = post_json(
         &app,
         &format!("/api/archive/{object_id}/complete"),
@@ -804,7 +917,6 @@ async fn test_complete_refuses_a_short_upload() {
     let app = build_test_app_with_config(db.clone(), config);
     let code = seed_connect_code(&db, "alice", "Field laptop").await;
     let token = enrol_device(&app, &code).await;
-    let client = reqwest::Client::new();
 
     let content = patterned_bytes(300 * 1024);
     let claimed_size = content.len() + 4096;
@@ -819,7 +931,7 @@ async fn test_complete_refuses_a_short_upload() {
     assert_eq!(status, 200, "{body}");
     let object_id = body["object_id"].as_str().unwrap().to_string();
 
-    upload_parts(&client, &body, &content).await;
+    upload_parts(&app, &token, &body, &content).await;
     let (status, body) = post_json(
         &app,
         &format!("/api/archive/{object_id}/complete"),
@@ -850,7 +962,6 @@ async fn test_complete_verifies_small_objects_whole() {
     let app = build_test_app_with_config(db.clone(), config);
     let code = seed_connect_code(&db, "alice", "Field laptop").await;
     let token = enrol_device(&app, &code).await;
-    let client = reqwest::Client::new();
 
     let content = patterned_bytes(64 * 1024);
     let content_hash = content_hash_of(&content);
@@ -865,7 +976,7 @@ async fn test_complete_verifies_small_objects_whole() {
     assert_eq!(status, 200, "{body}");
     let object_id = body["object_id"].as_str().unwrap().to_string();
 
-    upload_parts(&client, &body, &content).await;
+    upload_parts(&app, &token, &body, &content).await;
     let (status, body) = post_json(
         &app,
         &format!("/api/archive/{object_id}/complete"),

@@ -33,6 +33,12 @@ pub enum AppError {
 
     #[error("Unavailable: {0}")]
     Unavailable(String),
+
+    #[error("Length required: {0}")]
+    LengthRequired(String),
+
+    #[error("Payload too large: {0}")]
+    PayloadTooLarge(String),
 }
 
 impl IntoResponse for AppError {
@@ -67,6 +73,8 @@ impl IntoResponse for AppError {
             Self::Forbidden(msg) => (StatusCode::FORBIDDEN, msg.clone()),
             Self::Conflict(msg) => (StatusCode::CONFLICT, msg.clone()),
             Self::Unavailable(msg) => (StatusCode::SERVICE_UNAVAILABLE, msg.clone()),
+            Self::LengthRequired(msg) => (StatusCode::LENGTH_REQUIRED, msg.clone()),
+            Self::PayloadTooLarge(msg) => (StatusCode::PAYLOAD_TOO_LARGE, msg.clone()),
         };
 
         (status, Json(json!({ "error": message }))).into_response()
