@@ -19,7 +19,7 @@ async fn test_heartbeat_updates_the_calling_device() {
             "gui_version": "0.10.0",
             "library_version": "0.15.0",
             "platform": "windows",
-            "system_profile": { "gpu": "RTX 4070 Laptop", "ram_gb": 32 },
+            "system_profile": { "gpu": "RTX 4070 Laptop", "ram_gb": 32, "disk_free_bytes": 512_000_000_000_i64 },
         }),
         Some(&token),
     )
@@ -35,6 +35,10 @@ async fn test_heartbeat_updates_the_calling_device() {
     assert_eq!(platform.as_deref(), Some("windows"));
     let gpu: Option<String> = one_value(&db, "SELECT system_profile->>'gpu' FROM device").await;
     assert_eq!(gpu.as_deref(), Some("RTX 4070 Laptop"));
+    // Stored as sent: a new profile key like disk_free_bytes needs no server change.
+    let disk: Option<String> =
+        one_value(&db, "SELECT system_profile->>'disk_free_bytes' FROM device").await;
+    assert_eq!(disk.as_deref(), Some("512000000000"));
     let stamped: i64 = one_value(
         &db,
         "SELECT COUNT(*)::BIGINT FROM device WHERE profile_reported_at IS NOT NULL",
@@ -120,6 +124,84 @@ async fn test_heartbeat_cannot_reach_another_device() {
     )
     .await;
     assert_eq!(alice_gui.as_deref(), Some("9.9.9"));
+}
+
+/// The stamp records change, not reporting: repeating the same versions leaves it be.
+#[tokio::test]
+async fn test_heartbeat_stamps_versions_changed_once() {
+    let db = setup_test_db().await;
+    let app = build_test_app(db.clone());
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&app, &code).await;
+
+    let report = serde_json::json!({ "gui_version": "0.10.0", "library_version": "0.15.0" });
+    let (status, body) = post(&app, "/api/sync/heartbeat", &report, Some(&token)).await;
+    assert_eq!(status, 200, "{body}");
+
+    let first: Option<String> =
+        one_value(&db, "SELECT versions_changed_at::text FROM device").await;
+    assert!(first.is_some(), "an updated version did not stamp");
+
+    let (status, _) = post(&app, "/api/sync/heartbeat", &report, Some(&token)).await;
+    assert_eq!(status, 200);
+    let second: Option<String> =
+        one_value(&db, "SELECT versions_changed_at::text FROM device").await;
+    assert_eq!(second, first, "an unchanged report moved the stamp");
+}
+
+#[tokio::test]
+async fn test_heartbeat_stamps_on_a_library_only_change() {
+    let db = setup_test_db().await;
+    let app = build_test_app(db.clone());
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&app, &code).await;
+    exec(
+        &db,
+        "UPDATE device SET gui_version = '0.10.0', library_version = '0.15.0'",
+    )
+    .await;
+
+    let (status, _) = post(
+        &app,
+        "/api/sync/heartbeat",
+        &serde_json::json!({ "gui_version": "0.10.0", "library_version": "0.16.0" }),
+        Some(&token),
+    )
+    .await;
+    assert_eq!(status, 200);
+
+    let stamped: i64 = one_value(
+        &db,
+        "SELECT COUNT(*)::BIGINT FROM device WHERE versions_changed_at IS NOT NULL",
+    )
+    .await;
+    assert_eq!(stamped, 1, "a library-only change did not stamp");
+}
+
+/// An absent version field is not a report of change, whatever is stored.
+#[tokio::test]
+async fn test_heartbeat_absent_versions_stamp_nothing() {
+    let db = setup_test_db().await;
+    let app = build_test_app(db.clone());
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&app, &code).await;
+    exec(&db, "UPDATE device SET gui_version = '0.10.0'").await;
+
+    let (status, _) = post(
+        &app,
+        "/api/sync/heartbeat",
+        &serde_json::json!({ "platform": "windows" }),
+        Some(&token),
+    )
+    .await;
+    assert_eq!(status, 200);
+
+    let stamped: i64 = one_value(
+        &db,
+        "SELECT COUNT(*)::BIGINT FROM device WHERE versions_changed_at IS NOT NULL",
+    )
+    .await;
+    assert_eq!(stamped, 0, "a versionless report stamped");
 }
 
 #[tokio::test]

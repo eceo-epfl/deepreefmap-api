@@ -331,6 +331,9 @@ impl MigrationTrait for Migration {
                 -- Heartbeat self-reports: server-side bookkeeping like the rest of the
                 -- table, not sync columns, so no trigger and no contract entry.
                 library_version      TEXT,
+                -- When a heartbeat last reported a different version. Enrolment does
+                -- not stamp it, so NULL reads as unchanged since enrolment.
+                versions_changed_at  TIMESTAMPTZ,
                 system_profile       JSONB,
                 profile_reported_at  TIMESTAMPTZ,
                 -- Which preset-schema.json revision the installation understands,

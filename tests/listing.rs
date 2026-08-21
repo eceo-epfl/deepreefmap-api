@@ -198,6 +198,7 @@ const DEVICE_ONE_KEYS: &[&str] = &[
     "profile_reported_at",
     "revoked_at",
     "system_profile",
+    "versions_changed_at",
 ];
 
 /// The list also drops `system_profile`.
@@ -218,6 +219,7 @@ const DEVICE_LIST_KEYS: &[&str] = &[
     "preset_schema_version",
     "profile_reported_at",
     "revoked_at",
+    "versions_changed_at",
 ];
 
 #[tokio::test]

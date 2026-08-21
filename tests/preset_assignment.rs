@@ -221,6 +221,129 @@ async fn test_assign_refuses_someone_elses_device_and_missing_presets() {
 }
 
 #[tokio::test]
+async fn test_assign_all_reaches_the_active_fleet() {
+    let db = setup_test_db().await;
+    let admin = build_test_app_as_admin(db.clone());
+    let device_app = build_test_app(db.clone());
+
+    let mut tokens = Vec::new();
+    for (subject, name) in [
+        ("alice", "Reef laptop 1"),
+        ("bob", "Reef laptop 2"),
+        ("carol", "Retired laptop"),
+    ] {
+        let code = seed_connect_code(&db, subject, name).await;
+        tokens.push(enrol_device(&device_app, &code).await);
+    }
+    exec(
+        &db,
+        "UPDATE device SET revoked_at = NOW() WHERE name = 'Retired laptop'",
+    )
+    .await;
+
+    let preset_id = seeded_preset_id(&admin).await;
+    let (status, body) = post_json(
+        &admin,
+        &format!("/api/presets/{preset_id}/assign-all"),
+        &serde_json::json!({}),
+        None,
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(body["preset_id"], serde_json::json!(preset_id));
+    assert_eq!(body["assigned_count"], 2);
+    assert!(!body["assigned_at"].is_null());
+
+    let assigned: i64 = one_value(
+        &db,
+        "SELECT COUNT(*)::BIGINT FROM device WHERE assigned_preset_id IS NOT NULL",
+    )
+    .await;
+    assert_eq!(assigned, 2);
+    let retired: i64 = one_value(
+        &db,
+        "SELECT COUNT(*)::BIGINT FROM device
+         WHERE name = 'Retired laptop' AND assigned_preset_id IS NOT NULL",
+    )
+    .await;
+    assert_eq!(retired, 0, "a revoked device was assigned to");
+
+    // The sweep travels like the single route: in each device's next heartbeat.
+    let (status, body) = post_json(
+        &device_app,
+        "/api/sync/heartbeat",
+        &serde_json::json!({}),
+        Some(&tokens[0]),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(body["assigned_preset"]["name"], "Standard reef survey");
+}
+
+#[tokio::test]
+async fn test_assign_all_is_admin_only() {
+    let db = setup_test_db().await;
+    let member = build_test_app_as_member(db.clone());
+    let device_app = build_test_app(db.clone());
+    let code = seed_connect_code(&db, "member-sub", "Field laptop").await;
+    let token = enrol_device(&device_app, &code).await;
+
+    let preset_id = seeded_preset_id(&member).await;
+    let uri = format!("/api/presets/{preset_id}/assign-all");
+
+    let (status, body) = post_json(&member, &uri, &serde_json::json!({}), None).await;
+    assert_eq!(status, 403, "a member swept the fleet: {body}");
+    let (status, body) = post_json(&device_app, &uri, &serde_json::json!({}), Some(&token)).await;
+    assert_eq!(status, 403, "a device swept the fleet: {body}");
+
+    let assigned: i64 = one_value(
+        &db,
+        "SELECT COUNT(*)::BIGINT FROM device WHERE assigned_preset_id IS NOT NULL",
+    )
+    .await;
+    assert_eq!(assigned, 0);
+}
+
+#[tokio::test]
+async fn test_assign_all_refuses_missing_and_deleted_presets() {
+    let db = setup_test_db().await;
+    let admin = build_test_app_as_admin(db.clone());
+
+    let (status, _) = post_json(
+        &admin,
+        "/api/presets/00000000-0000-0000-0000-000000000000/assign-all",
+        &serde_json::json!({}),
+        None,
+    )
+    .await;
+    assert_eq!(status, 404, "an unknown preset swept the fleet");
+
+    let (status, created) = post_json(
+        &admin,
+        "/api/presets",
+        &serde_json::json!({
+            "name": "Short-lived", "version": 1, "settings": { "fps": 5 },
+            "description": "",
+        }),
+        None,
+    )
+    .await;
+    assert_eq!(status, 201, "{created}");
+    let doomed = created["id"].as_str().expect("a preset id").to_string();
+    let (status, _) = delete(&admin, &format!("/api/presets/{doomed}"), None).await;
+    assert_eq!(status, 204);
+
+    let (status, _) = post_json(
+        &admin,
+        &format!("/api/presets/{doomed}/assign-all"),
+        &serde_json::json!({}),
+        None,
+    )
+    .await;
+    assert_eq!(status, 404, "a deleted preset swept the fleet");
+}
+
+#[tokio::test]
 async fn test_preset_create_refuses_what_a_laptop_could_not_run() {
     let db = setup_test_db().await;
     let member = build_test_app_as_member(db.clone());

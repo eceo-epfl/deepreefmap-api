@@ -88,6 +88,22 @@ pub async fn heartbeat(
         ));
     }
 
+    let row = device::Entity::find_by_id(device_id)
+        .one(&state.db)
+        .await?
+        .ok_or_else(|| AppError::NotFound("Device not found".to_string()))?;
+
+    // Stamped only when a reported version differs from the stored one, and never at
+    // enrolment, so the column reads as "updated in the field since onboarding".
+    let versions_changed = body
+        .gui_version
+        .as_deref()
+        .is_some_and(|v| row.gui_version.as_deref() != Some(v))
+        || body
+            .library_version
+            .as_deref()
+            .is_some_and(|v| row.library_version.as_deref() != Some(v));
+
     let mut update = device::ActiveModel {
         id: Set(device_id),
         profile_reported_at: Set(Some(Utc::now())),
@@ -99,6 +115,9 @@ pub async fn heartbeat(
     }
     if body.library_version.is_some() {
         update.library_version = Set(body.library_version);
+    }
+    if versions_changed {
+        update.versions_changed_at = Set(Some(Utc::now()));
     }
     if body.platform.is_some() {
         update.platform = Set(body.platform);
@@ -116,10 +135,6 @@ pub async fn heartbeat(
     }
     update.update(&state.db).await?;
 
-    let row = device::Entity::find_by_id(device_id)
-        .one(&state.db)
-        .await?
-        .ok_or_else(|| AppError::NotFound("Device not found".to_string()))?;
     let assigned_preset = match row.assigned_preset_id {
         None => None,
         Some(preset_id) => presets::Entity::find_by_id(preset_id)

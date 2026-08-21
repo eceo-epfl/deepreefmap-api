@@ -149,6 +149,7 @@ pub async fn enrol(
         platform: Set(body.platform),
         gui_version: Set(body.gui_version),
         library_version: Set(body.library_version),
+        versions_changed_at: Set(None),
         system_profile: Set(None),
         profile_reported_at: Set(None),
         preset_schema_version: Set(None),

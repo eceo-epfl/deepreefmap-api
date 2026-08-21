@@ -6,7 +6,10 @@
 
 use axum::{Json, extract::State};
 use chrono::{Duration, Utc};
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, ExprTrait, QueryFilter, Set};
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, EntityTrait, ExprTrait, QueryFilter, Set, TransactionTrait,
+    sea_query::Expr,
+};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
@@ -293,6 +296,86 @@ pub async fn assign_preset(
     Ok(Json(AssignPresetResponse {
         device_id,
         assigned_preset_id: body.preset_id,
+        assigned_at,
+    }))
+}
+
+#[derive(Debug, serde::Serialize, ToSchema)]
+pub struct AssignAllResponse {
+    pub preset_id: Uuid,
+    /// Active devices reached. Revoked devices are skipped.
+    pub assigned_count: u64,
+    pub assigned_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// Assign a preset to every active device. Administrators only.
+///
+/// Member semantics ("devices I enrolled") would make a bulk route mean a different
+/// fleet per caller, so this one is admin-only. Each assignment travels in that
+/// device's next heartbeat response, exactly as the single route's does.
+#[utoipa::path(
+    post,
+    path = "/presets/{preset_id}/assign-all",
+    params(("preset_id" = Uuid, Path, description = "Preset to assign fleet-wide")),
+    responses(
+        (status = 200, description = "Assignment stored on every active device", body = AssignAllResponse),
+        (status = 403, description = "Requires the deepreefmap-admin role"),
+        (status = 404, description = "No such preset"),
+    ),
+    tag = "devices"
+)]
+pub async fn assign_all(
+    State(state): State<AppState>,
+    axum::Extension(auth): axum::Extension<AuthContext>,
+    axum::extract::Path(preset_id): axum::extract::Path<Uuid>,
+) -> AppResult<Json<AssignAllResponse>> {
+    if !auth.is_admin() {
+        return Err(AppError::Forbidden(
+            "Assigning a preset fleet-wide requires the deepreefmap-admin role".to_string(),
+        ));
+    }
+
+    // One transaction, so the preset cannot be deleted between the check and the sweep.
+    let txn = state.db.begin().await?;
+
+    let live = crate::routes::private::presets::Entity::find_by_id(preset_id)
+        .filter(crate::routes::private::presets::Column::DeletedAt.is_null())
+        .one(&txn)
+        .await?;
+    if live.is_none() {
+        return Err(AppError::NotFound("Preset not found".to_string()));
+    }
+
+    let assigned_at = Utc::now();
+    let swept = device::Entity::update_many()
+        .col_expr(
+            device::Column::AssignedPresetId,
+            Expr::value(Some(preset_id)),
+        )
+        .col_expr(device::Column::AssignedAt, Expr::value(Some(assigned_at)))
+        // A fresh assignment awaits a fresh acknowledgement, whatever was reported before.
+        .col_expr(
+            device::Column::ActivePresetName,
+            Expr::value(Option::<String>::None),
+        )
+        .col_expr(
+            device::Column::ActivePresetVersion,
+            Expr::value(Option::<i32>::None),
+        )
+        .col_expr(
+            device::Column::ActivePresetReportedAt,
+            Expr::value(Option::<chrono::DateTime<chrono::Utc>>::None),
+        )
+        .filter(device::Column::RevokedAt.is_null())
+        .exec(&txn)
+        .await?;
+
+    txn.commit().await?;
+
+    tracing::info!(%preset_id, assigned_count = swept.rows_affected, "Preset assigned fleet-wide");
+    Ok(Json(AssignAllResponse {
+        preset_id,
+        assigned_count: swept.rows_affected,
         assigned_at,
     }))
 }

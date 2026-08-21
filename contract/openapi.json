@@ -1,6 +1,30 @@
 {
   "components": {
     "schemas": {
+      "AssignAllResponse": {
+        "properties": {
+          "assigned_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "assigned_count": {
+            "description": "Active devices reached. Revoked devices are skipped.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "preset_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "preset_id",
+          "assigned_count",
+          "assigned_at"
+        ],
+        "type": "object"
+      },
       "AssignPresetRequest": {
         "properties": {
           "preset_id": {
@@ -740,6 +764,14 @@
               "string",
               "null"
             ]
+          },
+          "versions_changed_at": {
+            "description": "When a heartbeat last reported a different `gui_version` or `library_version`.\nEnrolment does not stamp it, so null reads as unchanged since enrolment.",
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -857,6 +889,14 @@
           },
           "system_profile": {
             "description": "Hardware and driver survey the device reports about itself, stored as sent.\nDetail view only."
+          },
+          "versions_changed_at": {
+            "description": "When a heartbeat last reported a different `gui_version` or `library_version`.\nEnrolment does not stamp it, so null reads as unchanged since enrolment.",
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -5069,7 +5109,7 @@
     },
     "/devices": {
       "get": {
-        "description": "Retrieves all devices.\n\nThis resource manages device items\n\nAdditional sortable columns: \n- name\n- profile_reported_at\n- assigned_at\n- active_preset_reported_at\n- created_at\n- last_seen_at\n- revoked_at.\n\nAdditional filterable columns: \n- id\n- enrolled_by\n- name\n- platform\n- gui_version\n- library_version\n- preset_schema_version\n- assigned_preset_id\n- revoked_at.",
+        "description": "Retrieves all devices.\n\nThis resource manages device items\n\nAdditional sortable columns: \n- name\n- versions_changed_at\n- profile_reported_at\n- assigned_at\n- active_preset_reported_at\n- created_at\n- last_seen_at\n- revoked_at.\n\nAdditional filterable columns: \n- id\n- enrolled_by\n- name\n- platform\n- gui_version\n- library_version\n- preset_schema_version\n- assigned_preset_id\n- revoked_at.",
         "operationId": "get_all_devices",
         "parameters": [
           {
@@ -7420,6 +7460,46 @@
           }
         },
         "summary": "Update one preset"
+      }
+    },
+    "/presets/{preset_id}/assign-all": {
+      "post": {
+        "description": "Member semantics (\"devices I enrolled\") would make a bulk route mean a different\nfleet per caller, so this one is admin-only. Each assignment travels in that\ndevice's next heartbeat response, exactly as the single route's does.",
+        "operationId": "assign_all",
+        "parameters": [
+          {
+            "description": "Preset to assign fleet-wide",
+            "in": "path",
+            "name": "preset_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssignAllResponse"
+                }
+              }
+            },
+            "description": "Assignment stored on every active device"
+          },
+          "403": {
+            "description": "Requires the deepreefmap-admin role"
+          },
+          "404": {
+            "description": "No such preset"
+          }
+        },
+        "summary": "Assign a preset to every active device. Administrators only.",
+        "tags": [
+          "devices"
+        ]
       }
     },
     "/run_artifacts": {

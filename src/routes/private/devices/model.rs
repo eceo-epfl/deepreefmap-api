@@ -38,6 +38,10 @@ pub struct Model {
     pub gui_version: Option<String>,
     #[crudcrate(filterable, exclude(update))]
     pub library_version: Option<String>,
+    /// When a heartbeat last reported a different `gui_version` or `library_version`.
+    /// Enrolment does not stamp it, so null reads as unchanged since enrolment.
+    #[crudcrate(exclude(create, update), sortable)]
+    pub versions_changed_at: Option<chrono::DateTime<chrono::Utc>>,
     /// Hardware and driver survey the device reports about itself, stored as sent.
     /// Detail view only.
     #[sea_orm(column_type = "JsonBinary", nullable)]
