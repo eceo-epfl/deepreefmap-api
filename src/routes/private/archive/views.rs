@@ -441,19 +441,24 @@ pub struct CompleteResponse {
     pub status: String,
 }
 
-/// Assemble the uploaded parts into the finished object.
+/// Assemble the uploaded parts into the finished object and verify them.
 ///
 /// S3 checked every part against the `ETag` it answered as the part arrived, so an
-/// assembly it accepts is the bytes the client sent.
+/// assembly it accepts is the bytes the client sent. Whether those bytes are the
+/// content the client claimed is checked here: the stored size must match the
+/// initiated one, and the imohash re-computed from the stored object must match the
+/// claimed hash, before the object counts as `complete`. A mismatch deletes the
+/// object, fails the row and answers 409, so a wrong upload can never poison a
+/// content-addressed key another device would dedup against.
 #[utoipa::path(
     post,
     path = "/archive/{object_id}/complete",
     params(("object_id" = Uuid, Path, description = "Object being uploaded")),
     request_body = CompleteRequest,
     responses(
-        (status = 200, description = "Parts assembled into the object", body = CompleteResponse),
+        (status = 200, description = "Parts assembled and verified against the claimed hash", body = CompleteResponse),
         (status = 404, description = "No such object"),
-        (status = 409, description = "The object is not pending"),
+        (status = 409, description = "The object is not pending, or its content does not match the claimed size or hash"),
         (status = 503, description = "The archive is not configured"),
     ),
     tag = "archive"
@@ -479,11 +484,47 @@ pub async fn complete(
         .clone()
         .ok_or_else(|| AppError::Conflict("Object has no open upload".to_string()))?;
 
-    let assembled = store.complete_multipart(&row.s3_key, &upload_id).await?;
-    if assembled == 0 {
-        return Err(AppError::Conflict(
-            "Nothing has been uploaded for this object yet".to_string(),
-        ));
+    match store.complete_multipart(&row.s3_key, &upload_id).await {
+        Ok(0) => {
+            return Err(AppError::Conflict(
+                "Nothing has been uploaded for this object yet".to_string(),
+            ));
+        }
+        Ok(_) => {}
+        // A prior attempt may have assembled and then failed transiently during
+        // verification: the multipart upload is gone but the object exists. Verify
+        // what is stored rather than wedging the row.
+        Err(assembly_error) => {
+            if store.object_size(&row.s3_key).await?.is_none() {
+                return Err(assembly_error);
+            }
+        }
+    }
+
+    let stored_size = store
+        .object_size(&row.s3_key)
+        .await?
+        .ok_or_else(|| AppError::Internal("The assembled object is missing".to_string()))?;
+    if stored_size != row.size_bytes {
+        let claimed = row.size_bytes;
+        return fail_verification(
+            &state,
+            &store,
+            row,
+            format!("Uploaded {stored_size} bytes, not the {claimed} initiated"),
+        )
+        .await;
+    }
+    let computed = store.computed_imohash(&row.s3_key, stored_size).await?;
+    if computed != row.content_hash {
+        let claimed = row.content_hash.clone();
+        return fail_verification(
+            &state,
+            &store,
+            row,
+            format!("Uploaded content hashes to {computed}, not the {claimed} claimed"),
+        )
+        .await;
     }
 
     // Guarded on status, so a racing complete flips the row exactly once.
@@ -512,6 +553,26 @@ pub async fn complete(
         object_id,
         status: stored_object::STATUS_COMPLETE.to_string(),
     }))
+}
+
+/// The uploaded bytes are not the claimed content: remove them, fail the row and
+/// tell the client to start over. Nothing wrong may sit at a content-addressed key.
+async fn fail_verification(
+    state: &AppState,
+    store: &ArchiveStore,
+    row: stored_object::Model,
+    why: String,
+) -> AppResult<Json<CompleteResponse>> {
+    store.delete_object(&row.s3_key).await;
+    let mut update: stored_object::ActiveModel = row.into();
+    update.status = Set(stored_object::STATUS_FAILED.to_string());
+    update.s3_upload_id = Set(None);
+    update.failure = Set(Some(why.clone()));
+    update.updated_at = Set(Utc::now());
+    update.update(&state.db).await?;
+    Err(AppError::Conflict(format!(
+        "{why}: re-initiate to upload again"
+    )))
 }
 
 #[derive(Debug, serde::Serialize, ToSchema)]

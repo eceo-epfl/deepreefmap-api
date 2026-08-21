@@ -9,6 +9,7 @@ use aws_sdk_s3::presigning::PresigningConfig;
 use aws_sdk_s3::types::{CompletedMultipartUpload, CompletedPart};
 use std::time::Duration;
 
+use crate::archive::imohash;
 use crate::config::ArchiveConfig;
 use crate::error::{AppError, AppResult};
 
@@ -194,6 +195,93 @@ impl ArchiveStore {
             .await
             .map_err(|e| internal("CompleteMultipartUpload", &e))?;
         Ok(parts.len())
+    }
+
+    /// The stored object's size in bytes, or `None` when no object sits at `key`.
+    pub async fn object_size(&self, key: &str) -> AppResult<Option<i64>> {
+        match self
+            .client
+            .head_object()
+            .bucket(&self.bucket)
+            .key(key)
+            .send()
+            .await
+        {
+            Ok(head) => head
+                .content_length()
+                .map(Some)
+                .ok_or_else(|| AppError::Internal("HeadObject answered no size".to_string())),
+            Err(e)
+                if e.as_service_error().is_some_and(
+                    aws_sdk_s3::operation::head_object::HeadObjectError::is_not_found,
+                ) =>
+            {
+                Ok(None)
+            }
+            Err(e) => Err(internal("HeadObject", &e)),
+        }
+    }
+
+    /// `len` bytes of the object at `key`, starting at `start`.
+    pub async fn get_range(&self, key: &str, start: u64, len: u64) -> AppResult<Vec<u8>> {
+        let got = self
+            .client
+            .get_object()
+            .bucket(&self.bucket)
+            .key(key)
+            .range(format!("bytes={start}-{}", start + len - 1))
+            .send()
+            .await
+            .map_err(|e| internal("GetObject", &e))?;
+        let data = got
+            .body
+            .collect()
+            .await
+            .map_err(|e| internal("GetObject body", &e))?
+            .into_bytes();
+        if data.len() as u64 != len {
+            return Err(AppError::Internal(format!(
+                "GetObject answered {} bytes for a {len} byte range",
+                data.len()
+            )));
+        }
+        Ok(data.to_vec())
+    }
+
+    /// Remove an object, tolerating one that is already gone. Verification cleanup
+    /// only: no route exposes deletion.
+    pub async fn delete_object(&self, key: &str) {
+        if let Err(e) = self
+            .client
+            .delete_object()
+            .bucket(&self.bucket)
+            .key(key)
+            .send()
+            .await
+        {
+            tracing::debug!(key, "DeleteObject: {}", DisplayErrorContext(&e));
+        }
+    }
+
+    /// The imohash of the stored object, computed the way a device computes it:
+    /// whole under the sampling threshold, three windows above it.
+    pub async fn computed_imohash(&self, key: &str, size: i64) -> AppResult<String> {
+        let size = u64::try_from(size)
+            .map_err(|_| AppError::Internal(format!("Cannot hash a {size} byte object")))?;
+        if size < imohash::SAMPLE_THRESHOLD {
+            let data = self.get_range(key, 0, size).await?;
+            return Ok(imohash::hash_whole(&data));
+        }
+        let mut samples = Vec::with_capacity(3);
+        for (start, len) in imohash::sample_windows(size) {
+            samples.push(self.get_range(key, start, len).await?);
+        }
+        Ok(imohash::hash_sampled(
+            size,
+            &samples[0],
+            &samples[1],
+            &samples[2],
+        ))
     }
 
     /// Every multipart upload open under this store's prefix.

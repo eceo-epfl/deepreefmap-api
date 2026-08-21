@@ -82,6 +82,9 @@ moka = { version = "0.12.16", features = ["future"] }
 aws-config = { version = "1.10", default-features = false }
 aws-sdk-s3 = "1.142"
 
+# Server-side imohash verification, matching the desktop app's Python package
+murmur3 = "0.5"
+
 # Rate limiting on the unauthenticated enrolment endpoint. Default features are off
 # because tower_governor 0.8 defaults to tonic, and only axum is served here.
 tower_governor = { version = "0.8", default-features = false, features = ["axum"] }

@@ -3995,7 +3995,7 @@
     },
     "/archive/{object_id}/complete": {
       "post": {
-        "description": "S3 checked every part against the `ETag` it answered as the part arrived, so an\nassembly it accepts is the bytes the client sent.",
+        "description": "S3 checked every part against the `ETag` it answered as the part arrived, so an\nassembly it accepts is the bytes the client sent. Whether those bytes are the\ncontent the client claimed is checked here: the stored size must match the\ninitiated one, and the imohash re-computed from the stored object must match the\nclaimed hash, before the object counts as `complete`. A mismatch deletes the\nobject, fails the row and answers 409, so a wrong upload can never poison a\ncontent-addressed key another device would dedup against.",
         "operationId": "complete",
         "parameters": [
           {
@@ -4028,19 +4028,19 @@
                 }
               }
             },
-            "description": "Parts assembled into the object"
+            "description": "Parts assembled and verified against the claimed hash"
           },
           "404": {
             "description": "No such object"
           },
           "409": {
-            "description": "The object is not pending"
+            "description": "The object is not pending, or its content does not match the claimed size or hash"
           },
           "503": {
             "description": "The archive is not configured"
           }
         },
-        "summary": "Assemble the uploaded parts into the finished object.",
+        "summary": "Assemble the uploaded parts into the finished object and verify them.",
         "tags": [
           "archive"
         ]

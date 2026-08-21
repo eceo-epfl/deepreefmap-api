@@ -488,10 +488,10 @@ fn sha256_hex_of(bytes: &[u8]) -> String {
     format!("{:x}", sha2::Sha256::digest(bytes))
 }
 
-/// A 32-hex identity for test content. Stands in for the imohash a device computes:
-/// the server treats the value as an opaque label, so only its shape matters here.
+/// The imohash a device would compute for this content, which `complete` re-computes
+/// from the stored object and refuses to mismatch.
 fn content_hash_of(bytes: &[u8]) -> String {
-    sha256_hex_of(bytes)[..32].to_string()
+    deepreefmap_api::archive::imohash::hash_bytes(bytes)
 }
 
 /// Bytes that differ per offset, so a part uploaded to the wrong slot cannot hash right.
@@ -712,4 +712,170 @@ async fn test_public_endpoint_signs_client_urls() {
         .await
         .expect("the body reads");
     assert_eq!(sha256_hex_of(&fetched), sha256_hex_of(&content));
+}
+
+/// Wrong bytes under a claimed hash are refused at `complete`: the object is
+/// deleted, the row fails, and the content stays unarchived, so one bad upload
+/// cannot poison the content-addressed key every other device dedups against.
+#[tokio::test]
+async fn test_complete_refuses_content_that_is_not_the_claimed_hash() {
+    let Some(archive_config) = s3_archive_config() else {
+        eprintln!("skipping: S3_URL/S3_BUCKET_ID/S3_ACCESS_KEY/S3_SECRET_KEY not set");
+        return;
+    };
+    let store = deepreefmap_api::archive::store::ArchiveStore::new(&archive_config);
+    let db = setup_test_db().await;
+    let config = Config {
+        archive: Some(archive_config),
+        ..test_config()
+    };
+    let app = build_test_app_with_config(db.clone(), config);
+    let code = seed_connect_code(&db, "alice").await;
+    let token = enrol_device(&app, &code, "Field laptop").await;
+    let client = reqwest::Client::new();
+
+    let real = patterned_bytes(1024 * 1024);
+    let claimed_hash = content_hash_of(&real);
+    let wrong = vec![0xAB_u8; real.len()];
+
+    let (status, body) = post_json(
+        &app,
+        "/api/archive/initiate",
+        &serde_json::json!({ "content_hash": claimed_hash, "size_bytes": real.len(), "kind": "video" }),
+        Some(&token),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    let object_id = body["object_id"].as_str().unwrap().to_string();
+
+    upload_parts(&client, &body, &wrong).await;
+    let (status, body) = post_json(
+        &app,
+        &format!("/api/archive/{object_id}/complete"),
+        &serde_json::json!({ "parts": [] }),
+        Some(&token),
+    )
+    .await;
+    assert_eq!(status, 409, "{body}");
+    let error = body["error"].as_str().unwrap();
+    assert!(
+        error.contains("hashes to"),
+        "the refusal names the mismatch: {error}"
+    );
+    assert_eq!(archived_status(&app, &claimed_hash, &token).await, "failed");
+    let failure: String = one_value(
+        &db,
+        &format!("SELECT failure FROM stored_object WHERE content_hash = '{claimed_hash}'"),
+    )
+    .await;
+    assert!(failure.contains("hashes to"), "{failure}");
+
+    let key = deepreefmap_api::archive::keys::video_key(&store.prefix, &claimed_hash);
+    assert_eq!(
+        store.object_size(&key).await.unwrap(),
+        None,
+        "nothing wrong sits at the content-addressed key"
+    );
+
+    // The content is not archived: a device holding the real file starts over.
+    let (status, body) = post_json(
+        &app,
+        "/api/archive/initiate",
+        &serde_json::json!({ "content_hash": claimed_hash, "size_bytes": real.len(), "kind": "video" }),
+        Some(&token),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(body["status"], "pending");
+}
+
+/// Fewer bytes than initiated fail the size check before any hashing.
+#[tokio::test]
+async fn test_complete_refuses_a_short_upload() {
+    let Some(archive_config) = s3_archive_config() else {
+        eprintln!("skipping: S3_URL/S3_BUCKET_ID/S3_ACCESS_KEY/S3_SECRET_KEY not set");
+        return;
+    };
+    let db = setup_test_db().await;
+    let config = Config {
+        archive: Some(archive_config),
+        ..test_config()
+    };
+    let app = build_test_app_with_config(db.clone(), config);
+    let code = seed_connect_code(&db, "alice").await;
+    let token = enrol_device(&app, &code, "Field laptop").await;
+    let client = reqwest::Client::new();
+
+    let content = patterned_bytes(300 * 1024);
+    let claimed_size = content.len() + 4096;
+
+    let (status, body) = post_json(
+        &app,
+        "/api/archive/initiate",
+        &serde_json::json!({ "content_hash": content_hash_of(&content), "size_bytes": claimed_size, "kind": "video" }),
+        Some(&token),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    let object_id = body["object_id"].as_str().unwrap().to_string();
+
+    upload_parts(&client, &body, &content).await;
+    let (status, body) = post_json(
+        &app,
+        &format!("/api/archive/{object_id}/complete"),
+        &serde_json::json!({ "parts": [] }),
+        Some(&token),
+    )
+    .await;
+    assert_eq!(status, 409, "{body}");
+    let error = body["error"].as_str().unwrap();
+    assert!(
+        error.contains("bytes"),
+        "the refusal names the sizes: {error}"
+    );
+}
+
+/// A file under the sampling threshold verifies down the whole-file path.
+#[tokio::test]
+async fn test_complete_verifies_small_objects_whole() {
+    let Some(archive_config) = s3_archive_config() else {
+        eprintln!("skipping: S3_URL/S3_BUCKET_ID/S3_ACCESS_KEY/S3_SECRET_KEY not set");
+        return;
+    };
+    let db = setup_test_db().await;
+    let config = Config {
+        archive: Some(archive_config),
+        ..test_config()
+    };
+    let app = build_test_app_with_config(db.clone(), config);
+    let code = seed_connect_code(&db, "alice").await;
+    let token = enrol_device(&app, &code, "Field laptop").await;
+    let client = reqwest::Client::new();
+
+    let content = patterned_bytes(64 * 1024);
+    let content_hash = content_hash_of(&content);
+
+    let (status, body) = post_json(
+        &app,
+        "/api/archive/initiate",
+        &serde_json::json!({ "content_hash": content_hash, "size_bytes": content.len(), "kind": "video" }),
+        Some(&token),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    let object_id = body["object_id"].as_str().unwrap().to_string();
+
+    upload_parts(&client, &body, &content).await;
+    let (status, body) = post_json(
+        &app,
+        &format!("/api/archive/{object_id}/complete"),
+        &serde_json::json!({ "parts": [] }),
+        Some(&token),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(
+        archived_status(&app, &content_hash, &token).await,
+        "complete"
+    );
 }
