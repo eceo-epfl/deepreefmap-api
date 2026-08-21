@@ -9,10 +9,10 @@ use common::*;
 async fn test_erase_subject_scrubs_the_audit_columns() {
     let db = setup_test_db().await;
     let device_app = build_test_app(db.clone());
-    let alice_code = seed_connect_code(&db, "alice").await;
-    enrol_device(&device_app, &alice_code, "Alice laptop").await;
-    let bob_code = seed_connect_code(&db, "bob").await;
-    enrol_device(&device_app, &bob_code, "Bob laptop").await;
+    let alice_code = seed_connect_code(&db, "alice", "Alice laptop").await;
+    enrol_device(&device_app, &alice_code).await;
+    let bob_code = seed_connect_code(&db, "bob", "Bob laptop").await;
+    enrol_device(&device_app, &bob_code).await;
     exec(
         &db,
         "INSERT INTO stored_object (id, content_hash, size_bytes, kind, status, s3_key, uploaded_by) \
@@ -69,8 +69,8 @@ async fn test_erase_subject_is_admin_only() {
     assert_eq!(status, 403, "{answer}");
 
     let device_app = build_test_app(db.clone());
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&device_app, &code, "Field laptop").await;
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&device_app, &code).await;
     let (status, _) = post(&device_app, "/api/admin/erase-subject", &body, Some(&token)).await;
     assert_eq!(status, 403);
     let (status, _) = post(&device_app, "/api/admin/erase-subject", &body, None).await;
@@ -91,13 +91,13 @@ async fn test_erase_subject_rejects_an_empty_subject() {
     assert_eq!(status, 400);
 }
 
-async fn seed_code_aged(db: &sea_orm::DatabaseConnection, note: &str, used: &str, expires: &str) {
+async fn seed_code_aged(db: &sea_orm::DatabaseConnection, name: &str, used: &str, expires: &str) {
     exec(
         db,
         &format!(
             "INSERT INTO connect_code \
-             (id, code_hash, created_by, note, expires_at, used_at, created_at) \
-             VALUES (gen_random_uuid(), '{note}', 'alice', '{note}', {expires}, {used}, NOW())"
+             (id, code_hash, created_by, device_name, expires_at, used_at, created_at) \
+             VALUES (gen_random_uuid(), '{name}', 'alice', '{name}', {expires}, {used}, NOW())"
         ),
     )
     .await;
@@ -128,19 +128,19 @@ async fn test_minting_deletes_long_dead_connect_codes() {
     let (status, body) = post(
         &app,
         "/api/devices/connect-codes",
-        &serde_json::json!({ "note": "fresh" }),
+        &serde_json::json!({ "device_name": "fresh" }),
         None,
     )
     .await;
     assert_eq!(status, 200, "{body}");
 
     let kept: Vec<String> = {
-        let notes: String = one_value(
+        let names: String = one_value(
             &db,
-            "SELECT STRING_AGG(note, ',' ORDER BY note) FROM connect_code",
+            "SELECT STRING_AGG(device_name, ',' ORDER BY device_name) FROM connect_code",
         )
         .await;
-        notes.split(',').map(String::from).collect()
+        names.split(',').map(String::from).collect()
     };
     assert_eq!(kept, ["fresh", "live", "recently-used"]);
 }

@@ -13,13 +13,13 @@ use deepreefmap_api::common::auth::Role;
 async fn test_connect_code_is_single_use() {
     let db = setup_test_db().await;
     let app = build_test_app(db.clone());
-    let code = seed_connect_code(&db, "alice").await;
+    let code = seed_connect_code(&db, "alice", "Field laptop 1").await;
 
     let (status, first) = post_json(
         &app,
         "/api/enrol",
         &serde_json::json!({
-            "code": code, "device_name": "Field laptop 1",
+            "code": code,
             "platform": "linux", "gui_version": "0.9.0",
             "library_version": "0.14.2",
         }),
@@ -28,7 +28,7 @@ async fn test_connect_code_is_single_use() {
     .await;
     assert_eq!(status, 200, "{first}");
     assert!(first["token"].as_str().unwrap().starts_with("drmd_"));
-    // The device is its own identity, not a delegation of the minter's.
+    // The name comes from the code, minted in the portal.
     assert_eq!(first["device_name"], "Field laptop 1");
     assert!(first["user_sub"].is_null(), "{first}");
 
@@ -38,7 +38,7 @@ async fn test_connect_code_is_single_use() {
     let (status, second) = post_json(
         &app,
         "/api/enrol",
-        &serde_json::json!({ "code": code, "device_name": "Field laptop 2" }),
+        &serde_json::json!({ "code": code }),
         None,
     )
     .await;
@@ -50,21 +50,18 @@ async fn test_connect_code_is_single_use() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_two_enrolments_racing_one_code_enrol_one_device() {
     let db = setup_test_db().await;
-    let code = seed_connect_code(&db, "alice").await;
+    let code = seed_connect_code(&db, "alice", "Racing laptop").await;
 
     let first = build_test_app(db.clone());
     let second = build_test_app(db.clone());
-    let body = |name: &str| {
-        serde_json::json!({
-            "code": code, "device_name": name,
-            "platform": "linux", "gui_version": "0.9.0",
-        })
-    };
-    let (one, two) = (body("Laptop 1"), body("Laptop 2"));
+    let body = serde_json::json!({
+        "code": code,
+        "platform": "linux", "gui_version": "0.9.0",
+    });
 
     let (left, right) = tokio::join!(
-        post_json(&first, "/api/enrol", &one, None),
-        post_json(&second, "/api/enrol", &two, None),
+        post_json(&first, "/api/enrol", &body, None),
+        post_json(&second, "/api/enrol", &body, None),
     );
 
     let mut codes = [left.0, right.0];
@@ -91,7 +88,8 @@ async fn test_enrol_accepts_wrapper_and_bare_secret() {
     exec(
         &db,
         &format!(
-            "INSERT INTO connect_code (id, code_hash, created_by, note, expires_at, created_at) \
+            "INSERT INTO connect_code \
+             (id, code_hash, created_by, device_name, expires_at, created_at) \
              VALUES (gen_random_uuid(), '{}', 'alice', 'test', NOW() + INTERVAL '1 hour', NOW())",
             minted.code_hash
         ),
@@ -101,7 +99,7 @@ async fn test_enrol_accepts_wrapper_and_bare_secret() {
     let (status, body) = post_json(
         &app,
         "/api/enrol",
-        &serde_json::json!({ "code": minted.code, "device_name": "Pasted whole" }),
+        &serde_json::json!({ "code": minted.code }),
         None,
     )
     .await;
@@ -118,7 +116,8 @@ async fn test_enrol_rejects_expired_code() {
     exec(
         &db,
         &format!(
-            "INSERT INTO connect_code (id, code_hash, created_by, note, expires_at, created_at) \
+            "INSERT INTO connect_code \
+             (id, code_hash, created_by, device_name, expires_at, created_at) \
              VALUES (gen_random_uuid(), '{hash}', 'alice', 'test', \
              NOW() - INTERVAL '1 minute', NOW() - INTERVAL '1 hour')"
         ),
@@ -128,7 +127,7 @@ async fn test_enrol_rejects_expired_code() {
     let (status, _) = post_json(
         &app,
         "/api/enrol",
-        &serde_json::json!({ "code": secret, "device_name": "Too late" }),
+        &serde_json::json!({ "code": secret }),
         None,
     )
     .await;
@@ -144,7 +143,7 @@ async fn test_enrol_rejects_malformed_code() {
         let (status, body) = post_json(
             &app,
             "/api/enrol",
-            &serde_json::json!({ "code": code, "device_name": "Chancer" }),
+            &serde_json::json!({ "code": code }),
             None,
         )
         .await;
@@ -158,20 +157,25 @@ async fn test_enrol_rejects_malformed_code() {
 }
 
 #[tokio::test]
-async fn test_enrol_requires_device_name() {
+async fn test_code_with_blank_name_enrols_with_a_fallback() {
     let db = setup_test_db().await;
     let app = build_test_app(db.clone());
-    let code = seed_connect_code(&db, "alice").await;
+    let code = seed_connect_code(&db, "alice", "   ").await;
 
-    let (status, _) = post_json(
+    let (status, body) = post_json(
         &app,
         "/api/enrol",
-        &serde_json::json!({ "code": code, "device_name": "   " }),
+        &serde_json::json!({ "code": code }),
         None,
     )
     .await;
-    // A revoke list of blank rows is unusable.
-    assert_eq!(status, 400);
+    // Codes minted before names existed carry a blank; the device still needs one
+    // a revoke list can show.
+    assert_eq!(status, 200, "{body}");
+    let name = body["device_name"].as_str().unwrap();
+    assert!(name.starts_with("Device "), "{name}");
+    let device_id = body["device_id"].as_str().unwrap();
+    assert_eq!(name, format!("Device {}", &device_id[..8]));
 }
 
 #[tokio::test]
@@ -228,8 +232,8 @@ async fn test_invalid_bearer_token_refused() {
 async fn test_revoked_device_loses_access() {
     let db = setup_test_db().await;
     let (app, state) = build_test_app_with_state(db.clone());
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Lost laptop").await;
+    let code = seed_connect_code(&db, "alice", "Lost laptop").await;
+    let token = enrol_device(&app, &code).await;
 
     let (status, _) = get_json(&app, "/api/me", Some(&token)).await;
     assert_eq!(status, 200);
@@ -254,14 +258,14 @@ async fn test_revoked_device_loses_access() {
 async fn test_device_cannot_mint_or_revoke() {
     let db = setup_test_db().await;
     let app = build_test_app(db.clone());
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Field laptop").await;
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&app, &code).await;
 
     // Otherwise one leaked token mints an endless supply of credentials.
     let (status, body) = post_json(
         &app,
         "/api/devices/connect-codes",
-        &serde_json::json!({ "note": "trying my luck" }),
+        &serde_json::json!({ "device_name": "trying my luck" }),
         Some(&token),
     )
     .await;
@@ -299,8 +303,8 @@ async fn test_device_cannot_mint_or_revoke() {
 async fn test_enrolled_by_records_the_minter_without_granting_identity() {
     let db = setup_test_db().await;
     let app = build_test_app(db.clone());
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Field laptop").await;
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&app, &code).await;
 
     let enrolled_by: String = one_value(&db, "SELECT enrolled_by FROM device").await;
     assert_eq!(enrolled_by, "alice");
@@ -318,8 +322,8 @@ async fn test_enrolled_by_records_the_minter_without_granting_identity() {
 async fn test_device_refused_on_crud_routes() {
     let db = setup_test_db().await;
     let app = build_test_app(db.clone());
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Field laptop").await;
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&app, &code).await;
 
     for uri in [
         "/api/sites",
@@ -351,8 +355,8 @@ async fn test_device_refused_on_crud_routes() {
 async fn test_rename_device_allows_the_enroller_and_an_admin() {
     let db = setup_test_db().await;
     let app = build_test_app(db.clone());
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Typo laptp").await;
+    let code = seed_connect_code(&db, "alice", "Typo laptp").await;
+    let token = enrol_device(&app, &code).await;
     let device_id: String = one_value(&db, "SELECT id::text FROM device").await;
 
     let alice = build_test_app_as_human(db.clone(), "alice", vec![Role::Member]);
@@ -384,8 +388,8 @@ async fn test_rename_device_allows_the_enroller_and_an_admin() {
 async fn test_rename_device_rejects_another_member_and_a_blank_name() {
     let db = setup_test_db().await;
     let app = build_test_app(db.clone());
-    let code = seed_connect_code(&db, "alice").await;
-    enrol_device(&app, &code, "Alice laptop").await;
+    let code = seed_connect_code(&db, "alice", "Alice laptop").await;
+    enrol_device(&app, &code).await;
     let device_id: String = one_value(&db, "SELECT id::text FROM device").await;
 
     let bob = build_test_app_as_human(db.clone(), "bob", vec![Role::Member]);
@@ -417,8 +421,8 @@ async fn test_device_list_hides_secrets() {
     let db = setup_test_db().await;
     let app = build_test_app(db.clone());
     let admin = build_test_app_as_admin(db.clone());
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Field laptop").await;
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&app, &code).await;
 
     // Returned once at enrolment; no read path may hand it back.
     let (status, listed) = get_json(&admin, "/api/devices", None).await;
@@ -460,7 +464,7 @@ async fn test_enrol_answers_over_a_real_socket_with_rate_limiting() {
             .unwrap();
     });
 
-    let body = format!(r#"{{"code":"{}","device_name":"probe"}}"#, "0".repeat(64));
+    let body = format!(r#"{{"code":"{}"}}"#, "0".repeat(64));
     let response = reqwest_post(&format!("http://{addr}/api/enrol"), &body).await;
 
     server.abort();

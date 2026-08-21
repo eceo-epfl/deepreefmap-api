@@ -84,8 +84,8 @@ fn initiate_video(content_hash: &str) -> serde_json::Value {
 async fn test_every_archive_route_answers_503_when_unconfigured() {
     let db = setup_test_db().await;
     let app = build_test_app(db.clone());
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Field laptop").await;
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&app, &code).await;
 
     let (status, body) = post(
         &app,
@@ -178,8 +178,8 @@ async fn test_both_principals_may_initiate_and_download() {
     seed_complete_object(&db, HASH).await;
 
     let device_app = build_test_app_with_config(db.clone(), dead_archive_config());
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&device_app, &code, "Field laptop").await;
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&device_app, &code).await;
     let (status, body) = post_json(
         &device_app,
         "/api/archive/initiate",
@@ -225,8 +225,8 @@ async fn test_dedup_short_circuits_without_s3() {
     let db = setup_test_db().await;
     let object_id = seed_complete_object(&db, HASH).await;
     let app = build_test_app_with_config(db.clone(), dead_archive_config());
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Field laptop").await;
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&app, &code).await;
 
     let (status, body) = post_json(
         &app,
@@ -260,8 +260,8 @@ async fn test_artifact_initiate_links_the_run() {
     let object_id = seed_complete_object(&db, HASH).await;
     seed_run(&db, "33333333-3333-4333-8333-333333333333").await;
     let app = build_test_app_with_config(db.clone(), dead_archive_config());
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Field laptop").await;
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&app, &code).await;
 
     let (status, body) = post_json(
         &app,
@@ -295,8 +295,8 @@ async fn test_probe_answers_many_hashes_in_one_request() {
     seed_object(&db, &pending, "pending").await;
     let unknown = HASH.replace('0', "9");
     let app = build_test_app_with_config(db.clone(), dead_archive_config());
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Field laptop").await;
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&app, &code).await;
 
     let (status, body) = post_json(
         &app,
@@ -340,8 +340,8 @@ async fn test_runs_probe_counts_artifact_states() {
     )
     .await;
     let app = build_test_app_with_config(db.clone(), dead_archive_config());
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Field laptop").await;
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&app, &code).await;
 
     let bare_run = uuid::Uuid::new_v4();
     let (status, body) = post_json(
@@ -364,8 +364,8 @@ async fn test_runs_probe_counts_artifact_states() {
 async fn test_probes_reject_oversized_and_malformed_requests() {
     let db = setup_test_db().await;
     let app = build_test_app_with_config(db.clone(), dead_archive_config());
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Field laptop").await;
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&app, &code).await;
 
     let (status, body) = post(
         &app,
@@ -399,8 +399,8 @@ async fn test_probes_reject_oversized_and_malformed_requests() {
 async fn test_initiate_rejects_malformed_requests() {
     let db = setup_test_db().await;
     let app = build_test_app_with_config(db.clone(), dead_archive_config());
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Field laptop").await;
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&app, &code).await;
 
     for (name, body) in [
         ("uppercase hash", initiate_video(&HASH.to_uppercase())),
@@ -558,8 +558,8 @@ async fn test_end_to_end_upload_and_download() {
         ..test_config()
     };
     let app = build_test_app_with_config(db.clone(), config);
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Field laptop").await;
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&app, &code).await;
     let client = reqwest::Client::new();
 
     // Two parts: one full 32 MiB, one small remainder.
@@ -653,8 +653,8 @@ async fn test_public_endpoint_signs_client_urls() {
         ..test_config()
     };
     let app = build_test_app_with_config(db.clone(), config);
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Field laptop").await;
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&app, &code).await;
     let client = reqwest::Client::new();
 
     let content = patterned_bytes(1024 * 1024);
@@ -730,8 +730,8 @@ async fn test_complete_refuses_content_that_is_not_the_claimed_hash() {
         ..test_config()
     };
     let app = build_test_app_with_config(db.clone(), config);
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Field laptop").await;
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&app, &code).await;
     let client = reqwest::Client::new();
 
     let real = patterned_bytes(1024 * 1024);
@@ -802,8 +802,8 @@ async fn test_complete_refuses_a_short_upload() {
         ..test_config()
     };
     let app = build_test_app_with_config(db.clone(), config);
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Field laptop").await;
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&app, &code).await;
     let client = reqwest::Client::new();
 
     let content = patterned_bytes(300 * 1024);
@@ -848,8 +848,8 @@ async fn test_complete_verifies_small_objects_whole() {
         ..test_config()
     };
     let app = build_test_app_with_config(db.clone(), config);
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Field laptop").await;
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&app, &code).await;
     let client = reqwest::Client::new();
 
     let content = patterned_bytes(64 * 1024);

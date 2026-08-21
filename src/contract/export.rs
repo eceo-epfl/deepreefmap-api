@@ -12,7 +12,7 @@ use serde_json::{Value, json};
 
 use crate::common::AppState;
 use crate::config::Config;
-use crate::contract::vocab;
+use crate::contract::{preset_schema, vocab};
 use crate::routes::private::sync::schema::{self, CONTRACT_VERSION};
 
 /// Where the artefacts live, relative to the repository root.
@@ -26,9 +26,9 @@ pub struct Artefact {
 
 /// Every artefact, in the order the exporter writes them.
 ///
-/// Three, and each answers a different question: `openapi.json` what the routes are,
+/// Four, and each answers a different question: `openapi.json` what the routes are,
 /// `sync-contract.json` what a client may push, `vocabularies.json` what a coded value
-/// may say and what it means.
+/// may say and what it means, `preset-schema.json` what a preset setting accepts.
 #[must_use]
 pub fn artefacts() -> Vec<Artefact> {
     vec![
@@ -43,6 +43,10 @@ pub fn artefacts() -> Vec<Artefact> {
         Artefact {
             path: "vocabularies.json".to_string(),
             body: pretty(&vocabularies()),
+        },
+        Artefact {
+            path: "preset-schema.json".to_string(),
+            body: pretty(&preset_schema_document()),
         },
     ]
 }
@@ -180,6 +184,21 @@ fn vocabularies() -> Value {
     })
 }
 
+/// The preset field table and model catalogue the console builds its form from.
+fn preset_schema_document() -> Value {
+    json!({
+        "preset_schema_version": preset_schema::PRESET_SCHEMA_VERSION,
+        "fields": preset_schema::FIELDS,
+        "choices": {
+            "segmentation": preset_schema::SEGMENTATION_MODELS,
+            "mapping": preset_schema::MAPPING_MODELS,
+            "camera": preset_schema::CAMERA_PROFILES,
+            "resolution": preset_schema::RESOLUTION_PRESETS,
+        },
+        "unpublishable_keys": preset_schema::UNPUBLISHABLE_KEYS,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -283,12 +302,17 @@ mod tests {
     }
 
     #[test]
-    fn test_artefacts_are_the_three_published_files() {
+    fn test_artefacts_are_the_four_published_files() {
         let artefacts = artefacts();
         let paths: Vec<&str> = artefacts.iter().map(|a| a.path.as_str()).collect();
         assert_eq!(
             paths,
-            ["sync-contract.json", "openapi.json", "vocabularies.json"]
+            [
+                "sync-contract.json",
+                "openapi.json",
+                "vocabularies.json",
+                "preset-schema.json"
+            ]
         );
     }
 }

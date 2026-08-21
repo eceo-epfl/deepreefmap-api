@@ -256,8 +256,8 @@ async fn test_update_site_refuses_unknown_fields() {
 async fn test_push_still_accepts_server_stamped_columns() {
     let db = setup_test_db().await;
     let app = build_test_app(db.clone());
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Field laptop").await;
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&app, &code).await;
 
     let (status, body) = post_json(
         &app,

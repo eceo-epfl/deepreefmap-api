@@ -18,10 +18,9 @@ use crate::error::{AppError, AppResult};
 
 #[derive(Debug, serde::Deserialize, ToSchema)]
 pub struct MintConnectCodeRequest {
-    /// Label for the unredeemed code, so the operator knows who they handed it to.
-    /// Never attribution: the device names itself at enrolment.
-    #[serde(default)]
-    pub note: String,
+    /// The name the redeeming device takes, so a device's name has one origin: the
+    /// person minting the code names the installation they are about to enrol.
+    pub device_name: String,
 }
 
 #[derive(Debug, serde::Serialize, ToSchema)]
@@ -40,6 +39,7 @@ pub struct MintConnectCodeResponse {
     request_body = MintConnectCodeRequest,
     responses(
         (status = 200, description = "Code minted; shown to the operator once", body = MintConnectCodeResponse),
+        (status = 400, description = "Empty device name"),
         (status = 403, description = "Requires an interactive login"),
         (status = 500, description = "PUBLIC_BASE_URL is not configured"),
     ),
@@ -54,6 +54,13 @@ pub async fn mint_code(
     let operator = auth
         .human_subject()
         .ok_or_else(|| AppError::Forbidden("Devices cannot mint connect codes".to_string()))?;
+
+    let device_name = body.device_name.trim();
+    if device_name.is_empty() {
+        return Err(AppError::BadRequest(
+            "device_name must not be empty".to_string(),
+        ));
+    }
 
     // A code with no address cannot be pasted anywhere, and would look like it worked.
     let base_url = state.config.public_base_url.as_ref().ok_or_else(|| {
@@ -84,7 +91,7 @@ pub async fn mint_code(
         id: Set(Uuid::new_v4()),
         code_hash: Set(minted.code_hash),
         created_by: Set(Some(operator.to_string())),
-        note: Set(body.note),
+        device_name: Set(device_name.to_string()),
         expires_at: Set(expires_at),
         used_at: Set(None),
         used_by_device_id: Set(None),
@@ -215,5 +222,77 @@ pub async fn rename(
     Ok(Json(RenameDeviceResponse {
         device_id,
         name: name.to_string(),
+    }))
+}
+
+#[derive(Debug, serde::Deserialize, ToSchema)]
+pub struct AssignPresetRequest {
+    /// Null clears the assignment.
+    pub preset_id: Option<Uuid>,
+}
+
+#[derive(Debug, serde::Serialize, ToSchema)]
+pub struct AssignPresetResponse {
+    pub device_id: Uuid,
+    pub assigned_preset_id: Option<Uuid>,
+    pub assigned_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+/// Choose a device's default preset. Members may assign to their own, administrators
+/// to anyone's.
+///
+/// The assignment travels in the next heartbeat response, and the device reports the
+/// preset it actually runs under in the request after that, so `active_preset_*` on
+/// the device row says whether the assignment was acknowledged.
+#[utoipa::path(
+    post,
+    path = "/devices/{device_id}/assign-preset",
+    params(("device_id" = Uuid, Path, description = "Device to assign a preset to")),
+    request_body = AssignPresetRequest,
+    responses(
+        (status = 200, description = "Assignment stored", body = AssignPresetResponse),
+        (status = 403, description = "Not your device, or a device token"),
+        (status = 404, description = "No such device, or no such preset"),
+    ),
+    tag = "devices"
+)]
+pub async fn assign_preset(
+    State(state): State<AppState>,
+    axum::Extension(auth): axum::Extension<AuthContext>,
+    axum::extract::Path(device_id): axum::extract::Path<Uuid>,
+    Json(body): Json<AssignPresetRequest>,
+) -> AppResult<Json<AssignPresetResponse>> {
+    let found = device::Entity::find_by_id(device_id)
+        .one(&state.db)
+        .await?
+        .ok_or_else(|| AppError::NotFound("Device not found".to_string()))?;
+
+    authorise_device_admin(&auth, &found)?;
+
+    if let Some(preset_id) = body.preset_id {
+        let live = crate::routes::private::presets::Entity::find_by_id(preset_id)
+            .filter(crate::routes::private::presets::Column::DeletedAt.is_null())
+            .one(&state.db)
+            .await?;
+        if live.is_none() {
+            return Err(AppError::NotFound("Preset not found".to_string()));
+        }
+    }
+
+    let assigned_at = body.preset_id.map(|_| Utc::now());
+    let mut update: device::ActiveModel = found.into();
+    update.assigned_preset_id = Set(body.preset_id);
+    update.assigned_at = Set(assigned_at);
+    // A fresh assignment awaits a fresh acknowledgement, whatever was reported before.
+    update.active_preset_name = Set(None);
+    update.active_preset_version = Set(None);
+    update.active_preset_reported_at = Set(None);
+    update.update(&state.db).await?;
+
+    tracing::info!(%device_id, preset_id = ?body.preset_id, "Device preset assigned");
+    Ok(Json(AssignPresetResponse {
+        device_id,
+        assigned_preset_id: body.preset_id,
+        assigned_at,
     }))
 }

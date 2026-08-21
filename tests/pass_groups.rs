@@ -91,8 +91,8 @@ async fn test_pass_group_rejects_a_device() {
     let db = setup_test_db().await;
     let admin = build_test_app_as_admin(db.clone());
     let app = build_test_app(db.clone());
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Alice laptop").await;
+    let code = seed_connect_code(&db, "alice", "Alice laptop").await;
+    let token = enrol_device(&app, &code).await;
 
     let id = create_group(&admin, "2024 spring", "2024-04").await;
     let one = format!("/api/pass_groups/{id}");
@@ -129,8 +129,8 @@ async fn test_survey_group_survives_a_device_repush() {
     let db = setup_test_db().await;
     let admin = build_test_app_as_admin(db.clone());
     let app = build_test_app(db.clone());
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Alice laptop").await;
+    let code = seed_connect_code(&db, "alice", "Alice laptop").await;
+    let token = enrol_device(&app, &code).await;
 
     let pass = "11111111-1111-4111-8111-111111111111";
     let (status, body) = post_json(

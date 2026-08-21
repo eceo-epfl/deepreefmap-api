@@ -46,6 +46,24 @@ pub struct Model {
     /// When the device last reported on itself, so a stale profile reads as stale.
     #[crudcrate(exclude(create, update), sortable)]
     pub profile_reported_at: Option<chrono::DateTime<chrono::Utc>>,
+    /// Which `preset-schema.json` revision the installation understands, from its
+    /// heartbeat.
+    #[crudcrate(filterable, exclude(create, update))]
+    pub preset_schema_version: Option<i32>,
+    /// The server-chosen default preset, set through `/api/devices/{id}/assign-preset`
+    /// and delivered in the heartbeat response.
+    #[crudcrate(filterable, exclude(create, update))]
+    pub assigned_preset_id: Option<Uuid>,
+    #[crudcrate(exclude(create, update), sortable)]
+    pub assigned_at: Option<chrono::DateTime<chrono::Utc>>,
+    /// The preset the device says it runs under, from its heartbeat. Beside the
+    /// assignment, this is the acknowledgement.
+    #[crudcrate(exclude(create, update))]
+    pub active_preset_name: Option<String>,
+    #[crudcrate(exclude(create, update))]
+    pub active_preset_version: Option<i32>,
+    #[crudcrate(exclude(create, update), sortable)]
+    pub active_preset_reported_at: Option<chrono::DateTime<chrono::Utc>>,
     #[crudcrate(exclude(create, update), sortable, on_create = chrono::Utc::now())]
     pub created_at: chrono::DateTime<chrono::Utc>,
     #[crudcrate(exclude(create, update), sortable)]

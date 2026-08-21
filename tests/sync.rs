@@ -11,10 +11,10 @@ use common::*;
 
 /// Two devices enrolled by two people.
 async fn two_devices(app: &axum::Router, db: &sea_orm::DatabaseConnection) -> (String, String) {
-    let code_a = seed_connect_code(db, "alice").await;
-    let code_b = seed_connect_code(db, "bob").await;
-    let token_a = enrol_device(app, &code_a, "Alice laptop").await;
-    let token_b = enrol_device(app, &code_b, "Bob laptop").await;
+    let code_a = seed_connect_code(db, "alice", "Alice laptop").await;
+    let code_b = seed_connect_code(db, "bob", "Bob laptop").await;
+    let token_a = enrol_device(app, &code_a).await;
+    let token_b = enrol_device(app, &code_b).await;
     (token_a, token_b)
 }
 
@@ -99,8 +99,8 @@ async fn test_push_then_pull_on_another_device() {
 async fn test_conflict_resolves_last_write_wins_within_one_origin() {
     let db = setup_test_db().await;
     let app = build_test_app(db.clone());
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Alice laptop").await;
+    let code = seed_connect_code(&db, "alice", "Alice laptop").await;
+    let token = enrol_device(&app, &code).await;
 
     let transect_id = "22222222-2222-4222-8222-222222222222";
     post_json(
@@ -223,8 +223,8 @@ async fn test_delete_propagates_as_tombstone() {
 async fn test_push_whole_survey_in_one_call() {
     let db = setup_test_db().await;
     let app = build_test_app(db.clone());
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Field laptop").await;
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&app, &code).await;
 
     let site = "55555555-5555-4555-8555-555555555555";
     let campaign = "66666666-6666-4666-8666-666666666666";
@@ -353,8 +353,8 @@ async fn test_push_whole_survey_in_one_call() {
 async fn test_push_child_without_parent_conflicts() {
     let db = setup_test_db().await;
     let app = build_test_app(db.clone());
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Field laptop").await;
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&app, &code).await;
 
     let orphan = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
     let good = "12341234-1234-4234-8234-123412341234";
@@ -409,8 +409,8 @@ async fn test_push_child_without_parent_conflicts() {
 async fn test_a_malformed_document_is_refused_whole_and_a_bad_row_alone() {
     let db = setup_test_db().await;
     let app = build_test_app(db.clone());
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Field laptop").await;
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&app, &code).await;
 
     let valid = transect_row(
         "ffffffff-ffff-4fff-8fff-ffffffffffff",
@@ -427,9 +427,10 @@ async fn test_a_malformed_document_is_refused_whole_and_a_bad_row_alone() {
     )
     .await;
     assert_eq!(status, 400, "{body}");
+    // Only the migration's seeded preset comes back, never the pushed transect.
     let (_, pulled) = get_json(&app, "/api/sync/pull", Some(&token)).await;
     assert!(
-        pulled["sections"].as_object().unwrap().is_empty(),
+        pulled["sections"]["transects"].is_null(),
         "partial write: {pulled}"
     );
 
@@ -490,8 +491,8 @@ async fn test_a_malformed_document_is_refused_whole_and_a_bad_row_alone() {
 async fn test_push_pass_without_direction_stores_null() {
     let db = setup_test_db().await;
     let app = build_test_app(db.clone());
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Field laptop").await;
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&app, &code).await;
 
     let pass = "30303030-3030-4030-8030-303030303030";
     let (status, body) = post_json(
@@ -521,8 +522,8 @@ async fn test_push_pass_without_direction_stores_null() {
 async fn test_push_ignores_client_server_seq() {
     let db = setup_test_db().await;
     let app = build_test_app(db.clone());
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Field laptop").await;
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&app, &code).await;
 
     let mut row = transect_row(
         "12121212-1212-4212-8212-121212121212",
@@ -557,8 +558,8 @@ async fn test_push_ignores_client_server_seq() {
 async fn test_push_from_a_device_attributes_the_device_only() {
     let db = setup_test_db().await;
     let app = build_test_app(db.clone());
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Field laptop 1").await;
+    let code = seed_connect_code(&db, "alice", "Field laptop 1").await;
+    let token = enrol_device(&app, &code).await;
 
     let transect_id = "77777777-7777-4777-8777-777777777777";
     let (status, body) = post_json(
@@ -637,8 +638,8 @@ async fn test_paged_pull_returns_every_row_across_sections() {
     seed_campaign(&db, campaign_id, "2025_10_eritrea").await;
 
     // A laptop walks the whole feed two rows at a time.
-    let code_b = seed_connect_code(&db, "bob").await;
-    let token_b = enrol_device(&app, &code_b, "Bob laptop").await;
+    let code_b = seed_connect_code(&db, "bob", "Bob laptop").await;
+    let token_b = enrol_device(&app, &code_b).await;
 
     let mut cursor = 0i64;
     let mut seen_sites = std::collections::HashSet::new();
@@ -725,8 +726,8 @@ async fn test_unique_collision_refuses_one_row_not_the_document() {
 async fn test_pull_serves_presets_to_a_device() {
     let db = setup_test_db().await;
     let app = build_test_app(db.clone());
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Field laptop").await;
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&app, &code).await;
 
     // Authored in the console, like every preset.
     let admin = build_test_app_as_admin(db.clone());
@@ -750,12 +751,16 @@ async fn test_pull_serves_presets_to_a_device() {
     let presets = pulled["sections"]["presets"]
         .as_array()
         .expect("presets section");
-    assert_eq!(presets.len(), 1, "{pulled}");
-    assert_eq!(presets[0]["id"], created["id"]);
-    assert_eq!(presets[0]["name"], "eceo-default");
-    assert_eq!(presets[0]["version"], 2);
+    // The migration seeds one preset, so the pull carries it alongside ours.
+    assert_eq!(presets.len(), 2, "{pulled}");
+    let ours = presets
+        .iter()
+        .find(|p| p["id"] == created["id"])
+        .expect("the created preset is served");
+    assert_eq!(ours["name"], "eceo-default");
+    assert_eq!(ours["version"], 2);
     // The settings document round-trips exactly, nested values included.
-    assert_eq!(presets[0]["settings"], settings, "{pulled}");
+    assert_eq!(ours["settings"], settings, "{pulled}");
 }
 
 /// `presets` is pull only: a device naming the section has every row refused, and the
@@ -764,8 +769,8 @@ async fn test_pull_serves_presets_to_a_device() {
 async fn test_push_refuses_the_presets_section() {
     let db = setup_test_db().await;
     let app = build_test_app(db.clone());
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Field laptop").await;
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&app, &code).await;
 
     let preset = "40404040-4040-4040-8040-404040404040";
     let transect = "50505050-5050-4050-8050-505050505050";
@@ -788,16 +793,17 @@ async fn test_push_refuses_the_presets_section() {
     assert_eq!(body["sections"]["presets"]["refused"][0], preset, "{body}");
     assert_eq!(body["sections"]["transects"]["applied"], 1, "{body}");
 
+    // Only the migration's seeded preset remains.
     let presets: i64 = one_value(&db, "SELECT COUNT(*)::BIGINT FROM preset").await;
-    assert_eq!(presets, 0, "a device authored a preset");
+    assert_eq!(presets, 1, "a device authored a preset");
 }
 
 #[tokio::test]
 async fn test_push_clamps_a_stamp_from_the_future() {
     let db = setup_test_db().await;
     let app = build_test_app(db.clone());
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Laptop with a bad clock").await;
+    let code = seed_connect_code(&db, "alice", "Laptop with a bad clock").await;
+    let token = enrol_device(&app, &code).await;
 
     // Conflicts resolve on this stamp, so an unbounded one pins the row against every
     // later correction, the honest client's included. Clamped rather than refused: a

@@ -60,10 +60,20 @@ pub enum Relation {}
 
 impl ActiveModelBehavior for ActiveModel {}
 
+/// Settings are stored as sent apart from what `preset_schema` refuses: values the
+/// desktop could not apply, and paths that never leave one machine.
+fn validate_settings(
+    settings: &serde_json::Value,
+) -> Result<(), crudcrate::validation::ValidationError> {
+    crate::contract::preset_schema::validate_settings(settings)
+        .map_err(|why| crudcrate::validation::ValidationError::new("settings", why))
+}
+
 impl crudcrate::validation::Validatable for PresetCreate {
     fn validate(&self) -> Result<(), crudcrate::validation::ValidationError> {
         crudcrate::validation::validators::validate_required("name", &self.name)?;
-        crudcrate::validation::validators::validate_range("version", self.version, Some(1), None)
+        crudcrate::validation::validators::validate_range("version", self.version, Some(1), None)?;
+        validate_settings(&self.settings)
     }
 }
 
@@ -74,6 +84,9 @@ impl crudcrate::validation::Validatable for PresetUpdate {
         }
         if let Some(Some(version)) = self.version {
             crudcrate::validation::validators::validate_range("version", version, Some(1), None)?;
+        }
+        if let Some(Some(settings)) = &self.settings {
+            validate_settings(settings)?;
         }
         Ok(())
     }

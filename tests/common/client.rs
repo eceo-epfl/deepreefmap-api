@@ -190,17 +190,18 @@ pub async fn delete_with_body(
     (status, text)
 }
 
-/// Enrol a device and return its bearer token.
+/// Enrol a device and return its bearer token. The device takes the name seeded on
+/// its connect code.
 ///
 /// # Panics
 ///
 /// Panics when enrolment does not succeed, so a broken harness fails loudly rather
 /// than every later assertion failing on a missing token.
-pub async fn enrol_device(app: &Router, code: &str, name: &str) -> String {
+pub async fn enrol_device(app: &Router, code: &str) -> String {
     let (status, body) = post_json(
         app,
         "/api/enrol",
-        &serde_json::json!({ "code": code, "device_name": name }),
+        &serde_json::json!({ "code": code }),
         None,
     )
     .await;

@@ -113,6 +113,12 @@ batch-item and notification tables do not: they are one workstation's queue.
 The CRUD routers speak the `Content-Range` list dialect, so `ra-data-simple-rest` works
 against them unchanged.
 
+Preset settings are validated against `contract/preset-schema.json`, generated from
+`src/contract/preset_schema.rs`. That file mirrors the desktop application's
+`survey/preset_schema.py` and `models/cache.py`, and the web console builds its
+preset form from the published copy. A lagging mirror degrades to a missing dropdown
+entry on the laptop, never a broken run: the desktop drops names it cannot offer.
+
 ## Development
 
 ```bash

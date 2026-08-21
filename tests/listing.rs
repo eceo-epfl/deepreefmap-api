@@ -181,6 +181,11 @@ const RUN_LIST_KEYS: &[&str] = &[
 
 /// Every device column except the token pair, which no read path may return.
 const DEVICE_ONE_KEYS: &[&str] = &[
+    "active_preset_name",
+    "active_preset_reported_at",
+    "active_preset_version",
+    "assigned_at",
+    "assigned_preset_id",
     "created_at",
     "enrolled_by",
     "gui_version",
@@ -189,6 +194,7 @@ const DEVICE_ONE_KEYS: &[&str] = &[
     "library_version",
     "name",
     "platform",
+    "preset_schema_version",
     "profile_reported_at",
     "revoked_at",
     "system_profile",
@@ -196,6 +202,11 @@ const DEVICE_ONE_KEYS: &[&str] = &[
 
 /// The list also drops `system_profile`.
 const DEVICE_LIST_KEYS: &[&str] = &[
+    "active_preset_name",
+    "active_preset_reported_at",
+    "active_preset_version",
+    "assigned_at",
+    "assigned_preset_id",
     "created_at",
     "enrolled_by",
     "gui_version",
@@ -204,6 +215,7 @@ const DEVICE_LIST_KEYS: &[&str] = &[
     "library_version",
     "name",
     "platform",
+    "preset_schema_version",
     "profile_reported_at",
     "revoked_at",
 ];
@@ -262,8 +274,8 @@ async fn test_run_list_and_one_key_sets() {
     let db = setup_test_db().await;
     let app = build_test_app(db.clone());
     let admin = build_test_app_as_admin(db.clone());
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Field laptop").await;
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&app, &code).await;
 
     let pass = uuid("b1");
     let run = uuid("c1");
@@ -292,8 +304,8 @@ async fn test_device_list_and_one_key_sets() {
     let db = setup_test_db().await;
     let app = build_test_app(db.clone());
     let admin = build_test_app_as_admin(db.clone());
-    let code = seed_connect_code(&db, "alice").await;
-    enrol_device(&app, &code, "Field laptop").await;
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    enrol_device(&app, &code).await;
 
     let (status, listed) = get_json(&admin, "/api/devices", None).await;
     assert_eq!(status, 200);
@@ -623,8 +635,8 @@ async fn test_device_system_profile_survives_the_list_trim() {
     let db = setup_test_db().await;
     let app = build_test_app(db.clone());
     let admin = build_test_app_as_admin(db.clone());
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Field laptop").await;
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&app, &code).await;
 
     let profile = serde_json::json!({ "gpu": "RTX 4070 Laptop", "ram_gb": 32 });
     let (status, body) = post(
@@ -634,7 +646,7 @@ async fn test_device_system_profile_survives_the_list_trim() {
         Some(&token),
     )
     .await;
-    assert_eq!(status, 204, "{body}");
+    assert_eq!(status, 200, "{body}");
 
     let (status, listed) = get_json(&admin, "/api/devices", None).await;
     assert_eq!(status, 200);
@@ -654,8 +666,8 @@ async fn test_run_provenance_survives_the_list_trim() {
     let db = setup_test_db().await;
     let app = build_test_app(db.clone());
     let admin = build_test_app_as_admin(db.clone());
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Field laptop").await;
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&app, &code).await;
 
     let revisions = serde_json::json!({ "deepreefmap": "abc123" });
     let durations = serde_json::json!({ "mapping": 41.5 });
@@ -697,8 +709,8 @@ async fn test_get_one_run_hides_a_tombstone() {
     let db = setup_test_db().await;
     let app = build_test_app(db.clone());
     let admin = build_test_app_as_admin(db.clone());
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Field laptop").await;
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&app, &code).await;
 
     let pass = uuid("b1");
     let run = uuid("c1");

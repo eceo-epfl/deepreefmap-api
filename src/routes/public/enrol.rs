@@ -60,8 +60,6 @@ pub fn router(state: &AppState) -> Router {
 pub struct EnrolRequest {
     /// The whole `drm1.…` string or its bare secret.
     pub code: String,
-    /// This installation's durable name, shown as `uploaded_by` on what it pushes.
-    pub device_name: String,
     #[serde(default)]
     pub platform: Option<String>,
     #[serde(default)]
@@ -76,7 +74,8 @@ pub struct EnrolResponse {
     /// first push.
     pub contract_version: u32,
     pub device_id: Uuid,
-    /// The name accepted for this installation.
+    /// This installation's durable name, chosen when its connect code was minted and
+    /// shown as `uploaded_by` on what it pushes.
     pub device_name: String,
     /// Bearer token for every later sync request. Returned once; only its hash is kept.
     pub token: String,
@@ -102,13 +101,6 @@ pub async fn enrol(
     axum::Extension(contract): axum::Extension<ClientContract>,
     Json(body): Json<EnrolRequest>,
 ) -> AppResult<Json<EnrolResponse>> {
-    let name = body.device_name.trim();
-    if name.is_empty() {
-        return Err(AppError::BadRequest(
-            "device_name must not be empty".to_string(),
-        ));
-    }
-
     let secret = parse_connect_code(&body.code)
         .ok_or_else(|| AppError::Unauthorized("Invalid connect code".to_string()))?;
     let code_hash = sha256_hex(&secret);
@@ -141,10 +133,17 @@ pub async fn enrol(
     let minted = mint_device_token();
     let device_id = Uuid::new_v4();
 
+    // The name was chosen when the code was minted: one origin, in the portal. Old
+    // codes carry an empty name, which falls back to something visible.
+    let name = match code.device_name.trim() {
+        "" => format!("Device {}", &device_id.to_string()[..8]),
+        trimmed => trimmed.to_string(),
+    };
+
     device::ActiveModel {
         id: Set(device_id),
         enrolled_by: Set(code.created_by.clone()),
-        name: Set(name.to_string()),
+        name: Set(name.clone()),
         token_prefix: Set(minted.token_prefix),
         token_hash: Set(minted.token_hash),
         platform: Set(body.platform),
@@ -152,6 +151,12 @@ pub async fn enrol(
         library_version: Set(body.library_version),
         system_profile: Set(None),
         profile_reported_at: Set(None),
+        preset_schema_version: Set(None),
+        assigned_preset_id: Set(None),
+        assigned_at: Set(None),
+        active_preset_name: Set(None),
+        active_preset_version: Set(None),
+        active_preset_reported_at: Set(None),
         created_at: Set(Utc::now()),
         last_seen_at: Set(None),
         revoked_at: Set(None),
@@ -176,7 +181,7 @@ pub async fn enrol(
     Ok(Json(EnrolResponse {
         contract_version: contract.agreed(),
         device_id,
-        device_name: name.to_string(),
+        device_name: name,
         token: minted.raw_token,
     }))
 }

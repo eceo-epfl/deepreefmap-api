@@ -9,10 +9,10 @@ use common::*;
 async fn test_heartbeat_updates_the_calling_device() {
     let db = setup_test_db().await;
     let app = build_test_app(db.clone());
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Field laptop").await;
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&app, &code).await;
 
-    let (status, body) = post(
+    let (status, body) = post_json(
         &app,
         "/api/sync/heartbeat",
         &serde_json::json!({
@@ -24,7 +24,8 @@ async fn test_heartbeat_updates_the_calling_device() {
         Some(&token),
     )
     .await;
-    assert_eq!(status, 204, "{body}");
+    assert_eq!(status, 200, "{body}");
+    assert!(body["assigned_preset"].is_null(), "{body}");
 
     let gui: Option<String> = one_value(&db, "SELECT gui_version FROM device").await;
     assert_eq!(gui.as_deref(), Some("0.10.0"));
@@ -47,8 +48,8 @@ async fn test_heartbeat_updates_the_calling_device() {
 async fn test_heartbeat_leaves_absent_fields_alone() {
     let db = setup_test_db().await;
     let app = build_test_app(db.clone());
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Field laptop").await;
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&app, &code).await;
     exec(&db, "UPDATE device SET gui_version = '0.9.0'").await;
 
     let (status, body) = post(
@@ -58,7 +59,7 @@ async fn test_heartbeat_leaves_absent_fields_alone() {
         Some(&token),
     )
     .await;
-    assert_eq!(status, 204, "{body}");
+    assert_eq!(status, 200, "{body}");
 
     let gui: Option<String> = one_value(&db, "SELECT gui_version FROM device").await;
     assert_eq!(gui.as_deref(), Some("0.9.0"), "a partial report erased");
@@ -89,10 +90,10 @@ async fn test_heartbeat_refuses_a_person() {
 async fn test_heartbeat_cannot_reach_another_device() {
     let db = setup_test_db().await;
     let app = build_test_app(db.clone());
-    let code_a = seed_connect_code(&db, "alice").await;
-    let code_b = seed_connect_code(&db, "bob").await;
-    let token_a = enrol_device(&app, &code_a, "Alice laptop").await;
-    enrol_device(&app, &code_b, "Bob laptop").await;
+    let code_a = seed_connect_code(&db, "alice", "Alice laptop").await;
+    let code_b = seed_connect_code(&db, "bob", "Bob laptop").await;
+    let token_a = enrol_device(&app, &code_a).await;
+    enrol_device(&app, &code_b).await;
 
     let bob_id: String =
         one_value(&db, "SELECT id::text FROM device WHERE name = 'Bob laptop'").await;
@@ -105,7 +106,7 @@ async fn test_heartbeat_cannot_reach_another_device() {
         Some(&token_a),
     )
     .await;
-    assert_eq!(status, 204, "{body}");
+    assert_eq!(status, 200, "{body}");
 
     let bob_gui: Option<String> = one_value(
         &db,
@@ -125,8 +126,8 @@ async fn test_heartbeat_cannot_reach_another_device() {
 async fn test_heartbeat_rejects_a_scalar_system_profile() {
     let db = setup_test_db().await;
     let app = build_test_app(db.clone());
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Field laptop").await;
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&app, &code).await;
 
     let (status, _) = post(
         &app,

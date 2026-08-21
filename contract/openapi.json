@@ -1,6 +1,67 @@
 {
   "components": {
     "schemas": {
+      "AssignPresetRequest": {
+        "properties": {
+          "preset_id": {
+            "description": "Null clears the assignment.",
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "AssignPresetResponse": {
+        "properties": {
+          "assigned_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "assigned_preset_id": {
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "device_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "device_id"
+        ],
+        "type": "object"
+      },
+      "AssignedPreset": {
+        "description": "The server-chosen default preset, named well enough to select locally.",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "version"
+        ],
+        "type": "object"
+      },
       "BatchUpdateRequest": {
         "allOf": [
           {
@@ -576,6 +637,42 @@
       },
       "DeviceList": {
         "properties": {
+          "active_preset_name": {
+            "description": "The preset the device says it runs under, from its heartbeat. Beside the\nassignment, this is the acknowledgement.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "active_preset_reported_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "active_preset_version": {
+            "format": "int32",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "assigned_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "assigned_preset_id": {
+            "description": "The server-chosen default preset, set through `/api/devices/{id}/assign-preset`\nand delivered in the heartbeat response.",
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "created_at": {
             "format": "date-time",
             "type": "string"
@@ -617,6 +714,14 @@
           "platform": {
             "type": [
               "string",
+              "null"
+            ]
+          },
+          "preset_schema_version": {
+            "description": "Which `preset-schema.json` revision the installation understands, from its\nheartbeat.",
+            "format": "int32",
+            "type": [
+              "integer",
               "null"
             ]
           },
@@ -646,6 +751,42 @@
       },
       "DeviceResponse": {
         "properties": {
+          "active_preset_name": {
+            "description": "The preset the device says it runs under, from its heartbeat. Beside the\nassignment, this is the acknowledgement.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "active_preset_reported_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "active_preset_version": {
+            "format": "int32",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "assigned_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "assigned_preset_id": {
+            "description": "The server-chosen default preset, set through `/api/devices/{id}/assign-preset`\nand delivered in the heartbeat response.",
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "created_at": {
             "format": "date-time",
             "type": "string"
@@ -687,6 +828,14 @@
           "platform": {
             "type": [
               "string",
+              "null"
+            ]
+          },
+          "preset_schema_version": {
+            "description": "Which `preset-schema.json` revision the installation understands, from its\nheartbeat.",
+            "format": "int32",
+            "type": [
+              "integer",
               "null"
             ]
           },
@@ -735,10 +884,6 @@
             "description": "The whole `drm1.…` string or its bare secret.",
             "type": "string"
           },
-          "device_name": {
-            "description": "This installation's durable name, shown as `uploaded_by` on what it pushes.",
-            "type": "string"
-          },
           "gui_version": {
             "type": [
               "string",
@@ -759,8 +904,7 @@
           }
         },
         "required": [
-          "code",
-          "device_name"
+          "code"
         ],
         "type": "object"
       },
@@ -777,7 +921,7 @@
             "type": "string"
           },
           "device_name": {
-            "description": "The name accepted for this installation.",
+            "description": "This installation's durable name, chosen when its connect code was minted and\nshown as `uploaded_by` on what it pushes.",
             "type": "string"
           },
           "token": {
@@ -856,6 +1000,20 @@
       },
       "HeartbeatRequest": {
         "properties": {
+          "active_preset_name": {
+            "description": "The preset the device currently runs under, acknowledging an assignment.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "active_preset_version": {
+            "format": "int32",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
           "gui_version": {
             "type": [
               "string",
@@ -874,8 +1032,32 @@
               "null"
             ]
           },
+          "preset_schema_version": {
+            "description": "Which `preset-schema.json` revision this installation understands.",
+            "format": "int32",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
           "system_profile": {
             "description": "Arbitrary JSON object describing the hardware, stored as sent."
+          }
+        },
+        "type": "object"
+      },
+      "HeartbeatResponse": {
+        "properties": {
+          "assigned_preset": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AssignedPreset",
+                "description": "Null when nothing is assigned, or the assigned preset has been deleted."
+              }
+            ]
           }
         },
         "type": "object"
@@ -1051,11 +1233,14 @@
       },
       "MintConnectCodeRequest": {
         "properties": {
-          "note": {
-            "description": "Label for the unredeemed code, so the operator knows who they handed it to.\nNever attribution: the device names itself at enrolment.",
+          "device_name": {
+            "description": "The name the redeeming device takes, so a device's name has one origin: the\nperson minting the code names the installation they are about to enrol.",
             "type": "string"
           }
         },
+        "required": [
+          "device_name"
+        ],
         "type": "object"
       },
       "MintConnectCodeResponse": {
@@ -4768,7 +4953,7 @@
     },
     "/devices": {
       "get": {
-        "description": "Retrieves all devices.\n\nThis resource manages device items\n\nAdditional sortable columns: \n- name\n- profile_reported_at\n- created_at\n- last_seen_at\n- revoked_at.\n\nAdditional filterable columns: \n- id\n- enrolled_by\n- name\n- platform\n- gui_version\n- library_version\n- revoked_at.",
+        "description": "Retrieves all devices.\n\nThis resource manages device items\n\nAdditional sortable columns: \n- name\n- profile_reported_at\n- assigned_at\n- active_preset_reported_at\n- created_at\n- last_seen_at\n- revoked_at.\n\nAdditional filterable columns: \n- id\n- enrolled_by\n- name\n- platform\n- gui_version\n- library_version\n- preset_schema_version\n- assigned_preset_id\n- revoked_at.",
         "operationId": "get_all_devices",
         "parameters": [
           {
@@ -4896,6 +5081,9 @@
             },
             "description": "Code minted; shown to the operator once"
           },
+          "400": {
+            "description": "Empty device name"
+          },
           "403": {
             "description": "Requires an interactive login"
           },
@@ -4904,6 +5092,56 @@
           }
         },
         "summary": "Mint a connect code for a desktop installation.",
+        "tags": [
+          "devices"
+        ]
+      }
+    },
+    "/devices/{device_id}/assign-preset": {
+      "post": {
+        "description": "The assignment travels in the next heartbeat response, and the device reports the\npreset it actually runs under in the request after that, so `active_preset_*` on\nthe device row says whether the assignment was acknowledged.",
+        "operationId": "assign_preset",
+        "parameters": [
+          {
+            "description": "Device to assign a preset to",
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignPresetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssignPresetResponse"
+                }
+              }
+            },
+            "description": "Assignment stored"
+          },
+          "403": {
+            "description": "Not your device, or a device token"
+          },
+          "404": {
+            "description": "No such device, or no such preset"
+          }
+        },
+        "summary": "Choose a device's default preset. Members may assign to their own, administrators\nto anyone's.",
         "tags": [
           "devices"
         ]
@@ -8003,8 +8241,15 @@
           "required": true
         },
         "responses": {
-          "204": {
-            "description": "Report stored against the calling device"
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HeartbeatResponse"
+                }
+              }
+            },
+            "description": "Report stored; the response names the assigned preset"
           },
           "400": {
             "description": "system_profile is not a JSON object"
@@ -8013,7 +8258,7 @@
             "description": "Requires a device token"
           }
         },
-        "summary": "Update the calling device's own record.",
+        "summary": "Update the calling device's own record and learn its assigned preset.",
         "tags": [
           "devices"
         ]

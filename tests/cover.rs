@@ -111,8 +111,8 @@ async fn test_pooled_cover_weights_by_counts() {
     let db = setup_test_db().await;
     let app = build_test_app(db.clone());
     let admin = build_test_app_as_admin(db.clone());
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Field laptop").await;
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&app, &code).await;
 
     let transect = create_transect(&admin, "T1").await;
     let short = uuid("a1");
@@ -173,8 +173,8 @@ async fn test_pooled_cover_keeps_the_latest_run_per_pass() {
     let db = setup_test_db().await;
     let app = build_test_app(db.clone());
     let admin = build_test_app_as_admin(db.clone());
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Field laptop").await;
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&app, &code).await;
 
     let transect = create_transect(&admin, "T1").await;
     let pass = uuid("c1");
@@ -225,8 +225,8 @@ async fn test_pooled_cover_narrows_to_one_campaign() {
     let db = setup_test_db().await;
     let app = build_test_app(db.clone());
     let admin = build_test_app_as_admin(db.clone());
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Field laptop").await;
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&app, &code).await;
 
     let transect = create_transect(&admin, "T1").await;
     let summer = uuid("f1");
@@ -281,8 +281,8 @@ async fn test_cover_series_splits_groups_and_buckets_ungrouped() {
     let db = setup_test_db().await;
     let app = build_test_app(db.clone());
     let admin = build_test_app_as_admin(db.clone());
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Field laptop").await;
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&app, &code).await;
 
     let transect = create_transect(&admin, "T1").await;
     let spring = create_group(&admin, "2024 spring", "2024-04").await;

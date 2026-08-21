@@ -165,10 +165,16 @@ pub async fn seed_campaign(db: &DatabaseConnection, id: &str, name: &str) {
 
 /// Seed a connect code with a known secret, so a test can enrol without a login.
 ///
+/// The enrolling device takes `device_name`, as it would from a minted code.
+///
 /// # Panics
 ///
 /// Panics when the insert fails.
-pub async fn seed_connect_code(db: &DatabaseConnection, minted_by: &str) -> String {
+pub async fn seed_connect_code(
+    db: &DatabaseConnection,
+    minted_by: &str,
+    device_name: &str,
+) -> String {
     // Derived from the subject, so two seeds cannot collide on the unique hash.
     use std::fmt::Write as _;
     let secret = format!("{minted_by:_<32}").bytes().take(32).fold(
@@ -183,8 +189,9 @@ pub async fn seed_connect_code(db: &DatabaseConnection, minted_by: &str) -> Stri
     exec(
         db,
         &format!(
-            "INSERT INTO connect_code (id, code_hash, created_by, note, expires_at, created_at) \
-             VALUES (gen_random_uuid(), '{hash}', '{minted_by}', 'test', \
+            "INSERT INTO connect_code \
+             (id, code_hash, created_by, device_name, expires_at, created_at) \
+             VALUES (gen_random_uuid(), '{hash}', '{minted_by}', '{device_name}', \
              NOW() + INTERVAL '1 hour', NOW())"
         ),
     )

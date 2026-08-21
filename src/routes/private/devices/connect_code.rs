@@ -12,7 +12,9 @@ pub struct Model {
     pub code_hash: String,
     /// Nullable: subject erasure scrubs it.
     pub created_by: Option<String>,
-    pub note: String,
+    /// The name the redeeming device takes. Minted in the portal, adopted at
+    /// enrolment, so a name has one origin.
+    pub device_name: String,
     pub expires_at: chrono::DateTime<chrono::Utc>,
     pub used_at: Option<chrono::DateTime<chrono::Utc>>,
     pub used_by_device_id: Option<Uuid>,

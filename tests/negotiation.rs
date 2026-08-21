@@ -43,8 +43,8 @@ fn push_body(sections: &serde_json::Value, contract_version: u32) -> serde_json:
 }
 
 async fn one_device(app: &axum::Router, db: &sea_orm::DatabaseConnection) -> String {
-    let code = seed_connect_code(db, "alice").await;
-    enrol_device(app, &code, "Alice laptop").await
+    let code = seed_connect_code(db, "alice", "Alice laptop").await;
+    enrol_device(app, &code).await
 }
 
 fn server_range(headers: &axum::http::HeaderMap, on: &str) -> String {
@@ -203,11 +203,11 @@ async fn test_every_sync_response_carries_the_agreed_version() {
     let db = setup_test_db().await;
     let app = build_test_app(db.clone());
 
-    let code = seed_connect_code(&db, "alice").await;
+    let code = seed_connect_code(&db, "alice", "Alice laptop").await;
     let (status, enrolled) = post_json(
         &app,
         "/api/enrol",
-        &serde_json::json!({ "code": code, "device_name": "Alice laptop" }),
+        &serde_json::json!({ "code": code }),
         None,
     )
     .await;

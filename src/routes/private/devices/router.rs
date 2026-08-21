@@ -12,6 +12,7 @@ pub fn router(state: &AppState) -> OpenApiRouter {
         .routes(utoipa_axum::routes!(super::views::mint_code))
         .routes(utoipa_axum::routes!(super::views::revoke))
         .routes(utoipa_axum::routes!(super::views::rename))
+        .routes(utoipa_axum::routes!(super::views::assign_preset))
         .layer(middleware::from_fn(require_human))
         .layer(RequestBodyLimitLayer::new(CRUD_BODY_LIMIT))
         .with_state(state.clone());

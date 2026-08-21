@@ -68,8 +68,8 @@ async fn test_video_runs_lists_the_consuming_runs_newest_first() {
     let db = setup_test_db().await;
     let app = build_test_app(db.clone());
     let admin = build_test_app_as_admin(db.clone());
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Field laptop").await;
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&app, &code).await;
 
     let video = uuid("a1");
     let other_video = uuid("a2");
@@ -113,8 +113,8 @@ async fn test_video_runs_hides_tombstoned_runs() {
     let db = setup_test_db().await;
     let app = build_test_app(db.clone());
     let admin = build_test_app_as_admin(db.clone());
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Field laptop").await;
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&app, &code).await;
 
     let video = uuid("a1");
     let pass = uuid("b1");
@@ -154,8 +154,8 @@ async fn test_video_runs_refuses_a_device_and_answers_empty_for_an_unknown_video
     let db = setup_test_db().await;
     let app = build_test_app(db.clone());
     let admin = build_test_app_as_admin(db.clone());
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Field laptop").await;
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&app, &code).await;
 
     let video = uuid("a1");
     let (status, body) = get(&app, &format!("/api/videos/{video}/runs"), Some(&token)).await;

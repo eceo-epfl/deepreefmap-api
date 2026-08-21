@@ -333,6 +333,18 @@ impl MigrationTrait for Migration {
                 library_version      TEXT,
                 system_profile       JSONB,
                 profile_reported_at  TIMESTAMPTZ,
+                -- Which preset-schema.json revision the installation understands,
+                -- from its heartbeat.
+                preset_schema_version INTEGER,
+                -- The server-chosen default preset, and the device's own report of
+                -- which preset it runs under. Assignment rides the heartbeat
+                -- response, the report rides the next request, so the console can
+                -- tell assigned from acknowledged.
+                assigned_preset_id   UUID REFERENCES preset(id),
+                assigned_at          TIMESTAMPTZ,
+                active_preset_name   TEXT,
+                active_preset_version INTEGER,
+                active_preset_reported_at TIMESTAMPTZ,
                 created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 last_seen_at         TIMESTAMPTZ,
                 revoked_at           TIMESTAMPTZ
@@ -350,7 +362,9 @@ impl MigrationTrait for Migration {
                 code_hash          TEXT NOT NULL UNIQUE,
                 -- Nullable because subject erasure sets it to NULL.
                 created_by         TEXT,
-                note               TEXT NOT NULL DEFAULT '',
+                -- Minting names the device: enrolment adopts this as device.name,
+                -- so the portal is the one place a name originates.
+                device_name        TEXT NOT NULL DEFAULT '',
                 expires_at         TIMESTAMPTZ NOT NULL,
                 used_at            TIMESTAMPTZ,
                 used_by_device_id  UUID REFERENCES device(id),
@@ -449,6 +463,45 @@ impl MigrationTrait for Migration {
             ))
             .await?;
         }
+
+        // The desktop application's bundled defaults, seeded so a fresh registry has a
+        // preset to assign on day one. After the trigger loop, so the row takes a real
+        // `server_seq` and reaches devices on their first pull. Values mirror the
+        // desktop's `survey_preset.yaml`, publishable keys only.
+        db.execute_unprepared(
+            r#"
+            INSERT INTO preset (id, name, version, settings, description)
+            SELECT gen_random_uuid(), 'Standard reef survey', 1,
+                '{
+                    "fps": 5,
+                    "segmentation_name": "coralscapes-vit-b-dpt",
+                    "mapping_name": "loger_star",
+                    "camera_profile_name": "gopro_hero_10",
+                    "transect_crop_width": 1.0,
+                    "enable_tsdf": false,
+                    "skip_segmentation": false,
+                    "resolution_preset": "Native",
+                    "processing_width": null,
+                    "processing_height": null,
+                    "preprocess_batch_size": 4,
+                    "grid_bins": 2000,
+                    "require_gravity_telemetry": false,
+                    "replacement_radius_factor": 0.0,
+                    "replacement_radius_estimation_frames": 30,
+                    "replacement_radius_override": 0.0,
+                    "loger_window_size": 32,
+                    "loger_overlap_size": 3,
+                    "refine_intrinsics_from_mapper": false,
+                    "scs_target_width": 512,
+                    "scs_target_height": 256
+                }'::jsonb,
+                'The desktop application''s bundled defaults.'
+            WHERE NOT EXISTS (
+                SELECT 1 FROM preset WHERE LOWER(name) = 'standard reef survey' AND version = 1
+            );
+            "#,
+        )
+        .await?;
 
         Ok(())
     }

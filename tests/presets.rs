@@ -81,8 +81,8 @@ async fn test_preset_crud_rejects_a_device() {
     let db = setup_test_db().await;
     let admin = build_test_app_as_admin(db.clone());
     let app = build_test_app(db.clone());
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Alice laptop").await;
+    let code = seed_connect_code(&db, "alice", "Alice laptop").await;
+    let token = enrol_device(&app, &code).await;
 
     let settings = serde_json::json!({ "fps": 4 });
     let id = create_preset(&admin, "eceo-default", 1, &settings).await;
@@ -116,6 +116,7 @@ async fn test_preset_crud_rejects_a_device() {
         );
     }
 
+    // The migration seeds one preset, plus the one created above.
     let presets: i64 = one_value(&db, "SELECT COUNT(*)::BIGINT FROM preset").await;
-    assert_eq!(presets, 1, "a device wrote a preset");
+    assert_eq!(presets, 2, "a device wrote a preset");
 }

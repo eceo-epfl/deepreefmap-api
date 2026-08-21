@@ -6,4 +6,5 @@
 
 pub mod classes;
 pub mod export;
+pub mod preset_schema;
 pub mod vocab;

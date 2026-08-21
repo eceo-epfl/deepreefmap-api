@@ -81,8 +81,8 @@ async fn test_delete_site_reaches_a_device_through_pull() {
     let db = setup_test_db().await;
     let admin = build_test_app_as_admin(db.clone());
     let device_app = build_test_app(db.clone());
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&device_app, &code, "Alice laptop").await;
+    let code = seed_connect_code(&db, "alice", "Alice laptop").await;
+    let token = enrol_device(&device_app, &code).await;
 
     let id = create_site(&admin, "Harat").await;
     let (_, pulled) = get_json(&device_app, "/api/sync/pull", Some(&token)).await;
@@ -389,8 +389,8 @@ async fn test_delete_site_rejects_a_device() {
     let db = setup_test_db().await;
     let admin = build_test_app_as_admin(db.clone());
     let device_app = build_test_app(db.clone());
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&device_app, &code, "Alice laptop").await;
+    let code = seed_connect_code(&db, "alice", "Alice laptop").await;
+    let token = enrol_device(&device_app, &code).await;
 
     let id = create_site(&admin, "Harat").await;
     let (status, body) = delete(&device_app, &format!("/api/sites/{id}"), Some(&token)).await;
@@ -433,7 +433,7 @@ async fn test_mint_connect_code_allows_a_member() {
     let (status, body) = post_json(
         &member,
         "/api/devices/connect-codes",
-        &serde_json::json!({ "note": "my laptop" }),
+        &serde_json::json!({ "device_name": "my laptop" }),
         None,
     )
     .await;
@@ -487,8 +487,8 @@ async fn test_list_videos_allows_a_member() {
 async fn test_push_allows_a_device() {
     let db = setup_test_db().await;
     let app = build_test_app(db.clone());
-    let code = seed_connect_code(&db, "alice").await;
-    let token = enrol_device(&app, &code, "Alice laptop").await;
+    let code = seed_connect_code(&db, "alice", "Alice laptop").await;
+    let token = enrol_device(&app, &code).await;
 
     let (status, body) = post_json(
         &app,
@@ -528,8 +528,8 @@ async fn test_push_allows_a_device() {
 /// Enrol one laptop and hand back the router plus its token.
 async fn device(db: &DatabaseConnection, minted_by: &str, name: &str) -> (axum::Router, String) {
     let app = build_test_app(db.clone());
-    let code = seed_connect_code(db, minted_by).await;
-    let token = enrol_device(&app, &code, name).await;
+    let code = seed_connect_code(db, minted_by, name).await;
+    let token = enrol_device(&app, &code).await;
     (app, token)
 }
 
@@ -616,7 +616,7 @@ async fn test_credential_routes_reject_a_device() {
         post(
             &app,
             "/api/devices/connect-codes",
-            &serde_json::json!({ "note": "another laptop" }),
+            &serde_json::json!({ "device_name": "another laptop" }),
             Some(&token),
         )
         .await,
@@ -728,10 +728,10 @@ async fn test_push_updates_a_device_own_row() {
 async fn test_push_refuses_another_devices_row() {
     let db = setup_test_db().await;
     let app = build_test_app(db.clone());
-    let code_a = seed_connect_code(&db, "alice").await;
-    let code_b = seed_connect_code(&db, "bob").await;
-    let token_a = enrol_device(&app, &code_a, "Alice laptop").await;
-    let token_b = enrol_device(&app, &code_b, "Bob laptop").await;
+    let code_a = seed_connect_code(&db, "alice", "Alice laptop").await;
+    let code_b = seed_connect_code(&db, "bob", "Bob laptop").await;
+    let token_a = enrol_device(&app, &code_a).await;
+    let token_b = enrol_device(&app, &code_b).await;
 
     let id = "33333333-3333-4333-8333-333333333333";
     post_json(
@@ -877,7 +877,8 @@ async fn test_pull_restricts_a_device_to_downloadable_sections() {
         .expect("sections object")
         .keys()
         .collect();
-    assert_eq!(sections, vec!["sites"], "{pulled}");
+    // The migration's seeded preset rides along; presets are pull only.
+    assert_eq!(sections, vec!["presets", "sites"], "{pulled}");
     // Uploaded and never offered back, so the cursor must not claim there is more.
     assert_eq!(pulled["has_more"], false, "{pulled}");
 
