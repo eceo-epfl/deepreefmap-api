@@ -171,6 +171,8 @@ fn sync_contract() -> Value {
         "min_contract_version": schema::MIN_CONTRACT_VERSION,
         "sections": schema::sections(),
         "pull_sections": schema::CLIENT_PULL_SECTIONS,
+        "own_rows_sections": schema::OWN_ROWS_SECTIONS,
+        "own_rows_since": schema::OWN_ROWS_SINCE,
         "push_sections": schema::CLIENT_PUSH_SECTIONS,
         "tables": schema::table_documents(),
     })
