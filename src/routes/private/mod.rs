@@ -8,7 +8,6 @@ pub mod class_groups;
 pub mod cover;
 pub mod devices;
 pub mod me;
-pub mod pass_groups;
 pub mod passes;
 pub mod performance;
 pub mod presets;
@@ -19,6 +18,7 @@ pub mod transects;
 pub mod videos;
 
 use axum::middleware;
+use axum::response::IntoResponse;
 use tower_http::limit::RequestBodyLimitLayer;
 use utoipa_axum::router::OpenApiRouter;
 
@@ -28,6 +28,17 @@ use crate::common::ledger::scope_subject;
 use crate::common::soft_delete::hide_tombstones;
 use crate::routes::CRUD_BODY_LIMIT;
 
+/// Refuse creation on a resource the console only amends.
+async fn deny_create(
+    request: axum::extract::Request,
+    next: middleware::Next,
+) -> axum::response::Response {
+    if request.method() == axum::http::Method::POST {
+        return axum::http::StatusCode::METHOD_NOT_ALLOWED.into_response();
+    }
+    next.run(request).await
+}
+
 /// Every CRUD and sync route, behind one authentication gate.
 ///
 /// Generated CRUD routers carry their own database handle; hand-written handlers bind
@@ -36,7 +47,7 @@ use crate::routes::CRUD_BODY_LIMIT;
 pub fn protected_router(state: &AppState) -> OpenApiRouter {
     use self::{
         archive::StoredObject, archive::run_artifact::RunArtifact, campaigns::Campaign,
-        changes::Change, cover::CoverRow, devices::Device, pass_groups::PassGroup, passes::Pass,
+        changes::Change, cover::CoverRow, devices::Device, passes::Pass,
         passes::pass_video::PassVideo, presets::Preset, runs::Run, sites::Site,
         transects::Transect, videos::Video,
     };
@@ -53,13 +64,16 @@ pub fn protected_router(state: &AppState) -> OpenApiRouter {
         .nest("/transects", Transect::router(db).layer(admin_delete()))
         .nest("/passes", Pass::router(db).layer(admin_delete()))
         .nest("/pass_videos", PassVideo::router(db).layer(admin_delete()))
-        // Console-authored curation: survey events over passes, and the presets
-        // devices download through sync pull.
-        .nest("/pass_groups", PassGroup::router(db).layer(admin_delete()))
+        // The presets devices download through sync pull.
         .nest("/presets", Preset::router(db).layer(admin_delete()))
-        // Devices report these, so the registry only records them. Footage metadata,
-        // provenance and measurements are not things a person types.
-        .nest("/videos", Video::read_only_router(db))
+        // Clips are reported by devices; the console reviews them, never invents one.
+        .nest(
+            "/videos",
+            Video::router(db)
+                .layer(admin_delete())
+                .layer(middleware::from_fn(deny_create)),
+        )
+        // Provenance and measurements are not things a person types.
         .nest("/runs", Run::read_only_router(db))
         .nest("/cover_rows", CoverRow::read_only_router(db))
         // Every syncable read, since a tombstone is a sync signal and not a row to

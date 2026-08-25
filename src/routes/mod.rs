@@ -99,7 +99,7 @@ async fn healthz() -> StatusCode {
         (name = "transects", description = "Survey lines"),
         (name = "videos", description = "Input footage, identified by content hash"),
         (name = "passes", description = "Swims along a transect"),
-        (name = "pass_groups", description = "Survey events curated in the console"),
+        (name = "changes", description = "The change ledger: proposals and validation"),
         (name = "presets", description = "Server-defined run settings"),
         (name = "runs", description = "Reconstruction runs and their provenance"),
         (name = "cover", description = "Benthic cover results"),

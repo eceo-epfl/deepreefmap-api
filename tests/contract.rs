@@ -24,9 +24,9 @@ use deepreefmap_api::routes::private::sync::schema::{self, ColumnKind, TableSpec
 /// contract.
 const SERVER_STAMPED: &str = "server_seq";
 
-/// Columns a curator owns on an otherwise device-authored table. Deliberately absent
-/// from the sync contract, so a device re-pushing its row can never clobber them.
-const CURATED_COLUMNS: [(&str, &str); 1] = [("transect_pass", "survey_group_id")];
+/// Columns a curator owns on an otherwise device-authored table, absent from the sync
+/// contract. Empty: what the console owns now travels as server-owned contract columns.
+const CURATED_COLUMNS: [(&str, &str); 0] = [];
 
 /// The curated columns of one table.
 fn curated(table: &str) -> impl Iterator<Item = &'static str> {
@@ -51,13 +51,12 @@ const RESPONSE_SCHEMAS: [(&str, &str); 9] = [
 ];
 
 /// Every list endpoint the web console reads through.
-const LIST_PATHS: [&str; 11] = [
+const LIST_PATHS: [&str; 10] = [
     "/sites",
     "/campaigns",
     "/transects",
     "/videos",
     "/passes",
-    "/pass_groups",
     "/pass_videos",
     "/presets",
     "/runs",
@@ -66,15 +65,14 @@ const LIST_PATHS: [&str; 11] = [
 ];
 
 /// Unique indexes that must free their name once a row is tombstoned.
-const PARTIAL_UNIQUE_INDEXES: [(&str, &str); 9] = [
-    ("site", "site_name_lower_idx"),
+const PARTIAL_UNIQUE_INDEXES: [(&str, &str); 8] = [
+    ("site", "site_country_name_lower_idx"),
     ("campaign", "campaign_name_lower_idx"),
     ("transect", "transect_site_name_lower_idx"),
     ("video_asset", "video_asset_hash_idx"),
     ("pass_video", "pass_video_ordinal_idx"),
     ("pass_video", "pass_video_unique_idx"),
     ("cover_row", "cover_row_unique_idx"),
-    ("pass_group", "pass_group_name_lower_idx"),
     ("preset", "preset_name_lower_version_idx"),
 ];
 

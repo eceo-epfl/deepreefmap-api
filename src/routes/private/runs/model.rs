@@ -17,6 +17,7 @@ use sea_orm::entity::prelude::*;
     name_plural = "runs",
     generate_router,
     require_scope,
+    deny_unknown_fields,
     create::one::post = ledger_created,
     create::many::post = ledger_created_many,
     update::one::post = ledger_updated,
@@ -60,6 +61,7 @@ pub struct Model {
     #[crudcrate(filterable)]
     pub taxonomy_version: Option<i32>,
     /// Digest of the class-groups definition, so a claimed version can be checked.
+    #[crudcrate(filterable)]
     pub taxonomy_hash: Option<String>,
     /// Repository to upstream revision present at launch. Best-effort: the version
     /// available, not proof it was loaded. Detail view only.
@@ -69,11 +71,14 @@ pub struct Model {
     #[crudcrate(filterable)]
     pub preset_name: Option<String>,
     /// Settings that departed from the preset, separating "unchanged" from "unrecorded".
+    /// Detail view only.
     #[sea_orm(column_type = "JsonBinary", nullable)]
+    #[crudcrate(exclude(list))]
     pub preset_deviations: Option<serde_json::Value>,
     #[crudcrate(filterable)]
     pub preset_version: Option<i32>,
     /// Digest of the preset definition, so a claimed version can be checked.
+    #[crudcrate(filterable)]
     pub preset_hash: Option<String>,
     /// Wall-clock seconds for the whole run.
     #[crudcrate(sortable)]
@@ -88,6 +93,19 @@ pub struct Model {
     #[sea_orm(column_type = "JsonBinary", nullable)]
     #[crudcrate(exclude(list))]
     pub stage_peaks: Option<serde_json::Value>,
+    /// The scale the cover was measured at: the camera profile, the tape length and
+    /// crop width the run used, the metres per pixel that gave, and how the scale
+    /// was established.
+    #[crudcrate(filterable)]
+    pub camera_profile: Option<String>,
+    pub pixel_size_m: Option<f64>,
+    #[crudcrate(filterable)]
+    pub scale_type: Option<String>,
+    pub transect_length_m: Option<f64>,
+    pub crop_width_m: Option<f64>,
+    /// The preset row the run ran under, where the device knew it.
+    #[crudcrate(filterable)]
+    pub preset_id: Option<Uuid>,
     #[crudcrate(exclude(create, update), sortable, on_create = chrono::Utc::now())]
     pub created_at: chrono::DateTime<chrono::Utc>,
     /// The conflict key last-write-wins resolves on. Server-stamped: `on_update` only

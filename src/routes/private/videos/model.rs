@@ -2,6 +2,9 @@ use crudcrate::{CRUDResource, EntityToModels};
 use sea_orm::entity::prelude::*;
 
 /// One input clip, identified by content hash. Paths are device-local and absent.
+///
+/// Which camera of the rig it came from, where that camera sat, and the review verdict
+/// are the clip's, not the pass's: one swim is filmed by several cameras at once.
 #[derive(
     Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize, serde::Deserialize, EntityToModels,
 )]
@@ -12,6 +15,7 @@ use sea_orm::entity::prelude::*;
     name_plural = "videos",
     generate_router,
     require_scope,
+    deny_unknown_fields,
     create::one::post = ledger_created,
     create::many::post = ledger_created_many,
     update::one::post = ledger_updated,
@@ -49,6 +53,20 @@ pub struct Model {
     pub gravity: String,
     #[crudcrate(filterable)]
     pub gps: String,
+    /// The camera's name on the rig, as the field team labels it: `GoPro_3`, `cam1`.
+    #[crudcrate(filterable, sortable)]
+    pub camera_label: Option<String>,
+    /// Where the camera sat relative to the diver: `left`, `centre` or `right`.
+    #[crudcrate(filterable)]
+    pub rig_position: Option<String>,
+    /// Mounted inverted, which the reconstruction has to know and no probe can tell.
+    #[crudcrate(filterable)]
+    pub upside_down: bool,
+    /// `unreviewed`, `usable` or `excluded`.
+    #[crudcrate(filterable, sortable)]
+    pub review: String,
+    #[crudcrate(fulltext)]
+    pub notes: String,
     #[crudcrate(exclude(create, update), sortable, on_create = chrono::Utc::now())]
     pub created_at: chrono::DateTime<chrono::Utc>,
     /// The conflict key last-write-wins resolves on. Server-stamped: `on_update` only
@@ -87,6 +105,33 @@ impl Related<crate::routes::private::passes::pass_video::Entity> for Entity {
 }
 
 impl ActiveModelBehavior for ActiveModel {}
+
+impl crudcrate::validation::Validatable for VideoUpdate {
+    fn validate(&self) -> Result<(), crudcrate::validation::ValidationError> {
+        for (field, value, vocabulary) in [
+            (
+                "rig_position",
+                self.rig_position.as_ref().and_then(|v| v.as_deref()),
+                &crate::contract::vocab::RIG_POSITION,
+            ),
+            (
+                "review",
+                self.review.as_ref().and_then(|v| v.as_deref()),
+                &crate::contract::vocab::VIDEO_REVIEW,
+            ),
+        ] {
+            if let Some(code) = value
+                && !vocabulary.codes().contains(&code)
+            {
+                return Err(crudcrate::validation::ValidationError::new(
+                    field,
+                    format!("must be one of {}", vocabulary.codes().join(", ")),
+                ));
+            }
+        }
+        Ok(())
+    }
+}
 
 crate::soft_delete_hooks!(Video, "videos");
 crate::ledger_hooks!(Video, "videos");

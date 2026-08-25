@@ -171,11 +171,11 @@ pub const TABLES: &[TableSpec] = &[
             col("site_id", ColumnKind::Uuid),
             required("name", ColumnKind::Text),
             required("description", ColumnKind::Text),
-            required("start_lat", ColumnKind::Float),
-            required("start_lon", ColumnKind::Float),
+            col("start_lat", ColumnKind::Float),
+            col("start_lon", ColumnKind::Float),
             col("start_accuracy_m", ColumnKind::Float),
-            required("end_lat", ColumnKind::Float),
-            required("end_lon", ColumnKind::Float),
+            col("end_lat", ColumnKind::Float),
+            col("end_lon", ColumnKind::Float),
             col("end_accuracy_m", ColumnKind::Float),
             col("length_m", ColumnKind::Float),
             col("depth_m", ColumnKind::Float),
@@ -198,11 +198,14 @@ pub const TABLES: &[TableSpec] = &[
             col("captured_source", ColumnKind::Text),
             required("gravity", ColumnKind::Text),
             required("gps", ColumnKind::Text),
+            col("camera_label", ColumnKind::Text).since(2),
+            col("rig_position", ColumnKind::Text).since(2),
+            required("upside_down", ColumnKind::Bool).since(2),
+            required("review", ColumnKind::Text).since(2),
+            required("notes", ColumnKind::Text).since(2),
         ],
         curated: true,
     },
-    // `survey_group_id` is deliberately absent: a curator assigns it in the console,
-    // and a device re-pushing its pass must never clobber that grouping.
     TableSpec {
         section: "passes",
         table: "transect_pass",
@@ -212,10 +215,10 @@ pub const TABLES: &[TableSpec] = &[
             required("begin_s", ColumnKind::Float),
             required("end_s", ColumnKind::Float),
             col("direction", ColumnKind::Text),
-            required("upside_down", ColumnKind::Bool),
             required("label", ColumnKind::Text),
             required("notes", ColumnKind::Text),
             col("quality", ColumnKind::Text),
+            col("surveyed_on", ColumnKind::Date).since(2),
         ],
         curated: true,
     },
@@ -228,6 +231,19 @@ pub const TABLES: &[TableSpec] = &[
             required("ordinal", ColumnKind::Int),
         ],
         curated: true,
+    },
+    // Pull only: presets are server-defined, and a device never authors one. Ahead of
+    // runs, which name the preset they ran under.
+    TableSpec {
+        section: "presets",
+        table: "preset",
+        own_columns: &[
+            required("name", ColumnKind::Text),
+            required("version", ColumnKind::Int),
+            required("settings", ColumnKind::Json),
+            required("description", ColumnKind::Text),
+        ],
+        curated: false,
     },
     TableSpec {
         section: "runs",
@@ -257,6 +273,12 @@ pub const TABLES: &[TableSpec] = &[
             col("run_duration_s", ColumnKind::Float),
             col("stage_durations", ColumnKind::Json),
             col("stage_peaks", ColumnKind::Json),
+            col("camera_profile", ColumnKind::Text).since(2),
+            col("pixel_size_m", ColumnKind::Float).since(2),
+            col("scale_type", ColumnKind::Text).since(2),
+            col("transect_length_m", ColumnKind::Float).since(2),
+            col("crop_width_m", ColumnKind::Float).since(2),
+            col("preset_id", ColumnKind::Uuid).since(2),
         ],
         curated: true,
     },
@@ -274,19 +296,6 @@ pub const TABLES: &[TableSpec] = &[
             col("metric_source", ColumnKind::Text),
         ],
         curated: true,
-    },
-    // Appended last so existing clients' section order is undisturbed. Pull only:
-    // presets are server-defined, and a device never authors one.
-    TableSpec {
-        section: "presets",
-        table: "preset",
-        own_columns: &[
-            required("name", ColumnKind::Text),
-            required("version", ColumnKind::Int),
-            required("settings", ColumnKind::Json),
-            required("description", ColumnKind::Text),
-        ],
-        curated: false,
     },
 ];
 
@@ -462,7 +471,7 @@ mod tests {
         let listed = sections();
         assert_eq!(listed.len(), TABLES.len());
         assert_eq!(listed[0], "sites");
-        assert_eq!(listed[listed.len() - 1], "presets");
+        assert_eq!(listed[listed.len() - 1], "cover_rows");
     }
 
     /// A section a device can neither author nor download would be unreachable to it.

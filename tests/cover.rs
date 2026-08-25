@@ -1,5 +1,5 @@
 //! Pooled cover over a transect: the count-weighted figure, which run each pass
-//! contributes, and the per-survey-event series.
+//! contributes, and the per-campaign series.
 
 #[allow(dead_code)]
 mod common;
@@ -81,27 +81,16 @@ fn push_body(sections: &serde_json::Value) -> serde_json::Value {
     serde_json::json!({ "contract_version": 1, "sections": sections })
 }
 
-async fn create_group(admin: &axum::Router, name: &str, period_label: &str) -> String {
+async fn create_campaign(admin: &axum::Router, name: &str, begin_date: &str) -> String {
     let (status, body) = post_json(
         admin,
-        "/api/pass_groups",
-        &serde_json::json!({ "name": name, "period_label": period_label, "description": "" }),
+        "/api/campaigns",
+        &serde_json::json!({ "name": name, "begin_date": begin_date, "description": "" }),
         None,
     )
     .await;
-    assert_eq!(status, 201, "group create failed: {body}");
+    assert_eq!(status, 201, "campaign create failed: {body}");
     body["id"].as_str().expect("id").to_string()
-}
-
-async fn assign_group(admin: &axum::Router, pass: &str, group: &str) {
-    let (status, body) = put(
-        admin,
-        &format!("/api/passes/{pass}"),
-        &serde_json::json!({ "survey_group_id": group }),
-        None,
-    )
-    .await;
-    assert_eq!(status, 200, "assigning the group failed: {body}");
 }
 
 /// A short pass and a long one over the same line. Pooling by counts must follow the long
@@ -273,11 +262,10 @@ async fn test_pooled_cover_narrows_to_one_campaign() {
     assert_eq!(only_summer["campaign_id"], summer);
 }
 
-/// Two curated survey events, a campaign-only pass and a pass with neither, on one line.
-/// The series keeps the four buckets apart and orders them: events by period label, then
-/// the campaign bucket, then the leftover.
+/// Two campaigns and a pass with none, on one line. The series keeps the three buckets
+/// apart and orders them: campaigns by begin date, then the leftover.
 #[tokio::test]
-async fn test_cover_series_splits_groups_and_buckets_ungrouped() {
+async fn test_cover_series_buckets_by_campaign() {
     let db = setup_test_db().await;
     let app = build_test_app(db.clone());
     let admin = build_test_app_as_admin(db.clone());
@@ -285,33 +273,32 @@ async fn test_cover_series_splits_groups_and_buckets_ungrouped() {
     let token = enrol_device(&app, &code).await;
 
     let transect = create_transect(&admin, "T1").await;
-    let spring = create_group(&admin, "2024 spring", "2024-04").await;
-    let autumn = create_group(&admin, "2024 autumn", "2024-10").await;
-    let campaign = uuid("ca");
-    seed_campaign(&db, &campaign, "2024_10_eritrea").await;
+    let spring = create_campaign(&admin, "2024_04_eilat", "2024-04-02").await;
+    let autumn = create_campaign(&admin, "2024_10_eilat", "2024-10-14").await;
 
     let spring_short = uuid("a1");
     let spring_long = uuid("a2");
     let autumn_pass = uuid("a3");
-    let campaign_pass = uuid("a4");
     let loose_pass = uuid("a5");
 
-    let mut with_campaign = pass_row(&campaign_pass, &transect, "campaign only");
-    with_campaign["campaign_id"] = serde_json::json!(campaign);
+    let mut in_spring_short = pass_row(&spring_short, &transect, "spring short");
+    in_spring_short["campaign_id"] = serde_json::json!(spring);
+    let mut in_spring_long = pass_row(&spring_long, &transect, "spring long");
+    in_spring_long["campaign_id"] = serde_json::json!(spring);
+    let mut in_autumn = pass_row(&autumn_pass, &transect, "autumn");
+    in_autumn["campaign_id"] = serde_json::json!(autumn);
 
     let document = push_body(&serde_json::json!({
         "passes": [
-            pass_row(&spring_short, &transect, "spring short"),
-            pass_row(&spring_long, &transect, "spring long"),
-            pass_row(&autumn_pass, &transect, "autumn"),
-            with_campaign,
+            in_spring_short,
+            in_spring_long,
+            in_autumn,
             pass_row(&loose_pass, &transect, "loose"),
         ],
         "runs": [
             run_row(&uuid("b1"), &spring_short),
             run_row(&uuid("b2"), &spring_long),
             run_row(&uuid("b3"), &autumn_pass),
-            run_row(&uuid("b4"), &campaign_pass),
             run_row(&uuid("b5"), &loose_pass),
         ],
         "cover_rows": [
@@ -319,17 +306,11 @@ async fn test_cover_series_splits_groups_and_buckets_ungrouped() {
             cover_row("e1", &uuid("b1"), "coral alive", 30.0, 100.0),
             cover_row("e2", &uuid("b2"), "coral alive", 30.0, 300.0),
             cover_row("e3", &uuid("b3"), "coral alive", 50.0, 100.0),
-            cover_row("e4", &uuid("b4"), "coral alive", 10.0, 100.0),
             cover_row("e5", &uuid("b5"), "coral alive", 5.0, 100.0),
         ],
     }));
     let (status, body) = post_json(&app, "/api/sync/push", &document, Some(&token)).await;
     assert_eq!(status, 200, "{body}");
-
-    // Grouping happens after the push, as a curator would do it.
-    assign_group(&admin, &spring_short, &spring).await;
-    assign_group(&admin, &spring_long, &spring).await;
-    assign_group(&admin, &autumn_pass, &autumn).await;
 
     let (status, series) = get_json(
         &admin,
@@ -340,14 +321,13 @@ async fn test_cover_series_splits_groups_and_buckets_ungrouped() {
     assert_eq!(status, 200, "{series}");
     assert_eq!(series["level"], "coarse");
     let entries = series["entries"].as_array().expect("entries");
-    assert_eq!(entries.len(), 4, "{series}");
+    assert_eq!(entries.len(), 3, "{series}");
 
     // The pooled figure follows the long pass, and the spread shows the two runs.
     let first = &entries[0];
-    assert_eq!(first["group_id"], spring, "{series}");
-    assert_eq!(first["group_name"], "2024 spring");
-    assert_eq!(first["period_label"], "2024-04");
-    assert!(first["campaign_id"].is_null());
+    assert_eq!(first["campaign_id"], spring, "{series}");
+    assert_eq!(first["campaign_name"], "2024_04_eilat");
+    assert_eq!(first["begin_date"], "2024-04-02");
     assert_eq!(first["denominator"], 400.0);
     assert_eq!(first["contributing_passes"], 2);
     let coral = &first["groups"][0];
@@ -367,20 +347,11 @@ async fn test_cover_series_splits_groups_and_buckets_ungrouped() {
     );
     assert_eq!(coral["colour"], "#e07677");
 
-    assert_eq!(entries[1]["group_name"], "2024 autumn", "{series}");
+    assert_eq!(entries[1]["campaign_name"], "2024_10_eilat", "{series}");
     assert_eq!(entries[1]["groups"][0]["point_count"], 50.0);
 
-    // Ungrouped but on an expedition: bucketed by the campaign alone.
-    let by_campaign = &entries[2];
-    assert!(by_campaign["group_id"].is_null(), "{series}");
-    assert_eq!(by_campaign["campaign_id"], campaign);
-    assert_eq!(by_campaign["campaign_name"], "2024_10_eritrea");
-    assert_eq!(by_campaign["contributing_passes"], 1);
-    assert_eq!(by_campaign["groups"][0]["point_count"], 10.0);
-
-    // Neither group nor campaign: one shared bucket, last.
-    let leftover = &entries[3];
-    assert!(leftover["group_id"].is_null(), "{series}");
+    // No campaign: one shared bucket, last.
+    let leftover = &entries[2];
     assert!(leftover["campaign_id"].is_null(), "{series}");
     assert_eq!(leftover["contributing_passes"], 1);
     assert_eq!(leftover["groups"][0]["point_count"], 5.0);

@@ -116,22 +116,22 @@ without exposing anything. Nothing here deletes or overwrites.
 
 ## Entities
 
-Everything above `pass_group` in this table replicates. The desktop application's batch,
+Everything above `device` in this table replicates. The desktop application's batch,
 batch-item and notification tables do not: they are one workstation's queue.
-`change_log` is the ledger behind sync, server-side only.
+`change_log` is the ledger behind sync, server-side only. A survey event is derived, the
+passes of one transect in one campaign, so there is nothing to curate by hand.
 
 | Entity | Notes |
 |---|---|
-| `site` | Reef location. Transect names are unique within one. |
+| `site` | Reef location, unique within its country. Transect names are unique within one. |
 | `campaign` | One trip, ie. `2025_10_eritrea`. Visits many sites; a repeat visit is a new campaign. |
-| `transect` | Survey line, two end points plus the tape length used for scaling. |
-| `video_asset` | Input clip, identified by imohash. Paths stay device-local. |
-| `transect_pass` | One swim: a time window over one or more clips. |
+| `transect` | Survey line: end points where known, plus the tape length and depth. |
+| `video_asset` | Input clip, identified by imohash, with its camera, rig position and review verdict. Paths stay device-local. |
+| `transect_pass` | One swim: a time window over one or more clips, on a day, in a campaign. |
 | `pass_video` | Which clips a pass spans, in playing order. |
-| `run_record` | A reconstruction that already ran, with its provenance. |
+| `run_record` | A reconstruction that already ran, with its provenance and scale. |
 | `cover_row` | Benthic cover in long format, one row per class group. |
 | `preset` | Named run settings the server defines. Pull only. |
-| `pass_group` | Curated grouping for statistics. Server-side only. |
 | `device` | Enrolled desktop installation. Server-side only. |
 | `stored_object` | An archived blob and its upload state. Server-side only. |
 

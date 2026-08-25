@@ -838,7 +838,7 @@
       "CoverSeries": {
         "properties": {
           "entries": {
-            "description": "Named survey events first, ordered by period label then name, then campaign\nbuckets, then the passes with neither.",
+            "description": "Campaigns by begin date then name, then the passes with none.",
             "items": {
               "$ref": "#/components/schemas/CoverSeriesEntry"
             },
@@ -861,7 +861,15 @@
       },
       "CoverSeriesEntry": {
         "properties": {
+          "begin_date": {
+            "format": "date",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "campaign_id": {
+            "description": "The campaign, or null for the passes with none.",
             "format": "uuid",
             "type": [
               "string",
@@ -884,32 +892,12 @@
             "format": "double",
             "type": "number"
           },
-          "group_id": {
-            "description": "The curator's survey event, or null for a campaign or unbucketed entry.",
-            "format": "uuid",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "group_name": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
           "groups": {
             "description": "Largest fraction first.",
             "items": {
               "$ref": "#/components/schemas/SeriesGroupCover"
             },
             "type": "array"
-          },
-          "period_label": {
-            "type": [
-              "string",
-              "null"
-            ]
           }
         },
         "required": [
@@ -1645,8 +1633,8 @@
               "null"
             ]
           },
-          "survey_group_id": {
-            "format": "uuid",
+          "surveyed_on": {
+            "format": "date",
             "type": [
               "string",
               "null"
@@ -1658,161 +1646,14 @@
               "string",
               "null"
             ]
-          },
-          "upside_down": {
-            "type": "boolean"
           }
         },
         "required": [
           "begin_s",
           "end_s",
-          "upside_down",
           "label",
           "notes"
         ],
-        "type": "object"
-      },
-      "PassGroupCreate": {
-        "additionalProperties": false,
-        "properties": {
-          "description": {
-            "type": "string"
-          },
-          "id": {
-            "format": "uuid",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "name": {
-            "type": "string"
-          },
-          "period_label": {
-            "type": [
-              "string",
-              "null"
-            ]
-          }
-        },
-        "required": [
-          "name",
-          "description"
-        ],
-        "type": "object"
-      },
-      "PassGroupList": {
-        "properties": {
-          "created_at": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "deleted_at": {
-            "description": "The tombstone. Written only by the delete route, which administrators alone\nreach. Accepting it on create or update would let a member delete through a\nplain edit.",
-            "format": "date-time",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "description": {
-            "type": "string"
-          },
-          "id": {
-            "format": "uuid",
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "period_label": {
-            "description": "Where the event sits on a timeline (`2024 spring`), and what orders a series.",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "updated_at": {
-            "format": "date-time",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "name",
-          "description",
-          "created_at",
-          "updated_at"
-        ],
-        "type": "object"
-      },
-      "PassGroupResponse": {
-        "properties": {
-          "created_at": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "deleted_at": {
-            "description": "The tombstone. Written only by the delete route, which administrators alone\nreach. Accepting it on create or update would let a member delete through a\nplain edit.",
-            "format": "date-time",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "description": {
-            "type": "string"
-          },
-          "id": {
-            "format": "uuid",
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "period_label": {
-            "description": "Where the event sits on a timeline (`2024 spring`), and what orders a series.",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "updated_at": {
-            "format": "date-time",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "name",
-          "description",
-          "created_at",
-          "updated_at"
-        ],
-        "type": "object"
-      },
-      "PassGroupUpdate": {
-        "additionalProperties": false,
-        "properties": {
-          "description": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "name": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "period_label": {
-            "type": [
-              "string",
-              "null"
-            ]
-          }
-        },
         "type": "object"
       },
       "PassList": {
@@ -1881,9 +1722,9 @@
             "format": "int64",
             "type": "integer"
           },
-          "survey_group_id": {
-            "description": "The curator's survey event, assigned in the console. Deliberately outside the\nsync contract, so a device re-pushing this pass can never clobber it.",
-            "format": "uuid",
+          "surveyed_on": {
+            "description": "The day the swim happened, from the clip's capture stamp unless corrected.",
+            "format": "date",
             "type": [
               "string",
               "null"
@@ -1901,9 +1742,6 @@
             "description": "The conflict key last-write-wins resolves on. Server-stamped: `on_update` only\nfires for a field the update model excludes, and a client-set stamp could pin a\nrow against every later push. `/api/sync/push` writes it directly instead.",
             "format": "date-time",
             "type": "string"
-          },
-          "upside_down": {
-            "type": "boolean"
           },
           "validated_at": {
             "description": "Stamped by the console; from then on a laptop's change is a proposal.",
@@ -1924,7 +1762,6 @@
           "id",
           "begin_s",
           "end_s",
-          "upside_down",
           "label",
           "notes",
           "created_at",
@@ -1999,9 +1836,9 @@
             "format": "int64",
             "type": "integer"
           },
-          "survey_group_id": {
-            "description": "The curator's survey event, assigned in the console. Deliberately outside the\nsync contract, so a device re-pushing this pass can never clobber it.",
-            "format": "uuid",
+          "surveyed_on": {
+            "description": "The day the swim happened, from the clip's capture stamp unless corrected.",
+            "format": "date",
             "type": [
               "string",
               "null"
@@ -2019,9 +1856,6 @@
             "description": "The conflict key last-write-wins resolves on. Server-stamped: `on_update` only\nfires for a field the update model excludes, and a client-set stamp could pin a\nrow against every later push. `/api/sync/push` writes it directly instead.",
             "format": "date-time",
             "type": "string"
-          },
-          "upside_down": {
-            "type": "boolean"
           },
           "validated_at": {
             "description": "Stamped by the console; from then on a laptop's change is a proposal.",
@@ -2042,7 +1876,6 @@
           "id",
           "begin_s",
           "end_s",
-          "upside_down",
           "label",
           "notes",
           "created_at",
@@ -2099,8 +1932,8 @@
               "null"
             ]
           },
-          "survey_group_id": {
-            "format": "uuid",
+          "surveyed_on": {
+            "format": "date",
             "type": [
               "string",
               "null"
@@ -2110,12 +1943,6 @@
             "format": "uuid",
             "type": [
               "string",
-              "null"
-            ]
-          },
-          "upside_down": {
-            "type": [
-              "boolean",
               "null"
             ]
           }
@@ -3166,9 +2993,23 @@
       },
       "RunList": {
         "properties": {
+          "camera_profile": {
+            "description": "The scale the cover was measured at: the camera profile, the tape length and\ncrop width the run used, the metres per pixel that gave, and how the scale\nwas established.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "created_at": {
             "format": "date-time",
             "type": "string"
+          },
+          "crop_width_m": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
           },
           "deleted_at": {
             "description": "The tombstone. Written only by the delete route, which administrators alone\nreach, and by `/api/sync/push`. Accepting it on create or update would let a\nmember delete through a plain edit.",
@@ -3229,6 +3070,13 @@
             "format": "uuid",
             "type": "string"
           },
+          "pixel_size_m": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
           "preprocess_batch_size": {
             "format": "int32",
             "type": [
@@ -3236,11 +3084,16 @@
               "null"
             ]
           },
-          "preset_deviations": {
-            "description": "Settings that departed from the preset, separating \"unchanged\" from \"unrecorded\"."
-          },
           "preset_hash": {
             "description": "Digest of the preset definition, so a claimed version can be checked.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "preset_id": {
+            "description": "The preset row the run ran under, where the device knew it.",
+            "format": "uuid",
             "type": [
               "string",
               "null"
@@ -3286,6 +3139,12 @@
               "null"
             ]
           },
+          "scale_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "segmentation_model": {
             "type": [
               "string",
@@ -3317,6 +3176,13 @@
             "format": "int32",
             "type": [
               "integer",
+              "null"
+            ]
+          },
+          "transect_length_m": {
+            "format": "double",
+            "type": [
+              "number",
               "null"
             ]
           },
@@ -3354,9 +3220,23 @@
       },
       "RunResponse": {
         "properties": {
+          "camera_profile": {
+            "description": "The scale the cover was measured at: the camera profile, the tape length and\ncrop width the run used, the metres per pixel that gave, and how the scale\nwas established.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "created_at": {
             "format": "date-time",
             "type": "string"
+          },
+          "crop_width_m": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
           },
           "deleted_at": {
             "description": "The tombstone. Written only by the delete route, which administrators alone\nreach, and by `/api/sync/push`. Accepting it on create or update would let a\nmember delete through a plain edit.",
@@ -3420,6 +3300,13 @@
             "format": "uuid",
             "type": "string"
           },
+          "pixel_size_m": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
           "preprocess_batch_size": {
             "format": "int32",
             "type": [
@@ -3428,10 +3315,18 @@
             ]
           },
           "preset_deviations": {
-            "description": "Settings that departed from the preset, separating \"unchanged\" from \"unrecorded\"."
+            "description": "Settings that departed from the preset, separating \"unchanged\" from \"unrecorded\".\nDetail view only."
           },
           "preset_hash": {
             "description": "Digest of the preset definition, so a claimed version can be checked.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "preset_id": {
+            "description": "The preset row the run ran under, where the device knew it.",
+            "format": "uuid",
             "type": [
               "string",
               "null"
@@ -3477,6 +3372,12 @@
               "null"
             ]
           },
+          "scale_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "segmentation_model": {
             "type": [
               "string",
@@ -3514,6 +3415,13 @@
             "format": "int32",
             "type": [
               "integer",
+              "null"
+            ]
+          },
+          "transect_length_m": {
+            "format": "double",
+            "type": [
+              "number",
               "null"
             ]
           },
@@ -4162,11 +4070,17 @@
           },
           "end_lat": {
             "format": "double",
-            "type": "number"
+            "type": [
+              "number",
+              "null"
+            ]
           },
           "end_lon": {
             "format": "double",
-            "type": "number"
+            "type": [
+              "number",
+              "null"
+            ]
           },
           "id": {
             "format": "uuid",
@@ -4201,20 +4115,22 @@
           },
           "start_lat": {
             "format": "double",
-            "type": "number"
+            "type": [
+              "number",
+              "null"
+            ]
           },
           "start_lon": {
             "format": "double",
-            "type": "number"
+            "type": [
+              "number",
+              "null"
+            ]
           }
         },
         "required": [
           "name",
-          "description",
-          "start_lat",
-          "start_lon",
-          "end_lat",
-          "end_lon"
+          "description"
         ],
         "type": "object"
       },
@@ -4259,11 +4175,17 @@
           },
           "end_lat": {
             "format": "double",
-            "type": "number"
+            "type": [
+              "number",
+              "null"
+            ]
           },
           "end_lon": {
             "format": "double",
-            "type": "number"
+            "type": [
+              "number",
+              "null"
+            ]
           },
           "id": {
             "format": "uuid",
@@ -4300,12 +4222,19 @@
             ]
           },
           "start_lat": {
+            "description": "End points are nullable: the historical lines mostly have none.",
             "format": "double",
-            "type": "number"
+            "type": [
+              "number",
+              "null"
+            ]
           },
           "start_lon": {
             "format": "double",
-            "type": "number"
+            "type": [
+              "number",
+              "null"
+            ]
           },
           "updated_at": {
             "description": "The conflict key last-write-wins resolves on. Server-stamped: `on_update` only\nfires for a field the update model excludes, and a client-set stamp could pin a\nrow against every later push. `/api/sync/push` writes it directly instead.",
@@ -4331,10 +4260,6 @@
           "id",
           "name",
           "description",
-          "start_lat",
-          "start_lon",
-          "end_lat",
-          "end_lon",
           "created_at",
           "updated_at",
           "server_seq"
@@ -4382,11 +4307,17 @@
           },
           "end_lat": {
             "format": "double",
-            "type": "number"
+            "type": [
+              "number",
+              "null"
+            ]
           },
           "end_lon": {
             "format": "double",
-            "type": "number"
+            "type": [
+              "number",
+              "null"
+            ]
           },
           "id": {
             "format": "uuid",
@@ -4423,12 +4354,19 @@
             ]
           },
           "start_lat": {
+            "description": "End points are nullable: the historical lines mostly have none.",
             "format": "double",
-            "type": "number"
+            "type": [
+              "number",
+              "null"
+            ]
           },
           "start_lon": {
             "format": "double",
-            "type": "number"
+            "type": [
+              "number",
+              "null"
+            ]
           },
           "updated_at": {
             "description": "The conflict key last-write-wins resolves on. Server-stamped: `on_update` only\nfires for a field the update model excludes, and a client-set stamp could pin a\nrow against every later push. `/api/sync/push` writes it directly instead.",
@@ -4454,10 +4392,6 @@
           "id",
           "name",
           "description",
-          "start_lat",
-          "start_lon",
-          "end_lat",
-          "end_lon",
           "created_at",
           "updated_at",
           "server_seq"
@@ -4598,8 +4532,126 @@
         ],
         "type": "object"
       },
+      "VideoCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "camera_label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "captured_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "captured_source": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "codec": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "duration_s": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "file_name": {
+            "type": "string"
+          },
+          "fps": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "gps": {
+            "type": "string"
+          },
+          "gravity": {
+            "type": "string"
+          },
+          "hash": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "height": {
+            "format": "int32",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "id": {
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "notes": {
+            "type": "string"
+          },
+          "review": {
+            "type": "string"
+          },
+          "rig_position": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "size_bytes": {
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "upside_down": {
+            "type": "boolean"
+          },
+          "width": {
+            "format": "int32",
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "file_name",
+          "gravity",
+          "gps",
+          "upside_down",
+          "review",
+          "notes"
+        ],
+        "type": "object"
+      },
       "VideoList": {
         "properties": {
+          "camera_label": {
+            "description": "The camera's name on the rig, as the field team labels it: `GoPro_3`, `cam1`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "captured_at": {
             "format": "date-time",
             "type": [
@@ -4682,6 +4734,20 @@
             "format": "uuid",
             "type": "string"
           },
+          "notes": {
+            "type": "string"
+          },
+          "review": {
+            "description": "`unreviewed`, `usable` or `excluded`.",
+            "type": "string"
+          },
+          "rig_position": {
+            "description": "Where the camera sat relative to the diver: `left`, `centre` or `right`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "server_seq": {
             "format": "int64",
             "type": "integer"
@@ -4697,6 +4763,10 @@
             "description": "The conflict key last-write-wins resolves on. Server-stamped: `on_update` only\nfires for a field the update model excludes, and a client-set stamp could pin a\nrow against every later push. `/api/sync/push` writes it directly instead.",
             "format": "date-time",
             "type": "string"
+          },
+          "upside_down": {
+            "description": "Mounted inverted, which the reconstruction has to know and no probe can tell.",
+            "type": "boolean"
           },
           "validated_at": {
             "description": "Stamped by the console; from then on a laptop's change is a proposal.",
@@ -4725,6 +4795,9 @@
           "file_name",
           "gravity",
           "gps",
+          "upside_down",
+          "review",
+          "notes",
           "created_at",
           "updated_at",
           "server_seq"
@@ -4733,6 +4806,13 @@
       },
       "VideoResponse": {
         "properties": {
+          "camera_label": {
+            "description": "The camera's name on the rig, as the field team labels it: `GoPro_3`, `cam1`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "captured_at": {
             "format": "date-time",
             "type": [
@@ -4815,6 +4895,20 @@
             "format": "uuid",
             "type": "string"
           },
+          "notes": {
+            "type": "string"
+          },
+          "review": {
+            "description": "`unreviewed`, `usable` or `excluded`.",
+            "type": "string"
+          },
+          "rig_position": {
+            "description": "Where the camera sat relative to the diver: `left`, `centre` or `right`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "server_seq": {
             "format": "int64",
             "type": "integer"
@@ -4830,6 +4924,10 @@
             "description": "The conflict key last-write-wins resolves on. Server-stamped: `on_update` only\nfires for a field the update model excludes, and a client-set stamp could pin a\nrow against every later push. `/api/sync/push` writes it directly instead.",
             "format": "date-time",
             "type": "string"
+          },
+          "upside_down": {
+            "description": "Mounted inverted, which the reconstruction has to know and no probe can tell.",
+            "type": "boolean"
           },
           "validated_at": {
             "description": "Stamped by the console; from then on a laptop's change is a proposal.",
@@ -4858,10 +4956,127 @@
           "file_name",
           "gravity",
           "gps",
+          "upside_down",
+          "review",
+          "notes",
           "created_at",
           "updated_at",
           "server_seq"
         ],
+        "type": "object"
+      },
+      "VideoUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "camera_label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "captured_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "captured_source": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "codec": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "duration_s": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "file_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "fps": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "gps": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "gravity": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "hash": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "height": {
+            "format": "int32",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "review": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rig_position": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "size_bytes": {
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "upside_down": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "width": {
+            "format": "int32",
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
         "type": "object"
       }
     },
@@ -6652,494 +6867,6 @@
         ]
       }
     },
-    "/pass_groups": {
-      "get": {
-        "description": "Retrieves all pass_groups.\n\nThis resource manages pass_group items\n\nAdditional sortable columns: \n- name\n- period_label\n- created_at\n- updated_at\n- deleted_at.\n\nAdditional filterable columns: \n- id\n- name\n- period_label\n- deleted_at.",
-        "operationId": "get_all_pass_groups",
-        "parameters": [
-          {
-            "description": "JSON-encoded filter for querying resources.\n\nThis parameter supports various filtering options:\n- Free text search: `{\"q\": \"search text\"}`\n- Filtering by a single ID: `{\"id\": \"550e8400-e29b-41d4-a716-446655440000\"}`\n- Filtering by multiple IDs: `{\"id\": [\"550e8400-e29b-41d4-a716-446655440000\", \"550e8400-e29b-41d4-a716-446655440001\"]}`\n- Filtering on other columns: `{\"name\": \"example\"}`",
-            "example": {
-              "id": "550e8400-e29b-41d4-a716-446655440000",
-              "name": "example",
-              "q": "search text"
-            },
-            "in": "query",
-            "name": "filter",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Range for pagination in the format \"[start, end]\".\n\nExample: `[0,9]`",
-            "example": "[0,9]",
-            "in": "query",
-            "name": "range",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Page number for standard REST pagination (1-based).\n\nExample: `1`",
-            "example": 1,
-            "in": "query",
-            "name": "page",
-            "required": false,
-            "schema": {
-              "format": "int64",
-              "minimum": 0,
-              "type": "integer"
-            }
-          },
-          {
-            "description": "Number of items per page for standard REST pagination.\n\nExample: `10`",
-            "example": 10,
-            "in": "query",
-            "name": "per_page",
-            "required": false,
-            "schema": {
-              "format": "int64",
-              "minimum": 0,
-              "type": "integer"
-            }
-          },
-          {
-            "description": "Sort order for the results in the format `[\"column\", \"order\"]`.\n\nExample: `[\"id\", \"ASC\"]`",
-            "example": "[\"id\", \"ASC\"]",
-            "in": "query",
-            "name": "sort",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Sort column for standard REST format.\n\nExample: `title`",
-            "example": "title",
-            "in": "query",
-            "name": "sort_by",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Sort order for standard REST format (ASC or DESC).\n\nExample: `ASC`",
-            "example": "ASC",
-            "in": "query",
-            "name": "order",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/PassGroupList"
-                  },
-                  "type": "array"
-                }
-              }
-            },
-            "description": "List of resources"
-          },
-          "500": {
-            "description": "Internal Server Error"
-          }
-        },
-        "summary": "Get all pass_groups"
-      },
-      "post": {
-        "description": "Creates a new pass_group.\n\nThis resource manages pass_group items",
-        "operationId": "create_one_pass_group",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PassGroupCreate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PassGroupResponse"
-                }
-              }
-            },
-            "description": "Resource created successfully"
-          },
-          "409": {
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "Duplicate record"
-          }
-        },
-        "summary": "Create one pass_group"
-      }
-    },
-    "/pass_groups/batch": {
-      "delete": {
-        "description": "Deletes many pass_groups by their IDs and returns array of deleted UUIDs.\n\nUse `?partial=true` for partial success mode (deletes valid items even if some fail).\n\nThis resource manages pass_group items",
-        "operationId": "delete_many_pass_groups",
-        "parameters": [
-          {
-            "description": "Enable partial success mode for batch operations.\n\nWhen `true`, the operation processes each item independently instead of\nusing all-or-nothing semantics. Items that succeed are committed even if\nother items fail.\n\nDefault: `false` (all-or-nothing)",
-            "example": false,
-            "in": "query",
-            "name": "partial",
-            "required": false,
-            "schema": {
-              "type": "boolean"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "type": "string"
-                  },
-                  "type": "array"
-                }
-              }
-            },
-            "description": "Resources deleted successfully"
-          },
-          "207": {
-            "description": "Partial success - some items deleted, some failed"
-          },
-          "400": {
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "Bad request - batch size exceeded"
-          },
-          "500": {
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "Internal Server Error"
-          }
-        },
-        "summary": "Delete many pass_groups"
-      },
-      "patch": {
-        "description": "Updates multiple pass_groups in a batch. Limited to 100 items per request.\n\nUse `?partial=true` for partial success mode (commits successful items even if some fail).\n\nThis resource manages pass_group items",
-        "operationId": "update_many_pass_groups",
-        "parameters": [
-          {
-            "description": "Enable partial success mode for batch operations.\n\nWhen `true`, the operation processes each item independently instead of\nusing all-or-nothing semantics. Items that succeed are committed even if\nother items fail.\n\nDefault: `false` (all-or-nothing)",
-            "example": false,
-            "in": "query",
-            "name": "partial",
-            "required": false,
-            "schema": {
-              "type": "boolean"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "items": {
-                  "$ref": "#/components/schemas/BatchUpdateRequest"
-                },
-                "type": "array"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/PassGroupResponse"
-                  },
-                  "type": "array"
-                }
-              }
-            },
-            "description": "Resources updated successfully"
-          },
-          "207": {
-            "description": "Partial success - some items updated, some failed"
-          },
-          "400": {
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "Bad request - batch size exceeded or validation failed"
-          },
-          "404": {
-            "description": "One or more resources not found"
-          },
-          "409": {
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "Duplicate record"
-          },
-          "500": {
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "Internal Server Error"
-          }
-        },
-        "summary": "Update many pass_groups"
-      },
-      "post": {
-        "description": "Creates multiple pass_groups in a batch. Limited to 100 items per request.\n\nUse `?partial=true` for partial success mode (commits successful items even if some fail).\n\nThis resource manages pass_group items",
-        "operationId": "create_many_pass_groups",
-        "parameters": [
-          {
-            "description": "Enable partial success mode for batch operations.\n\nWhen `true`, the operation processes each item independently instead of\nusing all-or-nothing semantics. Items that succeed are committed even if\nother items fail.\n\nDefault: `false` (all-or-nothing)",
-            "example": false,
-            "in": "query",
-            "name": "partial",
-            "required": false,
-            "schema": {
-              "type": "boolean"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "items": {
-                  "$ref": "#/components/schemas/PassGroupCreate"
-                },
-                "type": "array"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/PassGroupResponse"
-                  },
-                  "type": "array"
-                }
-              }
-            },
-            "description": "Resources created successfully"
-          },
-          "207": {
-            "description": "Partial success - some items created, some failed"
-          },
-          "400": {
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "Bad request - batch size exceeded or validation failed"
-          },
-          "409": {
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "Duplicate record"
-          },
-          "500": {
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "Internal Server Error"
-          }
-        },
-        "summary": "Create many pass_groups"
-      }
-    },
-    "/pass_groups/{id}": {
-      "delete": {
-        "description": "Deletes one pass_group by its ID.\n\nThis resource manages pass_group items",
-        "operationId": "delete_one_pass_group",
-        "parameters": [
-          {
-            "description": "Resource identifier",
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Resource deleted successfully"
-          },
-          "404": {
-            "description": "Resource not found"
-          },
-          "500": {
-            "description": "Internal Server Error"
-          }
-        },
-        "summary": "Delete one pass_group"
-      },
-      "get": {
-        "description": "Retrieves one pass_group by its ID.\n\nThis resource manages pass_group items",
-        "operationId": "get_one_pass_group",
-        "parameters": [
-          {
-            "description": "Resource identifier",
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PassGroupResponse"
-                }
-              }
-            },
-            "description": "The requested resource"
-          },
-          "400": {
-            "description": "Bad request"
-          },
-          "404": {
-            "description": "Resource not found"
-          },
-          "500": {
-            "description": "Internal Server Error"
-          }
-        },
-        "summary": "Get one pass_group"
-      },
-      "put": {
-        "description": "Updates one pass_group by its ID.\n\nThis resource manages pass_group items",
-        "operationId": "update_one_pass_group",
-        "parameters": [
-          {
-            "description": "Resource identifier",
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PassGroupUpdate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PassGroupResponse"
-                }
-              }
-            },
-            "description": "Resource updated successfully"
-          },
-          "404": {
-            "description": "Resource not found"
-          },
-          "409": {
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "Duplicate record"
-          }
-        },
-        "summary": "Update one pass_group"
-      }
-    },
     "/pass_videos": {
       "get": {
         "description": "Retrieves all pass_videos.\n\nThis resource manages pass_video items\n\nAdditional sortable columns: \n- ordinal\n- created_at\n- updated_at\n- deleted_at\n- server_seq\n- validated_at.\n\nAdditional filterable columns: \n- id\n- pass_id\n- video_id\n- deleted_at\n- device_id\n- validated_at\n- validated_by.",
@@ -7630,7 +7357,7 @@
     },
     "/passes": {
       "get": {
-        "description": "Retrieves all passes.\n\nThis resource manages pass items\n\nAdditional sortable columns: \n- quality\n- created_at\n- updated_at\n- deleted_at\n- server_seq\n- validated_at.\n\nAdditional filterable columns: \n- id\n- transect_id\n- campaign_id\n- survey_group_id\n- direction\n- upside_down\n- label\n- quality\n- deleted_at\n- device_id\n- validated_at\n- validated_by.",
+        "description": "Retrieves all passes.\n\nThis resource manages pass items\n\nAdditional sortable columns: \n- surveyed_on\n- quality\n- created_at\n- updated_at\n- deleted_at\n- server_seq\n- validated_at.\n\nAdditional filterable columns: \n- id\n- transect_id\n- campaign_id\n- direction\n- surveyed_on\n- label\n- quality\n- deleted_at\n- device_id\n- validated_at\n- validated_by.",
         "operationId": "get_all_passes",
         "parameters": [
           {
@@ -8812,7 +8539,7 @@
     },
     "/runs": {
       "get": {
-        "description": "Retrieves all runs.\n\nThis resource manages run items\n\nAdditional sortable columns: \n- status\n- started_at\n- finished_at\n- run_duration_s\n- created_at\n- updated_at\n- deleted_at\n- server_seq\n- validated_at.\n\nAdditional filterable columns: \n- id\n- pass_id\n- status\n- started_at\n- finished_at\n- gui_version\n- library_version\n- segmentation_model\n- mapping_backend\n- processing_width\n- processing_height\n- fps\n- preprocess_batch_size\n- taxonomy_version\n- preset_name\n- preset_version\n- deleted_at\n- device_id\n- validated_at\n- validated_by.",
+        "description": "Retrieves all runs.\n\nThis resource manages run items\n\nAdditional sortable columns: \n- status\n- started_at\n- finished_at\n- run_duration_s\n- created_at\n- updated_at\n- deleted_at\n- server_seq\n- validated_at.\n\nAdditional filterable columns: \n- id\n- pass_id\n- status\n- started_at\n- finished_at\n- gui_version\n- library_version\n- segmentation_model\n- mapping_backend\n- processing_width\n- processing_height\n- fps\n- preprocess_batch_size\n- taxonomy_version\n- taxonomy_hash\n- preset_name\n- preset_version\n- preset_hash\n- camera_profile\n- scale_type\n- preset_id\n- deleted_at\n- device_id\n- validated_at\n- validated_by.",
         "operationId": "get_all_runs",
         "parameters": [
           {
@@ -10304,7 +10031,7 @@
     },
     "/videos": {
       "get": {
-        "description": "Retrieves all videos.\n\nThis resource manages video items\n\nAdditional sortable columns: \n- file_name\n- size_bytes\n- duration_s\n- captured_at\n- created_at\n- updated_at\n- deleted_at\n- server_seq\n- validated_at.\n\nAdditional filterable columns: \n- id\n- hash\n- file_name\n- codec\n- captured_at\n- gravity\n- gps\n- deleted_at\n- device_id\n- validated_at\n- validated_by.",
+        "description": "Retrieves all videos.\n\nThis resource manages video items\n\nAdditional sortable columns: \n- file_name\n- size_bytes\n- duration_s\n- captured_at\n- camera_label\n- review\n- created_at\n- updated_at\n- deleted_at\n- server_seq\n- validated_at.\n\nAdditional filterable columns: \n- id\n- hash\n- file_name\n- codec\n- captured_at\n- gravity\n- gps\n- camera_label\n- rig_position\n- upside_down\n- review\n- deleted_at\n- device_id\n- validated_at\n- validated_by.",
         "operationId": "get_all_videos",
         "parameters": [
           {
@@ -10405,9 +10132,302 @@
           }
         },
         "summary": "Get all videos"
+      },
+      "post": {
+        "description": "Creates a new video.\n\nThis resource manages video items",
+        "operationId": "create_one_video",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VideoCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VideoResponse"
+                }
+              }
+            },
+            "description": "Resource created successfully"
+          },
+          "409": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Duplicate record"
+          }
+        },
+        "summary": "Create one video"
+      }
+    },
+    "/videos/batch": {
+      "delete": {
+        "description": "Deletes many videos by their IDs and returns array of deleted UUIDs.\n\nUse `?partial=true` for partial success mode (deletes valid items even if some fail).\n\nThis resource manages video items",
+        "operationId": "delete_many_videos",
+        "parameters": [
+          {
+            "description": "Enable partial success mode for batch operations.\n\nWhen `true`, the operation processes each item independently instead of\nusing all-or-nothing semantics. Items that succeed are committed even if\nother items fail.\n\nDefault: `false` (all-or-nothing)",
+            "example": false,
+            "in": "query",
+            "name": "partial",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Resources deleted successfully"
+          },
+          "207": {
+            "description": "Partial success - some items deleted, some failed"
+          },
+          "400": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Bad request - batch size exceeded"
+          },
+          "500": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Delete many videos"
+      },
+      "patch": {
+        "description": "Updates multiple videos in a batch. Limited to 100 items per request.\n\nUse `?partial=true` for partial success mode (commits successful items even if some fail).\n\nThis resource manages video items",
+        "operationId": "update_many_videos",
+        "parameters": [
+          {
+            "description": "Enable partial success mode for batch operations.\n\nWhen `true`, the operation processes each item independently instead of\nusing all-or-nothing semantics. Items that succeed are committed even if\nother items fail.\n\nDefault: `false` (all-or-nothing)",
+            "example": false,
+            "in": "query",
+            "name": "partial",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "items": {
+                  "$ref": "#/components/schemas/BatchUpdateRequest"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/VideoResponse"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Resources updated successfully"
+          },
+          "207": {
+            "description": "Partial success - some items updated, some failed"
+          },
+          "400": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Bad request - batch size exceeded or validation failed"
+          },
+          "404": {
+            "description": "One or more resources not found"
+          },
+          "409": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Duplicate record"
+          },
+          "500": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Update many videos"
+      },
+      "post": {
+        "description": "Creates multiple videos in a batch. Limited to 100 items per request.\n\nUse `?partial=true` for partial success mode (commits successful items even if some fail).\n\nThis resource manages video items",
+        "operationId": "create_many_videos",
+        "parameters": [
+          {
+            "description": "Enable partial success mode for batch operations.\n\nWhen `true`, the operation processes each item independently instead of\nusing all-or-nothing semantics. Items that succeed are committed even if\nother items fail.\n\nDefault: `false` (all-or-nothing)",
+            "example": false,
+            "in": "query",
+            "name": "partial",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "items": {
+                  "$ref": "#/components/schemas/VideoCreate"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/VideoResponse"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Resources created successfully"
+          },
+          "207": {
+            "description": "Partial success - some items created, some failed"
+          },
+          "400": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Bad request - batch size exceeded or validation failed"
+          },
+          "409": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Duplicate record"
+          },
+          "500": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Create many videos"
       }
     },
     "/videos/{id}": {
+      "delete": {
+        "description": "Deletes one video by its ID.\n\nThis resource manages video items",
+        "operationId": "delete_one_video",
+        "parameters": [
+          {
+            "description": "Resource identifier",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Resource deleted successfully"
+          },
+          "404": {
+            "description": "Resource not found"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Delete one video"
+      },
       "get": {
         "description": "Retrieves one video by its ID.\n\nThis resource manages video items",
         "operationId": "get_one_video",
@@ -10444,6 +10464,57 @@
           }
         },
         "summary": "Get one video"
+      },
+      "put": {
+        "description": "Updates one video by its ID.\n\nThis resource manages video items",
+        "operationId": "update_one_video",
+        "parameters": [
+          {
+            "description": "Resource identifier",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VideoUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VideoResponse"
+                }
+              }
+            },
+            "description": "Resource updated successfully"
+          },
+          "404": {
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Duplicate record"
+          }
+        },
+        "summary": "Update one video"
       }
     },
     "/videos/{id}/runs": {
@@ -10514,8 +10585,8 @@
       "name": "passes"
     },
     {
-      "description": "Survey events curated in the console",
-      "name": "pass_groups"
+      "description": "The change ledger: proposals and validation",
+      "name": "changes"
     },
     {
       "description": "Server-defined run settings",

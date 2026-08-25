@@ -15,6 +15,7 @@ use sea_orm::entity::prelude::*;
     name_plural = "cover_rows",
     generate_router,
     require_scope,
+    deny_unknown_fields,
     create::one::post = ledger_created,
     create::many::post = ledger_created_many,
     update::one::post = ledger_updated,

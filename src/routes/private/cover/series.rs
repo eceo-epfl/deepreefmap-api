@@ -1,8 +1,8 @@
 //! Cover over time for one transect, pooled per survey event.
 //!
-//! One entry per (survey event, campaign) pair, so the console draws a series without
-//! re-deriving the buckets. Passes without an event fall back to their campaign, and
-//! passes with neither share one bucket, matching the pooled endpoint's semantics.
+//! A survey event is the passes of one transect in one campaign, so one entry per
+//! campaign, ordered by when the campaign began. Passes with no campaign share one
+//! bucket, last.
 //!
 //! Pooling is the same count-over-summed-denominator figure as `pooled.rs`, with the
 //! per-run fraction extremes carried along as the spread of each point.
@@ -45,12 +45,10 @@ pub struct SeriesGroupCover {
 
 #[derive(Debug, serde::Serialize, ToSchema)]
 pub struct CoverSeriesEntry {
-    /// The curator's survey event, or null for a campaign or unbucketed entry.
-    pub group_id: Option<Uuid>,
-    pub group_name: Option<String>,
-    pub period_label: Option<String>,
+    /// The campaign, or null for the passes with none.
     pub campaign_id: Option<Uuid>,
     pub campaign_name: Option<String>,
+    pub begin_date: Option<chrono::NaiveDate>,
     /// Points the entry's fractions are measured over.
     pub denominator: f64,
     /// Passes that contributed a run with counts.
@@ -63,8 +61,7 @@ pub struct CoverSeriesEntry {
 pub struct CoverSeries {
     pub transect_id: Uuid,
     pub level: String,
-    /// Named survey events first, ordered by period label then name, then campaign
-    /// buckets, then the passes with neither.
+    /// Campaigns by begin date then name, then the passes with none.
     pub entries: Vec<CoverSeriesEntry>,
 }
 
@@ -109,7 +106,7 @@ pub async fn cover_series(
           ORDER BY r.pass_id, r.started_at DESC NULLS LAST, r.id DESC \
         ), \
         rows AS ( \
-          SELECT p.survey_group_id, p.campaign_id, c.class_group, c.fraction, \
+          SELECT p.campaign_id, c.class_group, c.fraction, \
                  c.point_count, c.denominator, c.run_id \
           FROM cover_row c \
           JOIN latest ON latest.id = c.run_id \
@@ -118,27 +115,22 @@ pub async fn cover_series(
             AND c.point_count IS NOT NULL AND c.denominator IS NOT NULL \
         ), \
         totals AS ( \
-          SELECT survey_group_id, campaign_id, SUM(denominator) AS denominator, \
-                 COUNT(*)::BIGINT AS passes \
-          FROM (SELECT DISTINCT survey_group_id, campaign_id, run_id, denominator FROM rows) d \
-          GROUP BY survey_group_id, campaign_id \
+          SELECT campaign_id, SUM(denominator) AS denominator, COUNT(*)::BIGINT AS passes \
+          FROM (SELECT DISTINCT campaign_id, run_id, denominator FROM rows) d \
+          GROUP BY campaign_id \
         ) \
-        SELECT rows.survey_group_id, rows.campaign_id, \
-               g.name AS group_name, g.period_label, ca.name AS campaign_name, \
+        SELECT rows.campaign_id, ca.name AS campaign_name, ca.begin_date, \
                rows.class_group, \
                SUM(rows.point_count) AS point_count, \
                MIN(rows.fraction) AS min_fraction, \
                MAX(rows.fraction) AS max_fraction, \
                totals.denominator, totals.passes AS contributing_passes \
         FROM rows \
-        JOIN totals ON totals.survey_group_id IS NOT DISTINCT FROM rows.survey_group_id \
-                   AND totals.campaign_id IS NOT DISTINCT FROM rows.campaign_id \
-        LEFT JOIN pass_group g ON g.id = rows.survey_group_id \
+        JOIN totals ON totals.campaign_id IS NOT DISTINCT FROM rows.campaign_id \
         LEFT JOIN campaign ca ON ca.id = rows.campaign_id \
-        GROUP BY rows.survey_group_id, rows.campaign_id, g.name, g.period_label, ca.name, \
-                 rows.class_group, totals.denominator, totals.passes \
-        ORDER BY (rows.survey_group_id IS NULL), g.period_label NULLS LAST, g.name, \
-                 (rows.campaign_id IS NULL), ca.name, \
+        GROUP BY rows.campaign_id, ca.name, ca.begin_date, rows.class_group, \
+                 totals.denominator, totals.passes \
+        ORDER BY (rows.campaign_id IS NULL), ca.begin_date NULLS LAST, ca.name, \
                  point_count DESC, rows.class_group ASC";
 
     let found = state
@@ -162,18 +154,15 @@ pub async fn cover_series(
 fn fold_entries(found: &[sea_orm::QueryResult], level: &str) -> AppResult<Vec<CoverSeriesEntry>> {
     let mut entries: Vec<CoverSeriesEntry> = Vec::new();
     for row in found {
-        let group_id: Option<Uuid> = row.try_get("", "survey_group_id")?;
         let campaign_id: Option<Uuid> = row.try_get("", "campaign_id")?;
         let same_bucket = entries
             .last()
-            .is_some_and(|entry| entry.group_id == group_id && entry.campaign_id == campaign_id);
+            .is_some_and(|entry| entry.campaign_id == campaign_id);
         if !same_bucket {
             entries.push(CoverSeriesEntry {
-                group_id,
-                group_name: row.try_get("", "group_name")?,
-                period_label: row.try_get("", "period_label")?,
                 campaign_id,
                 campaign_name: row.try_get("", "campaign_name")?,
+                begin_date: row.try_get("", "begin_date")?,
                 denominator: row.try_get("", "denominator").unwrap_or(0.0),
                 contributing_passes: row.try_get("", "contributing_passes").unwrap_or(0),
                 groups: Vec::new(),

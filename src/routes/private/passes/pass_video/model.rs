@@ -89,5 +89,20 @@ impl Related<crate::routes::private::videos::model::Entity> for Entity {
 
 impl ActiveModelBehavior for ActiveModel {}
 
+impl crudcrate::validation::Validatable for PassVideoCreate {
+    fn validate(&self) -> Result<(), crudcrate::validation::ValidationError> {
+        crudcrate::validation::validators::validate_range("ordinal", self.ordinal, Some(0), None)
+    }
+}
+
+impl crudcrate::validation::Validatable for PassVideoUpdate {
+    fn validate(&self) -> Result<(), crudcrate::validation::ValidationError> {
+        if let Some(Some(ordinal)) = self.ordinal {
+            crudcrate::validation::validators::validate_range("ordinal", ordinal, Some(0), None)?;
+        }
+        Ok(())
+    }
+}
+
 crate::soft_delete_hooks!(PassVideo, "pass_videos");
 crate::ledger_hooks!(PassVideo, "pass_videos");

@@ -1,7 +1,8 @@
 use crudcrate::{CRUDResource, EntityToModels};
 use sea_orm::entity::prelude::*;
 
-/// A named reef location. Transect names are unique within a site.
+/// A named reef location, unique within its country. Transect names are unique within a
+/// site.
 #[derive(
     Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize, serde::Deserialize, EntityToModels,
 )]

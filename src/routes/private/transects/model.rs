@@ -32,12 +32,13 @@ pub struct Model {
     pub name: String,
     #[crudcrate(fulltext)]
     pub description: String,
-    pub start_lat: f64,
-    pub start_lon: f64,
+    /// End points are nullable: the historical lines mostly have none.
+    pub start_lat: Option<f64>,
+    pub start_lon: Option<f64>,
     /// Accuracy is per end point, as the field records have it.
     pub start_accuracy_m: Option<f64>,
-    pub end_lat: f64,
-    pub end_lon: f64,
+    pub end_lat: Option<f64>,
+    pub end_lon: Option<f64>,
     pub end_accuracy_m: Option<f64>,
     #[crudcrate(filterable, sortable)]
     pub length_m: Option<f64>,
@@ -97,10 +98,18 @@ impl ActiveModelBehavior for ActiveModel {}
 impl crudcrate::validation::Validatable for TransectCreate {
     fn validate(&self) -> Result<(), crudcrate::validation::ValidationError> {
         crudcrate::validation::validators::validate_required("name", &self.name)?;
-        crate::common::validate::latitude("start_lat", self.start_lat)?;
-        crate::common::validate::longitude("start_lon", self.start_lon)?;
-        crate::common::validate::latitude("end_lat", self.end_lat)?;
-        crate::common::validate::longitude("end_lon", self.end_lon)?;
+        if let Some(start_lat) = self.start_lat {
+            crate::common::validate::latitude("start_lat", start_lat)?;
+        }
+        if let Some(start_lon) = self.start_lon {
+            crate::common::validate::longitude("start_lon", start_lon)?;
+        }
+        if let Some(end_lat) = self.end_lat {
+            crate::common::validate::latitude("end_lat", end_lat)?;
+        }
+        if let Some(end_lon) = self.end_lon {
+            crate::common::validate::longitude("end_lon", end_lon)?;
+        }
         Ok(())
     }
 }

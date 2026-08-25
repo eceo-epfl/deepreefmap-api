@@ -32,17 +32,14 @@ pub struct Model {
     pub transect_id: Option<Uuid>,
     #[crudcrate(filterable)]
     pub campaign_id: Option<Uuid>,
-    /// The curator's survey event, assigned in the console. Deliberately outside the
-    /// sync contract, so a device re-pushing this pass can never clobber it.
-    #[crudcrate(filterable)]
-    pub survey_group_id: Option<Uuid>,
     pub begin_s: f64,
     pub end_s: f64,
     /// Null means the direction was never recorded, which no code stands for.
     #[crudcrate(filterable)]
     pub direction: Option<String>,
-    #[crudcrate(filterable)]
-    pub upside_down: bool,
+    /// The day the swim happened, from the clip's capture stamp unless corrected.
+    #[crudcrate(filterable, sortable)]
+    pub surveyed_on: Option<chrono::NaiveDate>,
     /// Empty means unnamed, which clients render as their generated default.
     #[crudcrate(filterable, fulltext)]
     pub label: String,
@@ -90,12 +87,6 @@ pub enum Relation {
         to = "crate::routes::private::campaigns::model::Column::Id"
     )]
     Campaign,
-    #[sea_orm(
-        belongs_to = "crate::routes::private::pass_groups::model::Entity",
-        from = "Column::SurveyGroupId",
-        to = "crate::routes::private::pass_groups::model::Column::Id"
-    )]
-    PassGroup,
     #[sea_orm(has_many = "super::pass_video::Entity")]
     PassVideo,
     #[sea_orm(has_many = "crate::routes::private::runs::model::Entity")]
@@ -114,12 +105,6 @@ impl Related<crate::routes::private::campaigns::model::Entity> for Entity {
     }
 }
 
-impl Related<crate::routes::private::pass_groups::model::Entity> for Entity {
-    fn to() -> RelationDef {
-        Relation::PassGroup.def()
-    }
-}
-
 impl Related<super::pass_video::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::PassVideo.def()
@@ -133,6 +118,77 @@ impl Related<crate::routes::private::runs::model::Entity> for Entity {
 }
 
 impl ActiveModelBehavior for ActiveModel {}
+
+fn validate_window(
+    begin_s: Option<f64>,
+    end_s: Option<f64>,
+) -> Result<(), crudcrate::validation::ValidationError> {
+    if let Some(begin) = begin_s
+        && begin < 0.0
+    {
+        return Err(crudcrate::validation::ValidationError::new(
+            "begin_s",
+            "must not be negative",
+        ));
+    }
+    if let (Some(begin), Some(end)) = (begin_s, end_s)
+        && end <= begin
+    {
+        return Err(crudcrate::validation::ValidationError::new(
+            "end_s",
+            "must be after begin_s",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_code(
+    field: &str,
+    value: Option<&str>,
+    vocabulary: &crate::contract::vocab::Vocabulary,
+) -> Result<(), crudcrate::validation::ValidationError> {
+    match value {
+        Some(code) if !vocabulary.codes().contains(&code) => {
+            Err(crudcrate::validation::ValidationError::new(
+                field,
+                format!("must be one of {}", vocabulary.codes().join(", ")),
+            ))
+        }
+        _ => Ok(()),
+    }
+}
+
+impl crudcrate::validation::Validatable for PassCreate {
+    fn validate(&self) -> Result<(), crudcrate::validation::ValidationError> {
+        validate_window(Some(self.begin_s), Some(self.end_s))?;
+        validate_code(
+            "direction",
+            self.direction.as_deref(),
+            &crate::contract::vocab::PASS_DIRECTION,
+        )?;
+        validate_code(
+            "quality",
+            self.quality.as_deref(),
+            &crate::contract::vocab::PASS_QUALITY,
+        )
+    }
+}
+
+impl crudcrate::validation::Validatable for PassUpdate {
+    fn validate(&self) -> Result<(), crudcrate::validation::ValidationError> {
+        validate_window(self.begin_s.flatten(), self.end_s.flatten())?;
+        validate_code(
+            "direction",
+            self.direction.as_ref().and_then(|v| v.as_deref()),
+            &crate::contract::vocab::PASS_DIRECTION,
+        )?;
+        validate_code(
+            "quality",
+            self.quality.as_ref().and_then(|v| v.as_deref()),
+            &crate::contract::vocab::PASS_QUALITY,
+        )
+    }
+}
 
 crate::soft_delete_hooks!(Pass, "passes");
 crate::ledger_hooks!(Pass, "passes");

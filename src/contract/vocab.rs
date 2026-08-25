@@ -339,12 +339,75 @@ pub const COVER_METRIC_SOURCE: Vocabulary = Vocabulary {
     ],
 };
 
+/// Where a camera sat on the rig relative to the diver. Null means not recorded.
+pub const RIG_POSITION: Vocabulary = Vocabulary {
+    name: "rig_position",
+    columns: &["video_asset.rig_position"],
+    nullable: true,
+    multi_value: MultiValue::Split,
+    unknown_aliases: &["unknown", "n/a", "?"],
+    unknown_code: None,
+    terms: &[
+        Term {
+            code: "left",
+            label: "Left",
+            definition: "To the diver's left.",
+            aliases: &["l", "left of diver"],
+        },
+        Term {
+            code: "centre",
+            label: "Centre",
+            definition: "Directly ahead of the diver.",
+            aliases: &["center", "c", "middle", "front"],
+        },
+        Term {
+            code: "right",
+            label: "Right",
+            definition: "To the diver's right.",
+            aliases: &["r", "right of diver"],
+        },
+    ],
+};
+
+/// Whether a clip is fit to survey from. A clip nobody has looked at is `unreviewed`,
+/// which is not the same as one looked at and rejected.
+pub const VIDEO_REVIEW: Vocabulary = Vocabulary {
+    name: "video_review",
+    columns: &["video_asset.review"],
+    nullable: false,
+    multi_value: MultiValue::Split,
+    unknown_aliases: &[],
+    unknown_code: Some("unreviewed"),
+    terms: &[
+        Term {
+            code: "unreviewed",
+            label: "Unreviewed",
+            definition: "Nobody has judged the footage yet.",
+            aliases: &["pending", "todo"],
+        },
+        Term {
+            code: "usable",
+            label: "Usable",
+            definition: "Footage a pass can be cut from.",
+            aliases: &["ok", "good", "keep"],
+        },
+        Term {
+            code: "excluded",
+            label: "Excluded",
+            definition: "Footage judged unusable, or a duplicate of another clip.",
+            aliases: &["exclude", "duplicate", "reject", "rejected", "unusable"],
+        },
+    ],
+};
+
 /// Every vocabulary, so callers can render or check them all without a list of their own.
 pub const VOCABULARIES: &[&Vocabulary] = &[
     &PASS_QUALITY,
     &PASS_DIRECTION,
     &TELEMETRY_TRISTATE,
     &CAPTURE_SOURCE,
+    &RIG_POSITION,
+    &VIDEO_REVIEW,
     &RUN_STATUS,
     &COVER_LEVEL,
     &COVER_ESTIMATOR,

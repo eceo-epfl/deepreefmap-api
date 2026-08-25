@@ -201,6 +201,94 @@
     },
     {
       "columns": [
+        "video_asset.rig_position"
+      ],
+      "multi_value": "split",
+      "name": "rig_position",
+      "nullable": true,
+      "terms": [
+        {
+          "aliases": [
+            "l",
+            "left of diver"
+          ],
+          "code": "left",
+          "definition": "To the diver's left.",
+          "label": "Left"
+        },
+        {
+          "aliases": [
+            "center",
+            "c",
+            "middle",
+            "front"
+          ],
+          "code": "centre",
+          "definition": "Directly ahead of the diver.",
+          "label": "Centre"
+        },
+        {
+          "aliases": [
+            "r",
+            "right of diver"
+          ],
+          "code": "right",
+          "definition": "To the diver's right.",
+          "label": "Right"
+        }
+      ],
+      "unknown_aliases": [
+        "unknown",
+        "n/a",
+        "?"
+      ],
+      "unknown_code": null
+    },
+    {
+      "columns": [
+        "video_asset.review"
+      ],
+      "multi_value": "split",
+      "name": "video_review",
+      "nullable": false,
+      "terms": [
+        {
+          "aliases": [
+            "pending",
+            "todo"
+          ],
+          "code": "unreviewed",
+          "definition": "Nobody has judged the footage yet.",
+          "label": "Unreviewed"
+        },
+        {
+          "aliases": [
+            "ok",
+            "good",
+            "keep"
+          ],
+          "code": "usable",
+          "definition": "Footage a pass can be cut from.",
+          "label": "Usable"
+        },
+        {
+          "aliases": [
+            "exclude",
+            "duplicate",
+            "reject",
+            "rejected",
+            "unusable"
+          ],
+          "code": "excluded",
+          "definition": "Footage judged unusable, or a duplicate of another clip.",
+          "label": "Excluded"
+        }
+      ],
+      "unknown_aliases": [],
+      "unknown_code": "unreviewed"
+    },
+    {
+      "columns": [
         "run_record.status"
       ],
       "multi_value": "split",
