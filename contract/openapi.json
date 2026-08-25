@@ -1,6 +1,24 @@
 {
   "components": {
     "schemas": {
+      "Ack": {
+        "description": "A row that landed, and the position the device stores as its next `base_seq`.",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "seq": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "seq"
+        ],
+        "type": "object"
+      },
       "AssignAllResponse": {
         "properties": {
           "assigned_at": {
@@ -221,6 +239,20 @@
             "description": "The conflict key last-write-wins resolves on. Server-stamped: `on_update` only\nfires for a field the update model excludes, and a client-set stamp could pin a\nrow against every later push. `/api/sync/push` writes it directly instead.",
             "format": "date-time",
             "type": "string"
+          },
+          "validated_at": {
+            "description": "Stamped by the console; from then on a laptop's change is a proposal.",
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "validated_by": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -287,6 +319,20 @@
             "description": "The conflict key last-write-wins resolves on. Server-stamped: `on_update` only\nfires for a field the update model excludes, and a client-set stamp could pin a\nrow against every later push. `/api/sync/push` writes it directly instead.",
             "format": "date-time",
             "type": "string"
+          },
+          "validated_at": {
+            "description": "Stamped by the console; from then on a laptop's change is a proposal.",
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "validated_by": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -329,6 +375,192 @@
             ]
           }
         },
+        "type": "object"
+      },
+      "ChangeList": {
+        "properties": {
+          "author": {
+            "description": "The console user behind a console entry.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "base_seq": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "decided_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "decided_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "decided_seq": {
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "device_id": {
+            "description": "The pushing laptop; null for a console entry.",
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "patch": {
+            "description": "The fields this entry changed against its base."
+          },
+          "projected_seq": {
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "row_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "seq": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "status": {
+            "type": "string"
+          },
+          "table_key": {
+            "description": "The section, as `contract/sync-contract.json` names it.",
+            "type": "string"
+          },
+          "validate": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "seq",
+          "table_key",
+          "row_id",
+          "base_seq",
+          "patch",
+          "status",
+          "validate",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "ChangeResponse": {
+        "properties": {
+          "after_image": {},
+          "author": {
+            "description": "The console user behind a console entry.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "base_seq": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "decided_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "decided_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "decided_seq": {
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "device_id": {
+            "description": "The pushing laptop; null for a console entry.",
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "patch": {
+            "description": "The fields this entry changed against its base."
+          },
+          "projected_seq": {
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "row_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "seq": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "status": {
+            "type": "string"
+          },
+          "table_key": {
+            "description": "The section, as `contract/sync-contract.json` names it.",
+            "type": "string"
+          },
+          "validate": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "seq",
+          "table_key",
+          "row_id",
+          "base_seq",
+          "after_image",
+          "patch",
+          "status",
+          "validate",
+          "created_at"
+        ],
         "type": "object"
       },
       "ClassGroup": {
@@ -471,6 +703,20 @@
             "description": "The conflict key last-write-wins resolves on. Server-stamped: `on_update` only\nfires for a field the update model excludes, and a client-set stamp could pin a\nrow against every later push. `/api/sync/push` writes it directly instead.",
             "format": "date-time",
             "type": "string"
+          },
+          "validated_at": {
+            "description": "Stamped by the console; from then on a laptop's change is a proposal.",
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "validated_by": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -560,6 +806,20 @@
             "description": "The conflict key last-write-wins resolves on. Server-stamped: `on_update` only\nfires for a field the update model excludes, and a client-set stamp could pin a\nrow against every later push. `/api/sync/push` writes it directly instead.",
             "format": "date-time",
             "type": "string"
+          },
+          "validated_at": {
+            "description": "Stamped by the console; from then on a laptop's change is a proposal.",
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "validated_by": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -656,6 +916,22 @@
           "denominator",
           "contributing_passes",
           "groups"
+        ],
+        "type": "object"
+      },
+      "DecisionResponse": {
+        "properties": {
+          "seq": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "seq",
+          "status"
         ],
         "type": "object"
       },
@@ -1286,6 +1562,46 @@
         ],
         "type": "object"
       },
+      "OutboxEntry": {
+        "description": "The ledger's word on one entry a device pushed, decided since its cursor.",
+        "properties": {
+          "projected_seq": {
+            "description": "The row's `server_seq` once applied, for the device's `base_seq`.",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "row_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "seq": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Status"
+          },
+          "table_key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "table_key",
+          "row_id",
+          "seq",
+          "status"
+        ],
+        "type": "object"
+      },
       "PassCreate": {
         "additionalProperties": false,
         "properties": {
@@ -1588,6 +1904,20 @@
           },
           "upside_down": {
             "type": "boolean"
+          },
+          "validated_at": {
+            "description": "Stamped by the console; from then on a laptop's change is a proposal.",
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "validated_by": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -1692,6 +2022,20 @@
           },
           "upside_down": {
             "type": "boolean"
+          },
+          "validated_at": {
+            "description": "Stamped by the console; from then on a laptop's change is a proposal.",
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "validated_by": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -1852,6 +2196,20 @@
             "format": "date-time",
             "type": "string"
           },
+          "validated_at": {
+            "description": "Stamped by the console; from then on a laptop's change is a proposal.",
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "validated_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "video_id": {
             "format": "uuid",
             "type": "string"
@@ -1911,6 +2269,20 @@
             "description": "The conflict key last-write-wins resolves on. Server-stamped: `on_update` only\nfires for a field the update model excludes, and a client-set stamp could pin a\nrow against every later push. `/api/sync/push` writes it directly instead.",
             "format": "date-time",
             "type": "string"
+          },
+          "validated_at": {
+            "description": "Stamped by the console; from then on a laptop's change is a proposal.",
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "validated_by": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "video_id": {
             "format": "uuid",
@@ -2529,6 +2901,13 @@
             },
             "type": "array"
           },
+          "outbox": {
+            "description": "Decisions on this device's entries since the cursor. Empty for an operator, and\nunder contract 1.",
+            "items": {
+              "$ref": "#/components/schemas/OutboxEntry"
+            },
+            "type": "array"
+          },
           "sections": {
             "type": "object"
           }
@@ -2538,7 +2917,8 @@
           "cursor",
           "has_more",
           "sections",
-          "omitted_sections"
+          "omitted_sections",
+          "outbox"
         ],
         "type": "object"
       },
@@ -2551,7 +2931,7 @@
             "type": "integer"
           },
           "sections": {
-            "description": "Rows keyed by section name, as listed in `contract/sync-contract.json`.",
+            "description": "Rows keyed by section name, as listed in `contract/sync-contract.json`. From\ncontract 2 a row may carry `base_seq`, the `server_seq` the device last saw for it.",
             "type": "object"
           }
         },
@@ -2575,6 +2955,7 @@
             "type": "integer"
           },
           "sections": {
+            "description": "One [`SectionOutcome`] per section sent. Under contract 1 the older shape:\n`applied` a count, and `skipped`, `refused`, `conflicted` lists of ids.",
             "type": "object"
           }
         },
@@ -2582,6 +2963,23 @@
           "contract_version",
           "cursor",
           "sections"
+        ],
+        "type": "object"
+      },
+      "Refusal": {
+        "description": "A row that did not land, and why. The ledger keeps its values either way.",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "reason"
         ],
         "type": "object"
       },
@@ -2926,6 +3324,20 @@
             "description": "The conflict key last-write-wins resolves on. Server-stamped: `on_update` only\nfires for a field the update model excludes, and a client-set stamp could pin a\nrow against every later push. `/api/sync/push` writes it directly instead.",
             "format": "date-time",
             "type": "string"
+          },
+          "validated_at": {
+            "description": "Stamped by the console; from then on a laptop's change is a proposal.",
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "validated_by": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -3109,6 +3521,20 @@
             "description": "The conflict key last-write-wins resolves on. Server-stamped: `on_update` only\nfires for a field the update model excludes, and a client-set stamp could pin a\nrow against every later push. `/api/sync/push` writes it directly instead.",
             "format": "date-time",
             "type": "string"
+          },
+          "validated_at": {
+            "description": "Stamped by the console; from then on a laptop's change is a proposal.",
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "validated_by": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -3160,15 +3586,16 @@
       "SectionOutcome": {
         "properties": {
           "applied": {
-            "description": "Rows written, inserted or updated.",
-            "minimum": 0,
-            "type": "integer"
-          },
-          "conflicted": {
-            "description": "Ids the database would not take: a unique collision, a missing parent, or a value\noutside its allowed set. Re-sending the same row cannot help.",
+            "description": "Rows written, inserted or merged.",
             "items": {
-              "format": "uuid",
-              "type": "string"
+              "$ref": "#/components/schemas/Ack"
+            },
+            "type": "array"
+          },
+          "proposed": {
+            "description": "Rows the console holds the last word on, kept as proposals a curator reviews.",
+            "items": {
+              "$ref": "#/components/schemas/Refusal"
             },
             "type": "array"
           },
@@ -3176,19 +3603,17 @@
             "minimum": 0,
             "type": "integer"
           },
-          "refused": {
-            "description": "Ids left untouched because this origin does not author them: another origin's row,\nor any row of a section this origin may not write. A human reconciles these.",
+          "rejected": {
+            "description": "Rows the database would not take. Re-sending the same row cannot help.",
             "items": {
-              "format": "uuid",
-              "type": "string"
+              "$ref": "#/components/schemas/Refusal"
             },
             "type": "array"
           },
-          "skipped": {
-            "description": "Ids this origin owns but the server holds at an equal or newer `updated_at`; pull\nthem to see what won.",
+          "superseded": {
+            "description": "Rows another origin owns, or this origin has since moved past.",
             "items": {
-              "format": "uuid",
-              "type": "string"
+              "$ref": "#/components/schemas/Refusal"
             },
             "type": "array"
           }
@@ -3196,9 +3621,9 @@
         "required": [
           "received",
           "applied",
-          "skipped",
-          "refused",
-          "conflicted"
+          "superseded",
+          "proposed",
+          "rejected"
         ],
         "type": "object"
       },
@@ -3360,6 +3785,20 @@
             "description": "The conflict key last-write-wins resolves on. Server-stamped: `on_update` only\nfires for a field the update model excludes, and a client-set stamp could pin a\nrow against every later push. `/api/sync/push` writes it directly instead.",
             "format": "date-time",
             "type": "string"
+          },
+          "validated_at": {
+            "description": "Stamped by the console; from then on a laptop's change is a proposal.",
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "validated_by": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -3440,6 +3879,20 @@
             "description": "The conflict key last-write-wins resolves on. Server-stamped: `on_update` only\nfires for a field the update model excludes, and a client-set stamp could pin a\nrow against every later push. `/api/sync/push` writes it directly instead.",
             "format": "date-time",
             "type": "string"
+          },
+          "validated_at": {
+            "description": "Stamped by the console; from then on a laptop's change is a proposal.",
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "validated_by": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -3495,6 +3948,17 @@
           }
         },
         "type": "object"
+      },
+      "Status": {
+        "description": "How an entry was decided.",
+        "enum": [
+          "applied",
+          "superseded",
+          "proposed",
+          "rejected",
+          "dismissed"
+        ],
+        "type": "string"
       },
       "StoredObjectList": {
         "properties": {
@@ -3847,6 +4311,20 @@
             "description": "The conflict key last-write-wins resolves on. Server-stamped: `on_update` only\nfires for a field the update model excludes, and a client-set stamp could pin a\nrow against every later push. `/api/sync/push` writes it directly instead.",
             "format": "date-time",
             "type": "string"
+          },
+          "validated_at": {
+            "description": "Stamped by the console; from then on a laptop's change is a proposal.",
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "validated_by": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -3956,6 +4434,20 @@
             "description": "The conflict key last-write-wins resolves on. Server-stamped: `on_update` only\nfires for a field the update model excludes, and a client-set stamp could pin a\nrow against every later push. `/api/sync/push` writes it directly instead.",
             "format": "date-time",
             "type": "string"
+          },
+          "validated_at": {
+            "description": "Stamped by the console; from then on a laptop's change is a proposal.",
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "validated_by": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -4070,6 +4562,42 @@
         ],
         "type": "object"
       },
+      "ValidateRequest": {
+        "properties": {
+          "ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "section": {
+            "description": "The section, as `contract/sync-contract.json` names it.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "section",
+          "ids"
+        ],
+        "type": "object"
+      },
+      "ValidateResponse": {
+        "properties": {
+          "validated": {
+            "description": "Rows this call validated. Rows already validated, or absent, are not listed.",
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "validated"
+        ],
+        "type": "object"
+      },
       "VideoList": {
         "properties": {
           "captured_at": {
@@ -4169,6 +4697,20 @@
             "description": "The conflict key last-write-wins resolves on. Server-stamped: `on_update` only\nfires for a field the update model excludes, and a client-set stamp could pin a\nrow against every later push. `/api/sync/push` writes it directly instead.",
             "format": "date-time",
             "type": "string"
+          },
+          "validated_at": {
+            "description": "Stamped by the console; from then on a laptop's change is a proposal.",
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "validated_by": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "width": {
             "format": "int32",
@@ -4288,6 +4830,20 @@
             "description": "The conflict key last-write-wins resolves on. Server-stamped: `on_update` only\nfires for a field the update model excludes, and a client-set stamp could pin a\nrow against every later push. `/api/sync/push` writes it directly instead.",
             "format": "date-time",
             "type": "string"
+          },
+          "validated_at": {
+            "description": "Stamped by the console; from then on a laptop's change is a proposal.",
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "validated_by": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "width": {
             "format": "int32",
@@ -4761,7 +5317,7 @@
     },
     "/campaigns": {
       "get": {
-        "description": "Retrieves all campaigns.\n\nThis resource manages campaign items\n\nAdditional sortable columns: \n- name\n- begin_date\n- end_date\n- created_at\n- updated_at\n- deleted_at\n- server_seq.\n\nAdditional filterable columns: \n- id\n- name\n- begin_date\n- end_date\n- deleted_at\n- device_id.",
+        "description": "Retrieves all campaigns.\n\nThis resource manages campaign items\n\nAdditional sortable columns: \n- name\n- begin_date\n- end_date\n- created_at\n- updated_at\n- deleted_at\n- server_seq\n- validated_at.\n\nAdditional filterable columns: \n- id\n- name\n- begin_date\n- end_date\n- deleted_at\n- device_id\n- validated_at\n- validated_by.",
         "operationId": "get_all_campaigns",
         "parameters": [
           {
@@ -5247,6 +5803,262 @@
         "summary": "Update one campaign"
       }
     },
+    "/changes": {
+      "get": {
+        "description": "Retrieves all changes.\n\nThis resource manages change items\n\nAdditional sortable columns: \n- seq\n- table_key\n- status\n- projected_seq\n- created_at\n- decided_at.\n\nAdditional filterable columns: \n- seq\n- table_key\n- row_id\n- device_id\n- author\n- status\n- reason\n- validate\n- decided_by.",
+        "operationId": "get_all_changes",
+        "parameters": [
+          {
+            "description": "JSON-encoded filter for querying resources.\n\nThis parameter supports various filtering options:\n- Free text search: `{\"q\": \"search text\"}`\n- Filtering by a single ID: `{\"id\": \"550e8400-e29b-41d4-a716-446655440000\"}`\n- Filtering by multiple IDs: `{\"id\": [\"550e8400-e29b-41d4-a716-446655440000\", \"550e8400-e29b-41d4-a716-446655440001\"]}`\n- Filtering on other columns: `{\"name\": \"example\"}`",
+            "example": {
+              "id": "550e8400-e29b-41d4-a716-446655440000",
+              "name": "example",
+              "q": "search text"
+            },
+            "in": "query",
+            "name": "filter",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Range for pagination in the format \"[start, end]\".\n\nExample: `[0,9]`",
+            "example": "[0,9]",
+            "in": "query",
+            "name": "range",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Page number for standard REST pagination (1-based).\n\nExample: `1`",
+            "example": 1,
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "format": "int64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Number of items per page for standard REST pagination.\n\nExample: `10`",
+            "example": 10,
+            "in": "query",
+            "name": "per_page",
+            "required": false,
+            "schema": {
+              "format": "int64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Sort order for the results in the format `[\"column\", \"order\"]`.\n\nExample: `[\"id\", \"ASC\"]`",
+            "example": "[\"id\", \"ASC\"]",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Sort column for standard REST format.\n\nExample: `title`",
+            "example": "title",
+            "in": "query",
+            "name": "sort_by",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Sort order for standard REST format (ASC or DESC).\n\nExample: `ASC`",
+            "example": "ASC",
+            "in": "query",
+            "name": "order",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ChangeList"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "List of resources"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Get all changes"
+      }
+    },
+    "/changes/validate": {
+      "post": {
+        "operationId": "validate",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ValidateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidateResponse"
+                }
+              }
+            },
+            "description": "Rows validated"
+          },
+          "400": {
+            "description": "Unknown section, or a transect without a site"
+          }
+        },
+        "summary": "Validate rows: from here on a laptop's change to them is a proposal.",
+        "tags": [
+          "changes"
+        ]
+      }
+    },
+    "/changes/{id}": {
+      "get": {
+        "description": "Retrieves one change by its ID.\n\nThis resource manages change items",
+        "operationId": "get_one_change",
+        "parameters": [
+          {
+            "description": "Resource identifier",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangeResponse"
+                }
+              }
+            },
+            "description": "The requested resource"
+          },
+          "400": {
+            "description": "Bad request"
+          },
+          "404": {
+            "description": "Resource not found"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Get one change"
+      }
+    },
+    "/changes/{seq}/accept": {
+      "post": {
+        "operationId": "accept",
+        "parameters": [
+          {
+            "description": "Ledger position of the proposal",
+            "in": "path",
+            "name": "seq",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionResponse"
+                }
+              }
+            },
+            "description": "Proposal applied"
+          },
+          "404": {
+            "description": "No such change"
+          },
+          "409": {
+            "description": "Not a proposal"
+          }
+        },
+        "summary": "Accept a proposal: its fields land on the row as a console write.",
+        "tags": [
+          "changes"
+        ]
+      }
+    },
+    "/changes/{seq}/dismiss": {
+      "post": {
+        "operationId": "dismiss",
+        "parameters": [
+          {
+            "description": "Ledger position of the proposal",
+            "in": "path",
+            "name": "seq",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionResponse"
+                }
+              }
+            },
+            "description": "Proposal dismissed"
+          },
+          "404": {
+            "description": "No such change"
+          },
+          "409": {
+            "description": "Not a proposal"
+          }
+        },
+        "summary": "Dismiss a proposal: the row stands, the values stay in the ledger.",
+        "tags": [
+          "changes"
+        ]
+      }
+    },
     "/config/class-groups": {
       "get": {
         "description": "Served so the console colours a cover figure the same way the desktop viewer does.",
@@ -5295,7 +6107,7 @@
     },
     "/cover_rows": {
       "get": {
-        "description": "Retrieves all cover_rows.\n\nThis resource manages cover_row items\n\nAdditional sortable columns: \n- level\n- class_group\n- fraction\n- point_count\n- created_at\n- updated_at\n- deleted_at\n- server_seq.\n\nAdditional filterable columns: \n- id\n- run_id\n- level\n- class_group\n- estimator\n- metric_source\n- deleted_at\n- device_id.",
+        "description": "Retrieves all cover_rows.\n\nThis resource manages cover_row items\n\nAdditional sortable columns: \n- level\n- class_group\n- fraction\n- point_count\n- created_at\n- updated_at\n- deleted_at\n- server_seq\n- validated_at.\n\nAdditional filterable columns: \n- id\n- run_id\n- level\n- class_group\n- estimator\n- metric_source\n- deleted_at\n- device_id\n- validated_at\n- validated_by.",
         "operationId": "get_all_cover_rows",
         "parameters": [
           {
@@ -6330,7 +7142,7 @@
     },
     "/pass_videos": {
       "get": {
-        "description": "Retrieves all pass_videos.\n\nThis resource manages pass_video items\n\nAdditional sortable columns: \n- ordinal\n- created_at\n- updated_at\n- deleted_at\n- server_seq.\n\nAdditional filterable columns: \n- id\n- pass_id\n- video_id\n- deleted_at\n- device_id.",
+        "description": "Retrieves all pass_videos.\n\nThis resource manages pass_video items\n\nAdditional sortable columns: \n- ordinal\n- created_at\n- updated_at\n- deleted_at\n- server_seq\n- validated_at.\n\nAdditional filterable columns: \n- id\n- pass_id\n- video_id\n- deleted_at\n- device_id\n- validated_at\n- validated_by.",
         "operationId": "get_all_pass_videos",
         "parameters": [
           {
@@ -6818,7 +7630,7 @@
     },
     "/passes": {
       "get": {
-        "description": "Retrieves all passes.\n\nThis resource manages pass items\n\nAdditional sortable columns: \n- quality\n- created_at\n- updated_at\n- deleted_at\n- server_seq.\n\nAdditional filterable columns: \n- id\n- transect_id\n- campaign_id\n- survey_group_id\n- direction\n- upside_down\n- label\n- quality\n- deleted_at\n- device_id.",
+        "description": "Retrieves all passes.\n\nThis resource manages pass items\n\nAdditional sortable columns: \n- quality\n- created_at\n- updated_at\n- deleted_at\n- server_seq\n- validated_at.\n\nAdditional filterable columns: \n- id\n- transect_id\n- campaign_id\n- survey_group_id\n- direction\n- upside_down\n- label\n- quality\n- deleted_at\n- device_id\n- validated_at\n- validated_by.",
         "operationId": "get_all_passes",
         "parameters": [
           {
@@ -8000,7 +8812,7 @@
     },
     "/runs": {
       "get": {
-        "description": "Retrieves all runs.\n\nThis resource manages run items\n\nAdditional sortable columns: \n- status\n- started_at\n- finished_at\n- run_duration_s\n- created_at\n- updated_at\n- deleted_at\n- server_seq.\n\nAdditional filterable columns: \n- id\n- pass_id\n- status\n- started_at\n- finished_at\n- gui_version\n- library_version\n- segmentation_model\n- mapping_backend\n- processing_width\n- processing_height\n- fps\n- preprocess_batch_size\n- taxonomy_version\n- preset_name\n- preset_version\n- deleted_at\n- device_id.",
+        "description": "Retrieves all runs.\n\nThis resource manages run items\n\nAdditional sortable columns: \n- status\n- started_at\n- finished_at\n- run_duration_s\n- created_at\n- updated_at\n- deleted_at\n- server_seq\n- validated_at.\n\nAdditional filterable columns: \n- id\n- pass_id\n- status\n- started_at\n- finished_at\n- gui_version\n- library_version\n- segmentation_model\n- mapping_backend\n- processing_width\n- processing_height\n- fps\n- preprocess_batch_size\n- taxonomy_version\n- preset_name\n- preset_version\n- deleted_at\n- device_id\n- validated_at\n- validated_by.",
         "operationId": "get_all_runs",
         "parameters": [
           {
@@ -8144,7 +8956,7 @@
     },
     "/sites": {
       "get": {
-        "description": "Retrieves all sites.\n\nThis resource manages site items\n\nAdditional sortable columns: \n- name\n- country\n- created_at\n- updated_at\n- deleted_at\n- server_seq.\n\nAdditional filterable columns: \n- id\n- name\n- country\n- region\n- deleted_at\n- device_id.",
+        "description": "Retrieves all sites.\n\nThis resource manages site items\n\nAdditional sortable columns: \n- name\n- country\n- created_at\n- updated_at\n- deleted_at\n- server_seq\n- validated_at.\n\nAdditional filterable columns: \n- id\n- name\n- country\n- region\n- deleted_at\n- device_id\n- validated_at\n- validated_by.",
         "operationId": "get_all_sites",
         "parameters": [
           {
@@ -8889,9 +9701,6 @@
           },
           "400": {
             "description": "Unknown section, bad contract version, or malformed row"
-          },
-          "409": {
-            "description": "A row references something that does not exist"
           }
         },
         "summary": "Apply a document of survey metadata.",
@@ -8902,7 +9711,7 @@
     },
     "/transects": {
       "get": {
-        "description": "Retrieves all transects.\n\nThis resource manages transect items\n\nAdditional sortable columns: \n- name\n- length_m\n- depth_m\n- created_at\n- updated_at\n- deleted_at\n- server_seq.\n\nAdditional filterable columns: \n- id\n- site_id\n- name\n- length_m\n- depth_m\n- deleted_at\n- device_id.",
+        "description": "Retrieves all transects.\n\nThis resource manages transect items\n\nAdditional sortable columns: \n- name\n- length_m\n- depth_m\n- created_at\n- updated_at\n- deleted_at\n- server_seq\n- validated_at.\n\nAdditional filterable columns: \n- id\n- site_id\n- name\n- length_m\n- depth_m\n- deleted_at\n- device_id\n- validated_at\n- validated_by.",
         "operationId": "get_all_transects",
         "parameters": [
           {
@@ -9495,7 +10304,7 @@
     },
     "/videos": {
       "get": {
-        "description": "Retrieves all videos.\n\nThis resource manages video items\n\nAdditional sortable columns: \n- file_name\n- size_bytes\n- duration_s\n- captured_at\n- created_at\n- updated_at\n- deleted_at\n- server_seq.\n\nAdditional filterable columns: \n- id\n- hash\n- file_name\n- codec\n- captured_at\n- gravity\n- gps\n- deleted_at\n- device_id.",
+        "description": "Retrieves all videos.\n\nThis resource manages video items\n\nAdditional sortable columns: \n- file_name\n- size_bytes\n- duration_s\n- captured_at\n- created_at\n- updated_at\n- deleted_at\n- server_seq\n- validated_at.\n\nAdditional filterable columns: \n- id\n- hash\n- file_name\n- codec\n- captured_at\n- gravity\n- gps\n- deleted_at\n- device_id\n- validated_at\n- validated_by.",
         "operationId": "get_all_videos",
         "parameters": [
           {

@@ -94,6 +94,8 @@ const SITE_KEYS: &[&str] = &[
     "region",
     "server_seq",
     "updated_at",
+    "validated_at",
+    "validated_by",
 ];
 
 const PRESET_ONE_KEYS: &[&str] = &[
@@ -153,6 +155,8 @@ const RUN_ONE_KEYS: &[&str] = &[
     "taxonomy_hash",
     "taxonomy_version",
     "updated_at",
+    "validated_at",
+    "validated_by",
 ];
 
 /// The list drops the heavy provenance blobs. `preset_deviations` stays: the run list
@@ -185,6 +189,8 @@ const RUN_LIST_KEYS: &[&str] = &[
     "taxonomy_hash",
     "taxonomy_version",
     "updated_at",
+    "validated_at",
+    "validated_by",
 ];
 
 /// Every device column except the token pair, which no read path may return.

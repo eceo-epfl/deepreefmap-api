@@ -15,6 +15,10 @@ use sea_orm::entity::prelude::*;
     name_plural = "cover_rows",
     generate_router,
     require_scope,
+    create::one::post = ledger_created,
+    create::many::post = ledger_created_many,
+    update::one::post = ledger_updated,
+    update::many::post = ledger_updated_many,
     delete::one::body = soft_delete_one,
     delete::many::body = soft_delete_many
 )]
@@ -58,6 +62,11 @@ pub struct Model {
     pub device_id: Option<Uuid>,
     #[crudcrate(exclude(create, update), sortable)]
     pub server_seq: i64,
+    /// Stamped by the console; from then on a laptop's change is a proposal.
+    #[crudcrate(filterable, sortable, exclude(create, update))]
+    pub validated_at: Option<chrono::DateTime<chrono::Utc>>,
+    #[crudcrate(filterable, exclude(create, update))]
+    pub validated_by: Option<String>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -78,4 +87,5 @@ impl Related<crate::routes::private::runs::model::Entity> for Entity {
 
 impl ActiveModelBehavior for ActiveModel {}
 
-crate::soft_delete_hooks!(CoverRow);
+crate::soft_delete_hooks!(CoverRow, "cover_rows");
+crate::ledger_hooks!(CoverRow, "cover_rows");

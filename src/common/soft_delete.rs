@@ -63,7 +63,7 @@ fn strip_deleted_at_filter(uri: &Uri) -> Option<Uri> {
 /// Invoke in the model module, beside the `DeriveEntityModel` and the api struct it names.
 #[macro_export]
 macro_rules! soft_delete_hooks {
-    ($api_struct:ident) => {
+    ($api_struct:ident, $section:literal) => {
         /// Tombstone one row, returning its id.
         ///
         /// A client that already holds a row learns of its deletion only by pulling the row
@@ -123,8 +123,8 @@ macro_rules! soft_delete_hooks {
                 return Ok(vec![]);
             }
 
-            // `updated_at` moves too: it is the clock sync conflicts resolve on, and the
-            // UPDATE trigger stamps a fresh `server_seq` so the tombstone reaches pulls.
+            // `updated_at` moves too, so the UPDATE trigger stamps a fresh `server_seq`
+            // and the tombstone reaches pulls.
             let now = chrono::Utc::now();
             Entity::update_many()
                 .col_expr(Column::DeletedAt, Expr::value(now))
@@ -137,12 +137,31 @@ macro_rules! soft_delete_hooks {
 
             let existing: std::collections::HashSet<uuid::Uuid> = existing.into_iter().collect();
             let mut seen = std::collections::HashSet::new();
-            Ok(ids
+            let tombstoned: Vec<uuid::Uuid> = ids
                 .into_iter()
                 .filter(|id| existing.contains(id) && seen.insert(*id))
-                .collect())
+                .collect();
+            $crate::common::soft_delete::record_tombstones(db, $section, &tombstoned).await?;
+            Ok(tombstoned)
         }
     };
+}
+
+/// Record tombstones in the ledger for a replicated section; a console-only table has
+/// no section and nothing to record.
+///
+/// # Errors
+///
+/// Returns the ledger's database error.
+pub async fn record_tombstones(
+    db: &sea_orm::DatabaseConnection,
+    section: &str,
+    ids: &[uuid::Uuid],
+) -> Result<(), crudcrate::ApiError> {
+    if section.is_empty() {
+        return Ok(());
+    }
+    crate::common::ledger::record_deleted(db, section, ids).await
 }
 
 /// Whether a row is present at all, tombstoned or not.

@@ -3,6 +3,7 @@
 pub mod admin;
 pub mod archive;
 pub mod campaigns;
+pub mod changes;
 pub mod class_groups;
 pub mod cover;
 pub mod devices;
@@ -23,6 +24,7 @@ use utoipa_axum::router::OpenApiRouter;
 
 use crate::common::AppState;
 use crate::common::auth::{deny_device_crud, require_admin_delete};
+use crate::common::ledger::scope_subject;
 use crate::common::soft_delete::hide_tombstones;
 use crate::routes::CRUD_BODY_LIMIT;
 
@@ -34,7 +36,7 @@ use crate::routes::CRUD_BODY_LIMIT;
 pub fn protected_router(state: &AppState) -> OpenApiRouter {
     use self::{
         archive::StoredObject, archive::run_artifact::RunArtifact, campaigns::Campaign,
-        cover::CoverRow, devices::Device, pass_groups::PassGroup, passes::Pass,
+        changes::Change, cover::CoverRow, devices::Device, pass_groups::PassGroup, passes::Pass,
         passes::pass_video::PassVideo, presets::Preset, runs::Run, sites::Site,
         transects::Transect, videos::Video,
     };
@@ -71,7 +73,11 @@ pub fn protected_router(state: &AppState) -> OpenApiRouter {
         // Outside `hide_tombstones`, since neither table has a tombstone column.
         .nest("/stored_objects", StoredObject::read_only_router(db))
         .nest("/run_artifacts", RunArtifact::read_only_router(db))
+        // The ledger, for the console to review. Written by push and the CRUD hooks.
+        .nest("/changes", Change::read_only_router(db))
         .layer(RequestBodyLimitLayer::new(CRUD_BODY_LIMIT))
+        // The CRUD hooks record the caller's subject in the ledger from this scope.
+        .layer(middleware::from_fn(scope_subject))
         // Outermost, so no nest inside can be reached with a device token.
         .layer(middleware::from_fn(deny_device_crud));
 
@@ -90,6 +96,7 @@ pub fn protected_router(state: &AppState) -> OpenApiRouter {
     OpenApiRouter::new()
         .merge(entities)
         .merge(sync::router::router(state))
+        .merge(changes::router::router(state))
         .merge(devices::router::router(state))
         .merge(cover::router::router(state))
         .merge(performance::router(state))

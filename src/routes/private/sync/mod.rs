@@ -1,11 +1,14 @@
 //! Bidirectional metadata sync.
 //!
-//! `push` applies a client's document, `pull` hands back what the client has not seen.
-//! `schema` describes the replicated tables, published as a contract artefact.
+//! `push` applies a client's document through the `ledger`, `pull` hands back what the
+//! client has not seen. `schema` describes the replicated tables, published as a
+//! contract artefact.
 
+pub mod ledger;
 pub mod pull;
 pub mod push;
 pub mod router;
+pub mod rows;
 pub mod schema;
 
 use sea_orm::{ConnectionTrait, Statement};

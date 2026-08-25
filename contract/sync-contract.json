@@ -1,5 +1,5 @@
 {
-  "contract_version": 1,
+  "contract_version": 2,
   "min_contract_version": 1,
   "pull_sections": [
     "sites",
@@ -8,6 +8,8 @@
     "presets"
   ],
   "push_sections": [
+    "sites",
+    "campaigns",
     "transects",
     "videos",
     "passes",
@@ -32,57 +34,93 @@
         {
           "kind": "uuid",
           "name": "id",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "text",
           "name": "name",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "text",
           "name": "country",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "text",
           "name": "region",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "text",
           "name": "description",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "float",
           "name": "latitude",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "float",
           "name": "longitude",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "timestamp",
           "name": "created_at",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "timestamp",
           "name": "updated_at",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "timestamp",
           "name": "deleted_at",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "uuid",
           "name": "device_id",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "kind": "timestamp",
+          "name": "validated_at",
+          "nullable": true,
+          "server_owned": true,
+          "since": 2
+        },
+        {
+          "kind": "text",
+          "name": "validated_by",
+          "nullable": true,
+          "server_owned": true,
+          "since": 2
         }
       ],
       "section": "sites",
@@ -93,47 +131,79 @@
         {
           "kind": "uuid",
           "name": "id",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "text",
           "name": "name",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "date",
           "name": "begin_date",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "date",
           "name": "end_date",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "text",
           "name": "description",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "timestamp",
           "name": "created_at",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "timestamp",
           "name": "updated_at",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "timestamp",
           "name": "deleted_at",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "uuid",
           "name": "device_id",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "kind": "timestamp",
+          "name": "validated_at",
+          "nullable": true,
+          "server_owned": true,
+          "since": 2
+        },
+        {
+          "kind": "text",
+          "name": "validated_by",
+          "nullable": true,
+          "server_owned": true,
+          "since": 2
         }
       ],
       "section": "campaigns",
@@ -144,82 +214,128 @@
         {
           "kind": "uuid",
           "name": "id",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "uuid",
           "name": "site_id",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "text",
           "name": "name",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "text",
           "name": "description",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "float",
           "name": "start_lat",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "float",
           "name": "start_lon",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "float",
           "name": "start_accuracy_m",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "float",
           "name": "end_lat",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "float",
           "name": "end_lon",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "float",
           "name": "end_accuracy_m",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "float",
           "name": "length_m",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "float",
           "name": "depth_m",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "timestamp",
           "name": "created_at",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "timestamp",
           "name": "updated_at",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "timestamp",
           "name": "deleted_at",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "uuid",
           "name": "device_id",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "kind": "timestamp",
+          "name": "validated_at",
+          "nullable": true,
+          "server_owned": true,
+          "since": 2
+        },
+        {
+          "kind": "text",
+          "name": "validated_by",
+          "nullable": true,
+          "server_owned": true,
+          "since": 2
         }
       ],
       "section": "transects",
@@ -230,87 +346,135 @@
         {
           "kind": "uuid",
           "name": "id",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "text",
           "name": "hash",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "text",
           "name": "file_name",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "big_int",
           "name": "size_bytes",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "float",
           "name": "duration_s",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "float",
           "name": "fps",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "int",
           "name": "width",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "int",
           "name": "height",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "text",
           "name": "codec",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "timestamp",
           "name": "captured_at",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "text",
           "name": "captured_source",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "text",
           "name": "gravity",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "text",
           "name": "gps",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "timestamp",
           "name": "created_at",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "timestamp",
           "name": "updated_at",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "timestamp",
           "name": "deleted_at",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "uuid",
           "name": "device_id",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "kind": "timestamp",
+          "name": "validated_at",
+          "nullable": true,
+          "server_owned": true,
+          "since": 2
+        },
+        {
+          "kind": "text",
+          "name": "validated_by",
+          "nullable": true,
+          "server_owned": true,
+          "since": 2
         }
       ],
       "section": "videos",
@@ -321,72 +485,114 @@
         {
           "kind": "uuid",
           "name": "id",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "uuid",
           "name": "transect_id",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "uuid",
           "name": "campaign_id",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "float",
           "name": "begin_s",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "float",
           "name": "end_s",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "text",
           "name": "direction",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "bool",
           "name": "upside_down",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "text",
           "name": "label",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "text",
           "name": "notes",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "text",
           "name": "quality",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "timestamp",
           "name": "created_at",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "timestamp",
           "name": "updated_at",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "timestamp",
           "name": "deleted_at",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "uuid",
           "name": "device_id",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "kind": "timestamp",
+          "name": "validated_at",
+          "nullable": true,
+          "server_owned": true,
+          "since": 2
+        },
+        {
+          "kind": "text",
+          "name": "validated_by",
+          "nullable": true,
+          "server_owned": true,
+          "since": 2
         }
       ],
       "section": "passes",
@@ -397,42 +603,72 @@
         {
           "kind": "uuid",
           "name": "id",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "uuid",
           "name": "pass_id",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "uuid",
           "name": "video_id",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "int",
           "name": "ordinal",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "timestamp",
           "name": "created_at",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "timestamp",
           "name": "updated_at",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "timestamp",
           "name": "deleted_at",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "uuid",
           "name": "device_id",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "kind": "timestamp",
+          "name": "validated_at",
+          "nullable": true,
+          "server_owned": true,
+          "since": 2
+        },
+        {
+          "kind": "text",
+          "name": "validated_by",
+          "nullable": true,
+          "server_owned": true,
+          "since": 2
         }
       ],
       "section": "pass_videos",
@@ -443,147 +679,219 @@
         {
           "kind": "uuid",
           "name": "id",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "uuid",
           "name": "pass_id",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "text",
           "name": "status",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "timestamp",
           "name": "started_at",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "timestamp",
           "name": "finished_at",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "text",
           "name": "error",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "text",
           "name": "run_dir_name",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "text",
           "name": "gui_version",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "text",
           "name": "library_version",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "text",
           "name": "segmentation_model",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "text",
           "name": "mapping_backend",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "int",
           "name": "processing_width",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "int",
           "name": "processing_height",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "int",
           "name": "fps",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "int",
           "name": "preprocess_batch_size",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "int",
           "name": "taxonomy_version",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "text",
           "name": "taxonomy_hash",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "json",
           "name": "model_revisions",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "text",
           "name": "preset_name",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "json",
           "name": "preset_deviations",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "int",
           "name": "preset_version",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "text",
           "name": "preset_hash",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "float",
           "name": "run_duration_s",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "json",
           "name": "stage_durations",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "json",
           "name": "stage_peaks",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "timestamp",
           "name": "created_at",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "timestamp",
           "name": "updated_at",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "timestamp",
           "name": "deleted_at",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "uuid",
           "name": "device_id",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "kind": "timestamp",
+          "name": "validated_at",
+          "nullable": true,
+          "server_owned": true,
+          "since": 2
+        },
+        {
+          "kind": "text",
+          "name": "validated_by",
+          "nullable": true,
+          "server_owned": true,
+          "since": 2
         }
       ],
       "section": "runs",
@@ -594,67 +902,107 @@
         {
           "kind": "uuid",
           "name": "id",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "uuid",
           "name": "run_id",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "text",
           "name": "level",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "text",
           "name": "class_group",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "text",
           "name": "estimator",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "float",
           "name": "fraction",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "float",
           "name": "point_count",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "float",
           "name": "denominator",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "text",
           "name": "metric_source",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "timestamp",
           "name": "created_at",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "timestamp",
           "name": "updated_at",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "timestamp",
           "name": "deleted_at",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "uuid",
           "name": "device_id",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "kind": "timestamp",
+          "name": "validated_at",
+          "nullable": true,
+          "server_owned": true,
+          "since": 2
+        },
+        {
+          "kind": "text",
+          "name": "validated_by",
+          "nullable": true,
+          "server_owned": true,
+          "since": 2
         }
       ],
       "section": "cover_rows",
@@ -665,47 +1013,65 @@
         {
           "kind": "uuid",
           "name": "id",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "text",
           "name": "name",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "int",
           "name": "version",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "json",
           "name": "settings",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "text",
           "name": "description",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "timestamp",
           "name": "created_at",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "timestamp",
           "name": "updated_at",
-          "nullable": false
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "timestamp",
           "name": "deleted_at",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         },
         {
           "kind": "uuid",
           "name": "device_id",
-          "nullable": true
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
         }
       ],
       "section": "presets",

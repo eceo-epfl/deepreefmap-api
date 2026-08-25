@@ -71,4 +71,4 @@ impl crudcrate::validation::Validatable for PassGroupUpdate {
     }
 }
 
-crate::soft_delete_hooks!(PassGroup);
+crate::soft_delete_hooks!(PassGroup, "");

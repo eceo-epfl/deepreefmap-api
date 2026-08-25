@@ -17,6 +17,10 @@ use sea_orm::entity::prelude::*;
     generate_router,
     require_scope,
     deny_unknown_fields,
+    create::one::post = ledger_created,
+    create::many::post = ledger_created_many,
+    update::one::post = ledger_updated,
+    update::many::post = ledger_updated_many,
     delete::one::body = soft_delete_one,
     delete::many::body = soft_delete_many
 )]
@@ -92,4 +96,5 @@ impl crudcrate::validation::Validatable for PresetUpdate {
     }
 }
 
-crate::soft_delete_hooks!(Preset);
+crate::soft_delete_hooks!(Preset, "presets");
+crate::ledger_hooks!(Preset, "presets");

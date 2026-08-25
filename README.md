@@ -3,9 +3,10 @@
 **A metadata registry for reef surveys processed on the desktop.**
 
 Laptops run the DeepReefMap pipeline and hold the frames, clouds and orthomosaics. This
-server holds the catalogue: sites, transects, passes, runs and benthic cover. Metadata
-syncs both ways, so a transect made in the browser reaches every laptop, and a run
-finished in the field reaches everyone else.
+server holds the catalogue: sites, campaigns, transects, passes, runs and benthic cover.
+Metadata syncs both ways through a change ledger: a transect made in the browser
+reaches every laptop, a run finished in the field reaches everyone else, and the
+console has the last word on any row it has touched.
 
 Footage never passes through the API. Clients send it straight to S3-compatible storage.
 
@@ -34,7 +35,8 @@ replicas can start together.
 ## Authentication
 
 The browser presents a Keycloak JWT. The desktop application presents a device token.
-Both resolve to the same identity, so `created_by` means the same thing either way.
+A person writes through the CRUD routes and is named as `author` in the ledger; a
+device writes through `/api/sync/push` and is named as `device_id`.
 
 The desktop application ships with no server address in it. Enrol one in a single paste:
 
@@ -68,10 +70,26 @@ Deepreefmap-Sections: sites,campaigns,transects,videos,passes,pass_videos,runs,c
 Both headers are optional, and a malformed value counts as absent. Send neither and you
 get contract 1 with no narrowing. Every response carries the server's own range back.
 
-Conflicts resolve last-write-wins on `updated_at`, whole row. A row the server holds at
-an equal or newer stamp is skipped and listed in `skipped`. Deletes are tombstones,
-because an absent row is indistinguishable from one a client has not seen yet. A push
-amends only rows its own origin authored, and refuses anything else row by row.
+Every pushed row becomes an entry in `change_log`, decided against the `base_seq` the
+device last saw for it:
+
+| Outcome | When |
+|---|---|
+| `applied` | nothing moved since the base, or only other fields did (merged) |
+| `proposed` | the console edited the same field, validated, deleted or authored the row |
+| `superseded` | another device's row, or a field this device has since moved past |
+| `rejected` | a unique collision, a missing parent, or a value outside its vocabulary |
+
+Nothing a laptop sends is lost: a proposal keeps its values, and `GET /api/changes`
+lists them for a curator to accept (`POST /api/changes/{seq}/accept`) or dismiss.
+`POST /api/changes/validate` marks rows checked, after which every laptop's change to
+them is a proposal. Deletes are tombstones, because an absent row is indistinguishable
+from one a client has not seen yet.
+
+Under contract 2 a device also pulls its own rows of the upload sections back, so it
+learns what the console curated, validated or deleted, and `outbox` in the pull carries
+the decisions on its proposals. Contract 1 clients keep the older push shape and pull
+only the catalogue.
 
 ## Archive
 
@@ -100,11 +118,12 @@ without exposing anything. Nothing here deletes or overwrites.
 
 Everything above `pass_group` in this table replicates. The desktop application's batch,
 batch-item and notification tables do not: they are one workstation's queue.
+`change_log` is the ledger behind sync, server-side only.
 
 | Entity | Notes |
 |---|---|
 | `site` | Reef location. Transect names are unique within one. |
-| `campaign` | Field expedition, ie. `2025_10_eritrea`. Visits many sites. |
+| `campaign` | One trip, ie. `2025_10_eritrea`. Visits many sites; a repeat visit is a new campaign. |
 | `transect` | Survey line, two end points plus the tape length used for scaling. |
 | `video_asset` | Input clip, identified by imohash. Paths stay device-local. |
 | `transect_pass` | One swim: a time window over one or more clips. |

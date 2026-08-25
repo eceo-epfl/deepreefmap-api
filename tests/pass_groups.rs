@@ -122,8 +122,8 @@ async fn test_pass_group_rejects_a_device() {
     assert_eq!(groups, 1, "a device wrote a group");
 }
 
-/// The safety property the column's absence from the sync contract buys: a device
-/// re-pushing its own pass must not clear the grouping a curator assigned meanwhile.
+/// A device re-pushing its own pass must not clear the grouping a curator assigned
+/// meanwhile; its own edit lands beside it, since the two touch different fields.
 #[tokio::test]
 async fn test_survey_group_survives_a_device_repush() {
     let db = setup_test_db().await;
@@ -153,7 +153,6 @@ async fn test_survey_group_survives_a_device_repush() {
     .await;
     assert_eq!(status, 200, "assigning the group failed: {body}");
 
-    // Newer than the curator's edit, so last-write-wins takes the whole row again.
     let mut repushed = pass_row(pass, &soon());
     repushed["label"] = serde_json::json!("renamed swim");
     let (status, body) = post_json(

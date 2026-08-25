@@ -13,6 +13,10 @@ use sea_orm::entity::prelude::*;
     generate_router,
     require_scope,
     deny_unknown_fields,
+    create::one::post = ledger_created,
+    create::many::post = ledger_created_many,
+    update::one::post = ledger_updated,
+    update::many::post = ledger_updated_many,
     delete::one::body = soft_delete_one,
     delete::many::body = soft_delete_many
 )]
@@ -50,6 +54,11 @@ pub struct Model {
     /// Sync ordering, stamped by trigger. Never accepted from a client.
     #[crudcrate(exclude(create, update), sortable)]
     pub server_seq: i64,
+    /// Stamped by the console; from then on a laptop's change is a proposal.
+    #[crudcrate(filterable, sortable, exclude(create, update))]
+    pub validated_at: Option<chrono::DateTime<chrono::Utc>>,
+    #[crudcrate(filterable, exclude(create, update))]
+    pub validated_by: Option<String>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -94,4 +103,5 @@ impl crudcrate::validation::Validatable for SiteUpdate {
     }
 }
 
-crate::soft_delete_hooks!(Site);
+crate::soft_delete_hooks!(Site, "sites");
+crate::ledger_hooks!(Site, "sites");

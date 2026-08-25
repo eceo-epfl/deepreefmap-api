@@ -245,7 +245,6 @@ async fn test_push_whole_survey_in_one_call() {
             "sites": [site_row(site, "Harat", stamps.1)],
             "campaigns": [{
                 "id": campaign, "name": "2025_10_eritrea", "description": "",
-                "begin_date": "2025-10-28", "end_date": "2025-11-05",
                 "created_at": stamps.0, "updated_at": stamps.1,
             }],
             "transects": [{
@@ -321,11 +320,24 @@ async fn test_push_whole_survey_in_one_call() {
             "{section} not applied: {body}"
         );
     }
-    // The two the console owns travel as ancestors and are read, never written.
-    for (section, id) in [("sites", site), ("campaigns", campaign)] {
-        assert_eq!(body["sections"][section]["applied"], 0, "{body}");
-        assert_eq!(body["sections"][section]["refused"][0], id, "{body}");
+    // The two the console owns travel as ancestors: unchanged, so acknowledged and
+    // nothing proposed.
+    for section in ["sites", "campaigns"] {
+        assert_eq!(body["sections"][section]["applied"], 1, "{body}");
+        assert!(
+            body["sections"][section]["refused"]
+                .as_array()
+                .expect("refused list")
+                .is_empty(),
+            "{body}"
+        );
     }
+    let proposals: i64 = one_value(
+        &db,
+        "SELECT COUNT(*)::BIGINT FROM change_log WHERE status = 'proposed'",
+    )
+    .await;
+    assert_eq!(proposals, 0, "an unchanged ancestor became a proposal");
 
     // Provenance survives the round trip intact. Read as an operator: runs and cover are
     // upload only, so a device never pulls them back.
@@ -858,51 +870,4 @@ async fn test_push_refuses_the_presets_section() {
     // Only the migration's seeded preset remains.
     let presets: i64 = one_value(&db, "SELECT COUNT(*)::BIGINT FROM preset").await;
     assert_eq!(presets, 1, "a device authored a preset");
-}
-
-#[tokio::test]
-async fn test_push_clamps_a_stamp_from_the_future() {
-    let db = setup_test_db().await;
-    let app = build_test_app(db.clone());
-    let code = seed_connect_code(&db, "alice", "Laptop with a bad clock").await;
-    let token = enrol_device(&app, &code).await;
-
-    // Conflicts resolve on this stamp, so an unbounded one pins the row against every
-    // later correction, the honest client's included. Clamped rather than refused: a
-    // laptop carrying one poisoned row must still be able to sync the rest.
-    let id = "11111111-1111-4111-8111-111111111111";
-    let (status, body) = post_json(
-        &app,
-        "/api/sync/push",
-        &push_body(&serde_json::json!({
-            "transects": [transect_row(id, "Harat", "2099-01-01T00:00:00Z")]
-        })),
-        Some(&token),
-    )
-    .await;
-    assert_eq!(status, 200, "{body}");
-    assert_eq!(body["sections"]["transects"]["applied"], 1);
-
-    let stored: String = one_value(
-        &db,
-        &format!("SELECT updated_at::text FROM transect WHERE id = '{id}'"),
-    )
-    .await;
-    assert!(
-        !stored.starts_with("2099"),
-        "the future stamp was stored: {stored}"
-    );
-
-    // Pulled back to now, so the row stays correctable.
-    let (_, body) = post_json(
-        &app,
-        "/api/sync/push",
-        &push_body(&serde_json::json!({ "transects": [transect_row(id, "Renamed", &soon())] })),
-        Some(&token),
-    )
-    .await;
-    assert_eq!(body["sections"]["transects"]["applied"], 1, "{body}");
-    let name: String =
-        one_value(&db, &format!("SELECT name FROM transect WHERE id = '{id}'")).await;
-    assert_eq!(name, "Renamed");
 }

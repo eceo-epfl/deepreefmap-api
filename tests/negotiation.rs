@@ -184,7 +184,13 @@ async fn test_a_push_at_the_negotiated_down_version_is_accepted() {
     assert_eq!(status, 200, "{body}");
     let pushed: serde_json::Value = serde_json::from_str(&body).expect("JSON");
     assert_eq!(pushed["contract_version"], CONTRACT_VERSION);
-    assert_eq!(pushed["sections"]["transects"]["applied"], 1);
+    assert_eq!(
+        pushed["sections"]["transects"]["applied"]
+            .as_array()
+            .expect("acks under the current contract")
+            .len(),
+        1
+    );
 
     // The server's own maximum, declared by a client that cannot read it, is still refused.
     let (status, _, body) = post_declaring(
@@ -203,18 +209,45 @@ async fn test_every_sync_response_carries_the_agreed_version() {
     let db = setup_test_db().await;
     let app = build_test_app(db.clone());
 
+    let current = format!("{MIN_CONTRACT_VERSION}-{CONTRACT_VERSION}");
     let code = seed_connect_code(&db, "alice", "Alice laptop").await;
-    let (status, enrolled) = post_json(
+    let (status, _, body) = post_declaring(
         &app,
         "/api/enrol",
         &serde_json::json!({ "code": code }),
         None,
+        &declaring(&[(CONTRACT_HEADER, &current)]),
     )
     .await;
-    assert_eq!(status, 200, "enrolment failed: {enrolled}");
+    assert_eq!(status, 200, "enrolment failed: {body}");
+    let enrolled: serde_json::Value = serde_json::from_str(&body).expect("JSON");
     assert_eq!(enrolled["contract_version"], CONTRACT_VERSION);
     let token = enrolled["token"].as_str().expect("a token").to_string();
 
+    let (status, _, body) = post_declaring(
+        &app,
+        "/api/sync/push",
+        &push_body(&serde_json::json!({}), CONTRACT_VERSION),
+        Some(&token),
+        &declaring(&[(CONTRACT_HEADER, &current)]),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    let pushed: serde_json::Value = serde_json::from_str(&body).expect("JSON");
+    assert_eq!(pushed["contract_version"], CONTRACT_VERSION);
+
+    let (status, _, body) = get_declaring(
+        &app,
+        "/api/sync/pull",
+        Some(&token),
+        &declaring(&[(CONTRACT_HEADER, &current)]),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    let pulled: serde_json::Value = serde_json::from_str(&body).expect("JSON");
+    assert_eq!(pulled["contract_version"], CONTRACT_VERSION);
+
+    // A client declaring only the oldest version is answered in it.
     let (status, pushed) = post_json(
         &app,
         "/api/sync/push",
@@ -223,11 +256,7 @@ async fn test_every_sync_response_carries_the_agreed_version() {
     )
     .await;
     assert_eq!(status, 200, "{pushed}");
-    assert_eq!(pushed["contract_version"], CONTRACT_VERSION);
-
-    let (status, pulled) = get_json(&app, "/api/sync/pull", Some(&token)).await;
-    assert_eq!(status, 200, "{pulled}");
-    assert_eq!(pulled["contract_version"], CONTRACT_VERSION);
+    assert_eq!(pushed["contract_version"], 1);
 }
 
 #[tokio::test]

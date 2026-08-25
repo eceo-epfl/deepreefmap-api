@@ -31,6 +31,23 @@ pub struct ColumnSpec {
     pub kind: ColumnKind,
     /// Whether a document may omit the column or send it null.
     pub nullable: bool,
+    /// The contract version that introduced the column. A client negotiated below it
+    /// neither receives it nor writes it.
+    pub since: u32,
+    /// Travels downwards only: the server projects it, a push never writes it.
+    pub server_owned: bool,
+}
+
+impl ColumnSpec {
+    const fn since(mut self, version: u32) -> Self {
+        self.since = version;
+        self
+    }
+
+    const fn server_owned(mut self) -> Self {
+        self.server_owned = true;
+        self
+    }
 }
 
 const fn col(name: &'static str, kind: ColumnKind) -> ColumnSpec {
@@ -38,6 +55,8 @@ const fn col(name: &'static str, kind: ColumnKind) -> ColumnSpec {
         name,
         kind,
         nullable: true,
+        since: 1,
+        server_owned: false,
     }
 }
 
@@ -46,6 +65,8 @@ const fn required(name: &'static str, kind: ColumnKind) -> ColumnSpec {
         name,
         kind,
         nullable: false,
+        since: 1,
+        server_owned: false,
     }
 }
 
@@ -57,6 +78,9 @@ pub struct TableSpec {
     /// Entity-specific columns. The shared sync columns are appended by
     /// [`TableSpec::columns`], so no descriptor repeats them.
     pub own_columns: &'static [ColumnSpec],
+    /// Whether a curator validates rows of this table, which appends the
+    /// [`VALIDATION_COLUMNS`].
+    pub curated: bool,
 }
 
 /// Columns every replicated row carries. `updated_at` is the client's clock and what
@@ -70,13 +94,43 @@ const SYNC_COLUMNS: &[ColumnSpec] = &[
     col("device_id", ColumnKind::Uuid),
 ];
 
+/// The projection of a console entry that validated the row. Down only.
+const VALIDATION_COLUMNS: &[ColumnSpec] = &[
+    col("validated_at", ColumnKind::Timestamp)
+        .since(2)
+        .server_owned(),
+    col("validated_by", ColumnKind::Text)
+        .since(2)
+        .server_owned(),
+];
+
 impl TableSpec {
-    /// Every column a document may carry for this table, `id` first.
+    /// Every column a document may carry for this table at the newest contract, `id`
+    /// first.
     #[must_use]
     pub fn columns(&self) -> Vec<ColumnSpec> {
+        self.columns_at(CONTRACT_VERSION)
+    }
+
+    /// The columns a client negotiated to `agreed` knows, `id` first.
+    #[must_use]
+    pub fn columns_at(&self, agreed: u32) -> Vec<ColumnSpec> {
         let mut out = vec![required("id", ColumnKind::Uuid)];
         out.extend_from_slice(self.own_columns);
         out.extend_from_slice(SYNC_COLUMNS);
+        if self.curated {
+            out.extend_from_slice(VALIDATION_COLUMNS);
+        }
+        out.retain(|column| column.since <= agreed);
+        out
+    }
+
+    /// The columns a push may write at `agreed`: everything the client knows that the
+    /// server does not own.
+    #[must_use]
+    pub fn writable_at(&self, agreed: u32) -> Vec<ColumnSpec> {
+        let mut out = self.columns_at(agreed);
+        out.retain(|column| !column.server_owned);
         out
     }
 }
@@ -97,6 +151,7 @@ pub const TABLES: &[TableSpec] = &[
             col("latitude", ColumnKind::Float),
             col("longitude", ColumnKind::Float),
         ],
+        curated: true,
     },
     TableSpec {
         section: "campaigns",
@@ -107,6 +162,7 @@ pub const TABLES: &[TableSpec] = &[
             col("end_date", ColumnKind::Date),
             required("description", ColumnKind::Text),
         ],
+        curated: true,
     },
     TableSpec {
         section: "transects",
@@ -124,6 +180,7 @@ pub const TABLES: &[TableSpec] = &[
             col("length_m", ColumnKind::Float),
             col("depth_m", ColumnKind::Float),
         ],
+        curated: true,
     },
     TableSpec {
         section: "videos",
@@ -142,6 +199,7 @@ pub const TABLES: &[TableSpec] = &[
             required("gravity", ColumnKind::Text),
             required("gps", ColumnKind::Text),
         ],
+        curated: true,
     },
     // `survey_group_id` is deliberately absent: a curator assigns it in the console,
     // and a device re-pushing its pass must never clobber that grouping.
@@ -159,6 +217,7 @@ pub const TABLES: &[TableSpec] = &[
             required("notes", ColumnKind::Text),
             col("quality", ColumnKind::Text),
         ],
+        curated: true,
     },
     TableSpec {
         section: "pass_videos",
@@ -168,6 +227,7 @@ pub const TABLES: &[TableSpec] = &[
             required("video_id", ColumnKind::Uuid),
             required("ordinal", ColumnKind::Int),
         ],
+        curated: true,
     },
     TableSpec {
         section: "runs",
@@ -198,6 +258,7 @@ pub const TABLES: &[TableSpec] = &[
             col("stage_durations", ColumnKind::Json),
             col("stage_peaks", ColumnKind::Json),
         ],
+        curated: true,
     },
     TableSpec {
         section: "cover_rows",
@@ -212,6 +273,7 @@ pub const TABLES: &[TableSpec] = &[
             col("denominator", ColumnKind::Float),
             col("metric_source", ColumnKind::Text),
         ],
+        curated: true,
     },
     // Appended last so existing clients' section order is undisturbed. Pull only:
     // presets are server-defined, and a device never authors one.
@@ -224,13 +286,14 @@ pub const TABLES: &[TableSpec] = &[
             required("settings", ColumnKind::Json),
             required("description", ColumnKind::Text),
         ],
+        curated: false,
     },
 ];
 
 /// Highest contract version this server speaks. A document declaring anything but the
 /// version negotiated for its exchange is refused outright: parsing under the wrong
 /// version writes plausible wrong rows instead of failing.
-pub const CONTRACT_VERSION: u32 = 1;
+pub const CONTRACT_VERSION: u32 = 2;
 
 /// Oldest contract version this server still reads. Together with [`CONTRACT_VERSION`] it
 /// is the range a client negotiates against.
@@ -241,18 +304,23 @@ const _: () = assert!(
     "the server's contract range must contain at least one version"
 );
 
-/// Sections a client may download. Everything else is upload only.
+/// The catalogue: sections every device downloads whole.
 ///
-/// Sync is additive: a site, campaign or transect is defined on either side, and the
-/// rest is a client's own record of what it processed, so sending it back down would
-/// only hand a device its own work. Presets travel downwards only, since the server
-/// defines them.
+/// A site, campaign or transect is defined on either side and shared by all. Presets
+/// travel downwards only, since the server defines them.
 pub const CLIENT_PULL_SECTIONS: &[&str] = &["sites", "campaigns", "transects", "presets"];
 
+/// Sections a device downloads restricted to the rows it authored, from contract 2, so
+/// it learns what the console curated, validated or deleted.
+pub const OWN_ROWS_SECTIONS: &[&str] = &["videos", "passes", "pass_videos", "runs", "cover_rows"];
+
+/// The contract version from which [`OWN_ROWS_SECTIONS`] travel downwards.
+pub const OWN_ROWS_SINCE: u32 = 2;
+
 /// Sections a device may author rows in. The rest are read on a push, never written.
-///
-/// The desktop application has no site or campaign picker, so it creates neither.
 pub const CLIENT_PUSH_SECTIONS: &[&str] = &[
+    "sites",
+    "campaigns",
     "transects",
     "videos",
     "passes",
@@ -260,6 +328,13 @@ pub const CLIENT_PUSH_SECTIONS: &[&str] = &[
     "runs",
     "cover_rows",
 ];
+
+/// Whether a device pulls `section` at `agreed`.
+#[must_use]
+pub fn device_pulls(section: &str, agreed: u32) -> bool {
+    CLIENT_PULL_SECTIONS.contains(&section)
+        || (agreed >= OWN_ROWS_SINCE && OWN_ROWS_SECTIONS.contains(&section))
+}
 
 /// Every section name, in the order a document applies.
 #[must_use]
@@ -339,6 +414,30 @@ pub fn to_value(spec: &ColumnSpec, raw: Option<&serde_json::Value>) -> AppResult
     })
 }
 
+/// The canonical JSON form of one value, so two images of the same row compare equal:
+/// numbers by kind, timestamps as `Z`, dates as `YYYY-MM-DD`. Rejects like [`to_value`].
+pub fn normalise(
+    spec: &ColumnSpec,
+    raw: Option<&serde_json::Value>,
+) -> AppResult<serde_json::Value> {
+    let bound = to_value(spec, raw)?;
+    Ok(match bound {
+        Value::Uuid(Some(v)) => serde_json::Value::String(v.to_string()),
+        Value::String(Some(v)) => serde_json::Value::String(v),
+        Value::Double(Some(v)) => serde_json::Number::from_f64(v)
+            .map_or(serde_json::Value::Null, serde_json::Value::Number),
+        Value::Int(Some(v)) => v.into(),
+        Value::BigInt(Some(v)) => v.into(),
+        Value::Bool(Some(v)) => v.into(),
+        Value::ChronoDateTimeUtc(Some(v)) => {
+            serde_json::Value::String(v.to_rfc3339_opts(chrono::SecondsFormat::AutoSi, true))
+        }
+        Value::ChronoDate(Some(v)) => serde_json::Value::String(v.to_string()),
+        Value::Json(Some(v)) => *v,
+        _ => serde_json::Value::Null,
+    })
+}
+
 /// A typed SQL null, so Postgres can infer the parameter type on an all-null bind.
 fn null_value(kind: ColumnKind) -> Value {
     match kind {
@@ -372,7 +471,7 @@ mod tests {
         for spec in TABLES {
             assert!(
                 CLIENT_PUSH_SECTIONS.contains(&spec.section)
-                    || CLIENT_PULL_SECTIONS.contains(&spec.section),
+                    || device_pulls(spec.section, CONTRACT_VERSION),
                 "{} is neither pushable nor pullable",
                 spec.section
             );
@@ -388,7 +487,7 @@ mod tests {
                 continue;
             }
             assert!(
-                CLIENT_PULL_SECTIONS.contains(&spec.section),
+                device_pulls(spec.section, CONTRACT_VERSION),
                 "{} is reference-only on a push but never served on a pull",
                 spec.section
             );
@@ -430,6 +529,26 @@ mod tests {
                 assert!(names.contains(&needed), "{} lacks {needed}", spec.table);
             }
         }
+    }
+
+    #[test]
+    fn test_a_column_added_later_is_hidden_from_an_older_client() {
+        let spec = table_for_section("transects").expect("transects");
+        let v1: Vec<&str> = spec.columns_at(1).iter().map(|c| c.name).collect();
+        let v2: Vec<&str> = spec.columns_at(2).iter().map(|c| c.name).collect();
+        assert!(!v1.contains(&"validated_at"));
+        assert!(v2.contains(&"validated_at"));
+        assert!(
+            !spec.writable_at(2).iter().any(|c| c.name == "validated_at"),
+            "a push may not write what the server owns"
+        );
+    }
+
+    #[test]
+    fn test_own_rows_sections_travel_down_from_contract_two() {
+        assert!(!device_pulls("passes", 1));
+        assert!(device_pulls("passes", 2));
+        assert!(device_pulls("sites", 1));
     }
 
     #[test]

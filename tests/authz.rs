@@ -812,10 +812,9 @@ async fn test_push_refuses_a_server_authored_row() {
     assert_eq!(name, "Harat");
 }
 
-/// The desktop application has no site picker, so a site in a push document is an
-/// ancestor it pulled. It travels for referential integrity and is never written.
+/// A site or campaign made in the field lands unvalidated, for the console to check.
 #[tokio::test]
-async fn test_a_device_cannot_author_a_site_or_a_campaign() {
+async fn test_a_device_authors_a_site_and_a_campaign_unvalidated() {
     let db = setup_test_db().await;
     let (app, token) = device(&db, "alice", "Alice laptop").await;
 
@@ -825,26 +824,28 @@ async fn test_a_device_cannot_author_a_site_or_a_campaign() {
         &app,
         "/api/sync/push",
         &push_body(&serde_json::json!({
-            "sites": [pushed_site(site, "Invented", "2026-08-01T10:00:00Z")],
+            "sites": [pushed_site(site, "New reef", "2026-08-01T10:00:00Z")],
             "campaigns": [{
-                "id": campaign, "name": "Invented", "description": "",
+                "id": campaign, "name": "2026_08_djibouti", "description": "",
                 "created_at": "2026-08-01T00:00:00Z", "updated_at": "2026-08-01T10:00:00Z",
             }],
         })),
         Some(&token),
     )
     .await;
-
-    // The document still succeeds: the laptop sends these on every push.
     assert_eq!(status, 200, "{body}");
-    for (section, id) in [("sites", site), ("campaigns", campaign)] {
-        assert_eq!(body["sections"][section]["applied"], 0, "{body}");
-        assert_eq!(body["sections"][section]["refused"][0], id, "{body}");
+    for section in ["sites", "campaigns"] {
+        assert_eq!(body["sections"][section]["applied"], 1, "{body}");
     }
 
-    let sites: i64 = one_value(&db, "SELECT COUNT(*) FROM site").await;
+    let validated: Option<String> = one_value(
+        &db,
+        &format!("SELECT validated_at::text FROM site WHERE id = '{site}'"),
+    )
+    .await;
+    assert_eq!(validated, None, "a field-made site arrived validated");
     let campaigns: i64 = one_value(&db, "SELECT COUNT(*) FROM campaign").await;
-    assert_eq!((sites, campaigns), (0, 0), "a device authored curated data");
+    assert_eq!(campaigns, 1);
 }
 
 #[tokio::test]
