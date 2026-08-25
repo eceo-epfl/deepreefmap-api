@@ -43,6 +43,16 @@ pub struct Model {
     pub segmentation_model: Option<String>,
     #[crudcrate(filterable)]
     pub mapping_backend: Option<String>,
+    /// The processing configuration the run used: resolution and fps set the memory
+    /// regime, batch size gates VRAM. Integer fps, as the preset schema defines it.
+    #[crudcrate(filterable)]
+    pub processing_width: Option<i32>,
+    #[crudcrate(filterable)]
+    pub processing_height: Option<i32>,
+    #[crudcrate(filterable)]
+    pub fps: Option<i32>,
+    #[crudcrate(filterable)]
+    pub preprocess_batch_size: Option<i32>,
     #[crudcrate(filterable)]
     pub taxonomy_version: Option<i32>,
     /// Digest of the class-groups definition, so a claimed version can be checked.

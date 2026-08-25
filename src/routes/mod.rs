@@ -103,6 +103,7 @@ async fn healthz() -> StatusCode {
         (name = "presets", description = "Server-defined run settings"),
         (name = "runs", description = "Reconstruction runs and their provenance"),
         (name = "cover", description = "Benthic cover results"),
+        (name = "performance", description = "Fleet resource statistics over run peaks"),
         (name = "devices", description = "Desktop installation enrolment"),
         (name = "sync", description = "Device ingest and download"),
         (name = "archive", description = "Content-addressed blob storage"),

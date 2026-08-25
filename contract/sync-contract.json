@@ -497,6 +497,26 @@
         },
         {
           "kind": "int",
+          "name": "processing_width",
+          "nullable": true
+        },
+        {
+          "kind": "int",
+          "name": "processing_height",
+          "nullable": true
+        },
+        {
+          "kind": "int",
+          "name": "fps",
+          "nullable": true
+        },
+        {
+          "kind": "int",
+          "name": "preprocess_batch_size",
+          "nullable": true
+        },
+        {
+          "kind": "int",
           "name": "taxonomy_version",
           "nullable": true
         },

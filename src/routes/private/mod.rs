@@ -9,6 +9,7 @@ pub mod devices;
 pub mod me;
 pub mod pass_groups;
 pub mod passes;
+pub mod performance;
 pub mod presets;
 pub mod runs;
 pub mod sites;
@@ -91,6 +92,7 @@ pub fn protected_router(state: &AppState) -> OpenApiRouter {
         .merge(sync::router::router(state))
         .merge(devices::router::router(state))
         .merge(cover::router::router(state))
+        .merge(performance::router(state))
         .merge(videos::router::router(state))
         .merge(archive::router::router(state))
         .merge(me)

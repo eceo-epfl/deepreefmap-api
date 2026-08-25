@@ -239,6 +239,13 @@ impl MigrationTrait for Migration {
                 library_version     TEXT,
                 segmentation_model  TEXT,
                 mapping_backend     TEXT,
+                -- The processing configuration the run used, matching the desktop
+                -- application's performance-history grain: resolution and fps set
+                -- the memory regime, batch size gates VRAM.
+                processing_width    INTEGER,
+                processing_height   INTEGER,
+                fps                 INTEGER,
+                preprocess_batch_size INTEGER,
                 taxonomy_version    INTEGER,
                 taxonomy_hash       TEXT,
                 model_revisions     JSONB,

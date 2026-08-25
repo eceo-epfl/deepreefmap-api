@@ -1955,6 +1955,278 @@
         },
         "type": "object"
       },
+      "PerformanceGroup": {
+        "properties": {
+          "device_id": {
+            "description": "Null when the runs arrived under an interactive login rather than a device\ntoken: provenance binds from the credential, and a human push carries no device.",
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "device_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "duration_max_s": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "duration_mean_s": {
+            "description": "Wall-clock seconds, over the runs that report a duration.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "duration_min_s": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "duration_n": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "duration_std_s": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "failed_count": {
+            "description": "The failed subset of `run_count`.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "fps": {
+            "format": "int32",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "gpu_name": {
+            "description": "From the device's current profile, as are the two totals below: what the\nhardware is now, not what it was when the runs happened.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_run_at": {
+            "description": "Latest `started_at` in the group.",
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mapping_backend": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "preprocess_batch_size": {
+            "format": "int32",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "preset_hash": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "preset_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "preset_version": {
+            "format": "int32",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "processing_height": {
+            "format": "int32",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "processing_width": {
+            "description": "Processing configuration, part of the group key: resolution and fps set the\nmemory regime, batch size gates VRAM. All null for a run pushed by a build that\ndid not report them.",
+            "format": "int32",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "ram_max_bytes": {
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "ram_mean_bytes": {
+            "description": "Mean of the per-run RAM peaks. Every metric below carries the same five figures.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "ram_min_bytes": {
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "ram_n": {
+            "description": "Runs that observed a RAM peak. Counted per metric rather than per group, so it\ncan sit below `run_count`: a machine with no discrete GPU reports no VRAM at all,\nand a run that reported junk is a run with that metric unobserved.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "ram_std_bytes": {
+            "description": "Sample standard deviation, null below two observations.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "run_count": {
+            "description": "Every run in the group that recorded peaks, whatever its status. A run whose\n`stage_peaks` is absent, empty, or something other than a map of stages is not\nin the group at all.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "segmentation_model": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "swap_max_bytes": {
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "swap_mean_bytes": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "swap_min_bytes": {
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "swap_n": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "swap_std_bytes": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "total_ram_bytes": {
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "total_vram_bytes": {
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "vram_max_bytes": {
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "vram_mean_bytes": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "vram_min_bytes": {
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "vram_n": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "vram_std_bytes": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "run_count",
+          "failed_count",
+          "ram_n",
+          "swap_n",
+          "vram_n",
+          "duration_n"
+        ],
+        "type": "object"
+      },
+      "PerformanceSummary": {
+        "properties": {
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/PerformanceGroup"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "groups"
+        ],
+        "type": "object"
+      },
       "PooledCover": {
         "properties": {
           "campaign_id": {
@@ -2526,6 +2798,13 @@
               "null"
             ]
           },
+          "fps": {
+            "format": "int32",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
           "gui_version": {
             "type": [
               "string",
@@ -2552,6 +2831,13 @@
             "format": "uuid",
             "type": "string"
           },
+          "preprocess_batch_size": {
+            "format": "int32",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
           "preset_deviations": {
             "description": "Settings that departed from the preset, separating \"unchanged\" from \"unrecorded\"."
           },
@@ -2569,6 +2855,21 @@
             ]
           },
           "preset_version": {
+            "format": "int32",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "processing_height": {
+            "format": "int32",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "processing_width": {
+            "description": "The processing configuration the run used: resolution and fps set the memory\nregime, batch size gates VRAM. Integer fps, as the preset schema defines it.",
             "format": "int32",
             "type": [
               "integer",
@@ -2671,6 +2972,13 @@
               "null"
             ]
           },
+          "fps": {
+            "format": "int32",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
           "gui_version": {
             "type": [
               "string",
@@ -2700,6 +3008,13 @@
             "format": "uuid",
             "type": "string"
           },
+          "preprocess_batch_size": {
+            "format": "int32",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
           "preset_deviations": {
             "description": "Settings that departed from the preset, separating \"unchanged\" from \"unrecorded\"."
           },
@@ -2717,6 +3032,21 @@
             ]
           },
           "preset_version": {
+            "format": "int32",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "processing_height": {
+            "format": "int32",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "processing_width": {
+            "description": "The processing configuration the run used: resolution and fps set the memory\nregime, batch size gates VRAM. Integer fps, as the preset schema defines it.",
             "format": "int32",
             "type": [
               "integer",
@@ -6974,6 +7304,28 @@
         "summary": "Update one pass"
       }
     },
+    "/performance/summary": {
+      "get": {
+        "description": "One run contributes one observation per metric: the largest value across that run's\nstages. Mean, sample standard deviation, min, max and n are then taken across the\ngroup's runs over those per-run peaks. The standard deviation is null below two\nobservations, and n is per metric, so a fleet of machines without discrete GPUs\nreports a `vram_n` of zero beside a full `ram_n`.\n\nCovers the non-deleted runs that recorded per-stage peaks, and only those. A failed\nrun counts once it recorded them, which is the point: an out-of-memory run's peaks are\nexactly the interesting ones. A run that recorded none contributes nothing at all, not\neven to `run_count`: a run synced by a build that never reported peaks, one that died\nbefore a single stage finished, and one whose `stage_peaks` arrived empty or as\nsomething other than a map of stages are all absent here rather than counted as runs\nwith nothing to show. Revoked devices keep their history for the same reason failed\nruns do. Within a stage map `stage_peaks` is untrusted JSON, so a non-numeric or\nabsent value is ignored rather than refused, and the run still counts with that metric\nunobserved.\n\nThe device hardware figures (`gpu_name`, `total_ram_bytes`, `total_vram_bytes`) come\nfrom the device's current profile, not from its profile when the runs happened, so a\nmachine that has since been upgraded reports its new hardware against its old runs.",
+        "operationId": "performance_summary",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PerformanceSummary"
+                }
+              }
+            },
+            "description": "One row per device, preset, model combination and processing configuration"
+          }
+        },
+        "summary": "Resource statistics per device, preset, model combination and processing\nconfiguration, the grain the desktop application keys its own history by.",
+        "tags": [
+          "performance"
+        ]
+      }
+    },
     "/presets": {
       "get": {
         "description": "Retrieves all presets.\n\nThis resource manages preset items\n\nAdditional sortable columns: \n- name\n- version\n- created_at\n- updated_at\n- deleted_at\n- server_seq.\n\nAdditional filterable columns: \n- id\n- name\n- version\n- deleted_at\n- device_id.",
@@ -7648,7 +8000,7 @@
     },
     "/runs": {
       "get": {
-        "description": "Retrieves all runs.\n\nThis resource manages run items\n\nAdditional sortable columns: \n- status\n- started_at\n- finished_at\n- run_duration_s\n- created_at\n- updated_at\n- deleted_at\n- server_seq.\n\nAdditional filterable columns: \n- id\n- pass_id\n- status\n- started_at\n- finished_at\n- gui_version\n- library_version\n- segmentation_model\n- mapping_backend\n- taxonomy_version\n- preset_name\n- preset_version\n- deleted_at\n- device_id.",
+        "description": "Retrieves all runs.\n\nThis resource manages run items\n\nAdditional sortable columns: \n- status\n- started_at\n- finished_at\n- run_duration_s\n- created_at\n- updated_at\n- deleted_at\n- server_seq.\n\nAdditional filterable columns: \n- id\n- pass_id\n- status\n- started_at\n- finished_at\n- gui_version\n- library_version\n- segmentation_model\n- mapping_backend\n- processing_width\n- processing_height\n- fps\n- preprocess_batch_size\n- taxonomy_version\n- preset_name\n- preset_version\n- deleted_at\n- device_id.",
         "operationId": "get_all_runs",
         "parameters": [
           {
@@ -9367,6 +9719,10 @@
     {
       "description": "Benthic cover results",
       "name": "cover"
+    },
+    {
+      "description": "Fleet resource statistics over run peaks",
+      "name": "performance"
     },
     {
       "description": "Desktop installation enrolment",

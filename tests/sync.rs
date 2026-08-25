@@ -283,6 +283,8 @@ async fn test_push_whole_survey_in_one_call() {
                 "error": "", "run_dir_name": "run_20260801_100000",
                 "gui_version": "0.9.0", "library_version": "0.14.2",
                 "segmentation_model": "coralscapes-vit-b-dpt", "mapping_backend": "loger",
+                "processing_width": 640, "processing_height": 352,
+                "fps": 4, "preprocess_batch_size": 8,
                 "taxonomy_version": 3, "taxonomy_hash": "sha256:abcd",
                 "model_revisions": { "EPFL-ECEO/coralscapes-vit-b-dpt": "a1b2c3" },
                 "preset_name": "eceo-default", "preset_deviations": { "fps": 4 },
@@ -339,6 +341,10 @@ async fn test_push_whole_survey_in_one_call() {
     assert_eq!(run_row["preset_version"], 2);
     assert_eq!(run_row["preset_hash"], "sha256:ef01");
     assert_eq!(run_row["run_duration_s"], 2520.5);
+    assert_eq!(run_row["processing_width"], 640);
+    assert_eq!(run_row["processing_height"], 352);
+    assert_eq!(run_row["fps"], 4);
+    assert_eq!(run_row["preprocess_batch_size"], 8);
     assert_eq!(run_row["stage_durations"]["mapping"], 1800.0);
     assert_eq!(run_row["stage_peaks"]["mapping"]["vram_mb"], 7168);
     assert_eq!(pulled["sections"]["videos"][0]["hash"], "deadbeef");
@@ -347,6 +353,62 @@ async fn test_push_whole_survey_in_one_call() {
         "a key outside the contract is dropped, not stored"
     );
     assert_eq!(pulled["sections"]["cover_rows"][0]["class_group"], "sand");
+}
+
+/// A build that does not report its processing configuration leaves the four columns
+/// null, rather than the push inventing a resolution the run never ran at. The
+/// performance aggregate pools those runs on that nullness, so it has to be real.
+#[tokio::test]
+async fn test_push_omitting_processing_config_stores_nulls() {
+    let db = setup_test_db().await;
+    let app = build_test_app(db.clone());
+    let code = seed_connect_code(&db, "alice", "Older laptop").await;
+    let token = enrol_device(&app, &code).await;
+
+    let transect = "5a5a5a5a-5a5a-4a5a-8a5a-5a5a5a5a5a5a";
+    let pass = "5b5b5b5b-5b5b-4b5b-8b5b-5b5b5b5b5b5b";
+    let run = "5c5c5c5c-5c5c-4c5c-8c5c-5c5c5c5c5c5c";
+    let stamps = ("2026-08-01T00:00:00Z", "2026-08-01T10:00:00Z");
+
+    let (status, body) = post_json(
+        &app,
+        "/api/sync/push",
+        &push_body(&serde_json::json!({
+            "transects": [transect_row(transect, "T1", stamps.1)],
+            "passes": [{
+                "id": pass, "transect_id": transect,
+                "begin_s": 0.0, "end_s": 60.0,
+                "upside_down": false, "label": "", "notes": "",
+                "created_at": stamps.0, "updated_at": stamps.1,
+            }],
+            "runs": [{
+                "id": run, "pass_id": pass, "status": "succeeded",
+                "error": "", "run_dir_name": "run_20260801_100000",
+                "segmentation_model": "segformer-b2", "mapping_backend": "scsfmlearner",
+                "created_at": stamps.0, "updated_at": stamps.1,
+            }],
+        })),
+        Some(&token),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(body["sections"]["runs"]["applied"], 1, "{body}");
+
+    let admin = build_test_app_as_admin(db.clone());
+    let (_, pulled) = get_json(&admin, "/api/sync/pull", None).await;
+    let run_row = &pulled["sections"]["runs"][0];
+    assert_eq!(run_row["run_dir_name"], "run_20260801_100000", "{pulled}");
+    for column in [
+        "processing_width",
+        "processing_height",
+        "fps",
+        "preprocess_batch_size",
+    ] {
+        assert!(
+            run_row[column].is_null(),
+            "{column} was invented: {run_row}"
+        );
+    }
 }
 
 #[tokio::test]

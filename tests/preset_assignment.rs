@@ -280,6 +280,82 @@ async fn test_assign_all_reaches_the_active_fleet() {
     assert_eq!(body["assigned_preset"]["name"], "Standard reef survey");
 }
 
+/// The sweep resets acknowledgement, so the console never shows a stale ack against the
+/// preset it has just assigned. The single-device route's own reset is covered by the
+/// round-trip test above.
+///
+/// Expected behaviour: an active device that had reported a preset comes out with all
+/// three `active_preset_*` columns null, while a revoked one, which the sweep never
+/// reaches, keeps what it reported.
+#[tokio::test]
+async fn test_assign_all_resets_acknowledgement() {
+    let db = setup_test_db().await;
+    let admin = build_test_app_as_admin(db.clone());
+    let device_app = build_test_app(db.clone());
+
+    let mut tokens = Vec::new();
+    for (subject, name) in [("alice", "Reef laptop 1"), ("carol", "Retired laptop")] {
+        let code = seed_connect_code(&db, subject, name).await;
+        tokens.push(enrol_device(&device_app, &code).await);
+    }
+    for token in &tokens {
+        let (status, body) = post_json(
+            &device_app,
+            "/api/sync/heartbeat",
+            &serde_json::json!({
+                "active_preset_name": "Deep water survey",
+                "active_preset_version": 7,
+            }),
+            Some(token),
+        )
+        .await;
+        assert_eq!(status, 200, "{body}");
+    }
+    let acknowledged: i64 = one_value(
+        &db,
+        "SELECT COUNT(*)::BIGINT FROM device
+         WHERE active_preset_name = 'Deep water survey' AND active_preset_version = 7
+           AND active_preset_reported_at IS NOT NULL",
+    )
+    .await;
+    assert_eq!(acknowledged, 2, "the acknowledgements never landed");
+
+    exec(
+        &db,
+        "UPDATE device SET revoked_at = NOW() WHERE name = 'Retired laptop'",
+    )
+    .await;
+
+    let preset_id = seeded_preset_id(&admin).await;
+    let (status, body) = post_json(
+        &admin,
+        &format!("/api/presets/{preset_id}/assign-all"),
+        &serde_json::json!({}),
+        None,
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(body["assigned_count"], 1, "{body}");
+
+    let stale: i64 = one_value(
+        &db,
+        "SELECT COUNT(*)::BIGINT FROM device WHERE name = 'Reef laptop 1'
+           AND (active_preset_name IS NOT NULL OR active_preset_version IS NOT NULL
+                OR active_preset_reported_at IS NOT NULL)",
+    )
+    .await;
+    assert_eq!(stale, 0, "the sweep left a stale acknowledgement standing");
+
+    let kept: i64 = one_value(
+        &db,
+        "SELECT COUNT(*)::BIGINT FROM device WHERE name = 'Retired laptop'
+           AND active_preset_name = 'Deep water survey' AND active_preset_version = 7
+           AND active_preset_reported_at IS NOT NULL",
+    )
+    .await;
+    assert_eq!(kept, 1, "the sweep cleared a revoked device");
+}
+
 #[tokio::test]
 async fn test_assign_all_is_admin_only() {
     let db = setup_test_db().await;
