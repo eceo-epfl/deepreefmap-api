@@ -1,6 +1,7 @@
 //! Routes that answer before any credential exists: enrolment, bootstrap, and the
 //! signed archive fetch links (whose HMAC is the credential).
 
+pub mod archive_bundle;
 pub mod archive_fetch;
 pub mod config;
 pub mod enrol;
@@ -22,6 +23,10 @@ pub fn router(state: &AppState) -> Router {
     // plain browser navigation can save the file.
     let fetch = Router::new()
         .route("/archive/{object_id}/fetch", get(archive_fetch::fetch))
+        .route(
+            "/archive/runs/{run_id}/outputs.zip",
+            get(archive_bundle::bundle),
+        )
         .layer(RequestBodyLimitLayer::new(CRUD_BODY_LIMIT))
         .with_state(state.clone());
 

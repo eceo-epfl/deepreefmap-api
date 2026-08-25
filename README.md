@@ -108,6 +108,7 @@ GET  /api/archive/by-hash/{content_hash}
 POST /api/archive/probe                          # state for many hashes
 POST /api/archive/runs-probe                     # artefact counts for many runs
 GET  /api/archive/overview                       # console only: by run, by clip, unlinked
+GET  /api/runs/{id}/outputs/bundle?purpose=      # a signed link to one zip of a run
 ```
 
 Keys are content-addressed, `{S3_PREFIX}/videos/imohash/{hex}` and
@@ -116,6 +117,22 @@ lives in Postgres, so a 4 GB transfer resumes after a restart. Downloads redeem 
 short-lived HMAC-signed link at `/api/archive/{id}/fetch`, minted only to
 authenticated callers and bound to one object, so a plain browser navigation works
 without exposing anything. Nothing here deletes or overwrites.
+
+A run arrives as hundreds of objects, so `outputs/bundle` mints the same kind of link
+for a whole group of them: `purpose` takes `all` (the default), one of `Results`,
+`Record` or `Working data`, or a run subdirectory such as `frames`. The zip streams
+from `/api/archive/runs/{id}/outputs.zip`, stored rather than deflated, so nothing is
+buffered on the way through. `src/archive/purpose.rs` decides which files a purpose
+covers; the console groups the outputs tab by the same rule.
+
+## Taxonomy
+
+`GET /api/config/classes` publishes the segmentation classes by label id, each with its
+colour and the group it rolls into at the intermediate and coarse levels.
+`GET /api/config/class-groups` is the same table rolled up, one entry per group and
+level. The groups derive from the classes in `src/contract/classes.rs`, so a cover
+figure, a class ortho and the desktop viewer draw one colour set. A label id in a run's
+`ortho.npz` is one of these ids.
 
 ## Entities
 

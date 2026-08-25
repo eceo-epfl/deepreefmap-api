@@ -15,6 +15,9 @@ pub fn router(state: &AppState) -> OpenApiRouter {
         .routes(utoipa_axum::routes!(
             crate::routes::private::class_groups::get_class_groups
         ))
+        .routes(utoipa_axum::routes!(
+            crate::routes::private::class_groups::get_classes
+        ))
         .layer(middleware::from_fn(deny_device_crud))
         .layer(RequestBodyLimitLayer::new(CRUD_BODY_LIMIT))
         .with_state(state.clone())

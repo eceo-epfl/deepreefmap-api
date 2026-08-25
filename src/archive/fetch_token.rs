@@ -14,23 +14,62 @@ use uuid::Uuid;
 pub const FETCH_TTL_SECONDS: i64 = 5 * 60;
 
 fn mac(secret: &[u8], object_id: Uuid, expires: i64) -> Hmac<Sha256> {
+    signature_over(secret, &format!("archive-fetch:{object_id}:{expires}"))
+}
+
+fn signature_over(secret: &[u8], claim: &str) -> Hmac<Sha256> {
     let mut mac = Hmac::<Sha256>::new_from_slice(secret).expect("HMAC takes any key length");
-    mac.update(format!("archive-fetch:{object_id}:{expires}").as_bytes());
+    mac.update(claim.as_bytes());
     mac
 }
 
-/// The signature for one object and expiry, as lowercase hex.
-#[must_use]
-pub fn sign(secret: &[u8], object_id: Uuid, expires: i64) -> String {
+fn hex(mac: Hmac<Sha256>) -> String {
     use std::fmt::Write;
-    mac(secret, object_id, expires)
-        .finalize()
+    mac.finalize()
         .into_bytes()
         .iter()
         .fold(String::with_capacity(64), |mut out, byte| {
             let _ = write!(out, "{byte:02x}");
             out
         })
+}
+
+/// The claim a run bundle link is signed over: one run, one group of its files.
+fn bundle_claim(run_id: Uuid, purpose: &str, expires: i64) -> String {
+    format!("archive-bundle:{run_id}:{purpose}:{expires}")
+}
+
+/// The signature for one run's output bundle, as lowercase hex.
+#[must_use]
+pub fn sign_bundle(secret: &[u8], run_id: Uuid, purpose: &str, expires: i64) -> String {
+    hex(signature_over(secret, &bundle_claim(run_id, purpose, expires)))
+}
+
+/// Whether `sig` is the live signature for this bundle.
+#[must_use]
+pub fn verify_bundle(
+    secret: &[u8],
+    run_id: Uuid,
+    purpose: &str,
+    expires: i64,
+    sig: &str,
+    now: i64,
+) -> bool {
+    if expires < now {
+        return false;
+    }
+    let Some(bytes) = hex_bytes(sig) else {
+        return false;
+    };
+    signature_over(secret, &bundle_claim(run_id, purpose, expires))
+        .verify_slice(&bytes)
+        .is_ok()
+}
+
+/// The signature for one object and expiry, as lowercase hex.
+#[must_use]
+pub fn sign(secret: &[u8], object_id: Uuid, expires: i64) -> String {
+    hex(mac(secret, object_id, expires))
 }
 
 /// Whether `sig` is the live signature for this object. Constant-time on the
@@ -77,6 +116,15 @@ mod tests {
     fn test_expiry_is_refused() {
         let sig = sign(SECRET, object(), 1_000);
         assert!(!verify(SECRET, object(), 1_000, &sig, 1_001));
+    }
+
+    #[test]
+    fn test_a_bundle_signature_is_bound_to_its_run_and_group() {
+        let sig = sign_bundle(SECRET, object(), "Results", 1_000);
+        assert!(verify_bundle(SECRET, object(), "Results", 1_000, &sig, 999));
+        assert!(!verify_bundle(SECRET, object(), "frames", 1_000, &sig, 999));
+        assert!(!verify_bundle(SECRET, Uuid::new_v4(), "Results", 1_000, &sig, 999));
+        assert!(!verify_bundle(SECRET, object(), "Results", 1_000, &sig, 1_001));
     }
 
     #[test]

@@ -35,6 +35,7 @@ pub fn router(state: &AppState) -> OpenApiRouter {
 
     let console = OpenApiRouter::new()
         .routes(utoipa_axum::routes!(super::views::overview))
+        .routes(utoipa_axum::routes!(super::bundle::bundle))
         .layer(middleware::from_fn(deny_device_crud))
         .layer(RequestBodyLimitLayer::new(CRUD_BODY_LIMIT));
 

@@ -7,5 +7,6 @@
 pub mod fetch_token;
 pub mod imohash;
 pub mod keys;
+pub mod purpose;
 pub mod reaper;
 pub mod store;

@@ -525,6 +525,67 @@ async fn test_overview_groups_objects_by_run_and_clip() {
     assert_eq!(body["unlinked"]["size_bytes"], 123);
 }
 
+/// The bundle link names one group, counts what it holds, and is refused for a
+/// group the run archived nothing under.
+#[tokio::test]
+async fn test_bundle_link_counts_the_group_it_signs() {
+    let db = setup_test_db().await;
+    let run_id = "55555555-5555-4555-8555-555555555555";
+    seed_run(&db, run_id).await;
+    let ortho = seed_complete_object(&db, HASH).await;
+    let frame_hash = HASH.replace('0', "7");
+    let frame = seed_complete_object(&db, &frame_hash).await;
+    seed_run_artifact(&db, run_id, "ortho.png", HASH, Some(&ortho)).await;
+    seed_run_artifact(&db, run_id, "frames/000001.png", &frame_hash, Some(&frame)).await;
+    let app = build_test_app_with_config_as_human(
+        db.clone(),
+        dead_archive_config(),
+        "member-sub",
+        vec![deepreefmap_api::common::auth::Role::Member],
+    );
+
+    let (status, body) = get_json(&app, &format!("/api/runs/{run_id}/outputs/bundle"), None).await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(body["file_count"], 2, "every complete file: {body}");
+    assert_eq!(body["filename"], "run-all.zip");
+    let url = body["url"].as_str().expect("a signed url");
+    assert!(url.contains(&format!("/archive/runs/{run_id}/outputs.zip")), "{url}");
+
+    let (status, body) = get_json(
+        &app,
+        &format!("/api/runs/{run_id}/outputs/bundle?purpose=Results"),
+        None,
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(body["file_count"], 1, "only the ortho: {body}");
+    assert_eq!(body["filename"], "run-results.zip");
+
+    let (status, body) = get_json(
+        &app,
+        &format!("/api/runs/{run_id}/outputs/bundle?purpose=labels"),
+        None,
+    )
+    .await;
+    assert_eq!(status, 404, "no labels were archived: {body}");
+}
+
+#[tokio::test]
+async fn test_a_bundle_stream_refuses_a_wrong_signature() {
+    let db = setup_test_db().await;
+    let run_id = "66666666-6666-4666-8666-666666666666";
+    seed_run(&db, run_id).await;
+    let app = build_test_app_with_config(db.clone(), dead_archive_config());
+
+    let (status, body) = get(
+        &app,
+        &format!("/api/archive/runs/{run_id}/outputs.zip?purpose=all&expires=99999999999&sig=00"),
+        None,
+    )
+    .await;
+    assert_eq!(status, 403, "{body}");
+}
+
 #[tokio::test]
 async fn test_overview_refuses_devices() {
     let db = setup_test_db().await;

@@ -152,6 +152,65 @@
         ],
         "description": "Wrapper type for batch update request items.\nEach item contains an `id` field and the update fields flattened into the same object."
       },
+      "BenthicClass": {
+        "description": "One segmentation class: its colour, and the group it rolls into at each level.\n\n`name` is also the class's own group at the `fine` level.",
+        "properties": {
+          "coarse": {
+            "type": "string"
+          },
+          "colour": {
+            "description": "`#rrggbb`, so a browser can use it without conversion.",
+            "type": "string"
+          },
+          "id": {
+            "description": "Label id the segmentation model writes, and the value in a run's `ortho.npz`.",
+            "format": "int32",
+            "type": "integer"
+          },
+          "intermediate": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "colour",
+          "intermediate",
+          "coarse"
+        ],
+        "type": "object"
+      },
+      "BundleResponse": {
+        "properties": {
+          "file_count": {
+            "description": "Files the zip will hold.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "total_bytes": {
+            "description": "Their total size, before zipping. Stored, not deflated, so this is close.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "url": {
+            "description": "A signed link on this registry that streams the zip.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "file_count",
+          "total_bytes",
+          "filename"
+        ],
+        "type": "object"
+      },
       "ByHashResponse": {
         "properties": {
           "completed_at": {
@@ -5507,6 +5566,69 @@
         ]
       }
     },
+    "/archive/runs/{run_id}/outputs.zip": {
+      "get": {
+        "operationId": "bundle",
+        "parameters": [
+          {
+            "description": "Run whose outputs to stream",
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The group named when the link was signed.",
+            "in": "query",
+            "name": "purpose",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Unix timestamp the signature lapses at.",
+            "in": "query",
+            "name": "expires",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "HMAC over the run, group and expiry, from `/runs/{id}/outputs/bundle`.",
+            "in": "query",
+            "name": "sig",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The zip, as an attachment"
+          },
+          "403": {
+            "description": "The signature is wrong or has lapsed"
+          },
+          "404": {
+            "description": "No such run, or nothing archived in that group"
+          },
+          "503": {
+            "description": "The archive is not configured"
+          }
+        },
+        "summary": "Stream one run's outputs as a zip against a signed bundle link.",
+        "tags": [
+          "archive"
+        ]
+      }
+    },
     "/archive/{object_id}/complete": {
       "post": {
         "description": "S3 checked every part against the `ETag` it answered as the part arrived, so an\nassembly it accepts is the bytes the client sent. Whether those bytes are the\ncontent the client claimed is checked here: the stored size must match the\ninitiated one, and the imohash re-computed from the stored object must match the\nclaimed hash, before the object counts as `complete`. A mismatch deletes the\nobject, fails the row and answers 409, so a wrong upload can never poison a\ncontent-addressed key another device would dedup against.",
@@ -6532,6 +6654,31 @@
           }
         },
         "summary": "The benthic class groups and the colour each is drawn in.",
+        "tags": [
+          "config"
+        ]
+      }
+    },
+    "/config/classes": {
+      "get": {
+        "description": "A label id in a run's `ortho.npz` is one of these ids, so a viewer can paint the\nclass ortho in the same colours the cover figure uses.",
+        "operationId": "get_classes",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/BenthicClass"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Classes by label id"
+          }
+        },
+        "summary": "The segmentation classes, their colours, and the group each rolls into.",
         "tags": [
           "config"
         ]
@@ -8917,6 +9064,58 @@
           }
         },
         "summary": "Get one run"
+      }
+    },
+    "/runs/{run_id}/outputs/bundle": {
+      "get": {
+        "operationId": "bundle",
+        "parameters": [
+          {
+            "description": "Run whose outputs to pack",
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Which group to pack: a purpose, a directory name, or `all`.",
+            "example": "Results",
+            "in": "query",
+            "name": "purpose",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BundleResponse"
+                }
+              }
+            },
+            "description": "Signed bundle URL on this registry"
+          },
+          "404": {
+            "description": "No such run, or nothing archived in that group"
+          },
+          "503": {
+            "description": "The archive is not configured"
+          }
+        },
+        "summary": "A signed link that streams one run's outputs, or one group of them, as a zip.",
+        "tags": [
+          "archive"
+        ]
       }
     },
     "/sites": {

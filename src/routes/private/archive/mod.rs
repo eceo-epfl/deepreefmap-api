@@ -1,3 +1,4 @@
+pub mod bundle;
 pub mod model;
 pub mod router;
 pub mod run_artifact;
