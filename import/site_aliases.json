@@ -1,0 +1,320 @@
+{
+  "note": "Free-text place strings from the field spreadsheets, folded onto one site each. Keys are lowercased and stripped.",
+  "places": {
+    "djibouti arta ras korali": {
+      "country": "Djibouti",
+      "region": "Arta",
+      "site": "Ras Korali"
+    },
+    "djibouti arta shark island": {
+      "country": "Djibouti",
+      "region": "Arta",
+      "site": "Shark Island"
+    },
+    "djibouti city": {
+      "country": "Djibouti",
+      "region": "Djibouti City",
+      "site": "Djibouti City"
+    },
+    "djibouti east island lagoon": {
+      "country": "Djibouti",
+      "region": "East Island",
+      "site": "Lagoon"
+    },
+    "djibouti east island protected": {
+      "country": "Djibouti",
+      "region": "East Island",
+      "site": "Protected"
+    },
+    "djibouti ghoubet fare mare": {
+      "country": "Djibouti",
+      "region": "Ghoubet",
+      "site": "Fare Mare"
+    },
+    "djibouti ghoubet fosse aux requins (dan)": {
+      "country": "Djibouti",
+      "region": "Ghoubet",
+      "site": "Fosse aux Requins"
+    },
+    "djibouti ghoubet volcano": {
+      "country": "Djibouti",
+      "region": "Ghoubet",
+      "site": "Volcano"
+    },
+    "djibouti hamra exposed": {
+      "country": "Djibouti",
+      "region": "Hamra",
+      "site": "Exposed"
+    },
+    "djibouti hamra protected": {
+      "country": "Djibouti",
+      "region": "Hamra",
+      "site": "Protected"
+    },
+    "djibouti kadda dabali exposed": {
+      "country": "Djibouti",
+      "region": "Kadda Dabali",
+      "site": "Exposed"
+    },
+    "djibouti kadda dabali japanese garden": {
+      "country": "Djibouti",
+      "region": "Kadda Dabali",
+      "site": "Japanese Garden"
+    },
+    "djibouti kadda dabali near boat": {
+      "country": "Djibouti",
+      "region": "Kadda Dabali",
+      "site": "Near Boat"
+    },
+    "djibouti maskali aqarium": {
+      "country": "Djibouti",
+      "region": "Maskali",
+      "site": "Aquarium"
+    },
+    "djibouti maskali aquarium": {
+      "country": "Djibouti",
+      "region": "Maskali",
+      "site": "Aquarium"
+    },
+    "djibouti maskali bouoy air france": {
+      "country": "Djibouti",
+      "region": "Maskali",
+      "site": "Buoy Air France"
+    },
+    "djibouti maskali buoy air france": {
+      "country": "Djibouti",
+      "region": "Maskali",
+      "site": "Buoy Air France"
+    },
+    "djibouti maskali canyon": {
+      "country": "Djibouti",
+      "region": "Maskali",
+      "site": "Canyon"
+    },
+    "djibouti maskali north wall": {
+      "country": "Djibouti",
+      "region": "Maskali",
+      "site": "North Wall"
+    },
+    "djibouti maskali sunken bouoy": {
+      "country": "Djibouti",
+      "region": "Maskali",
+      "site": "Sunken Buoy"
+    },
+    "djibouti maskali sunken buoy": {
+      "country": "Djibouti",
+      "region": "Maskali",
+      "site": "Sunken Buoy"
+    },
+    "djibouti maskali sunken buoy, don’t see begin of 2nd transect": {
+      "country": "Djibouti",
+      "region": "Maskali",
+      "site": "Sunken Buoy"
+    },
+    "djibouti maskali sunken buoy,don't see end of first transect": {
+      "country": "Djibouti",
+      "region": "Maskali",
+      "site": "Sunken Buoy"
+    },
+    "djibouti maskali wreck": {
+      "country": "Djibouti",
+      "region": "Maskali",
+      "site": "Wreck"
+    },
+    "djibouti obock": {
+      "country": "Djibouti",
+      "region": "Obock",
+      "site": "Obock"
+    },
+    "djibouti obock ras bir": {
+      "country": "Djibouti",
+      "region": "Obock",
+      "site": "Ras Bir"
+    },
+    "djibouti obock surcouffe": {
+      "country": "Djibouti",
+      "region": "Obock",
+      "site": "Surcouffe"
+    },
+    "djibouti ras siyan reef": {
+      "country": "Djibouti",
+      "region": "Ras Siyan",
+      "site": "Reef"
+    },
+    "djibouti ras siyan sand": {
+      "country": "Djibouti",
+      "region": "Ras Siyan",
+      "site": "Sand"
+    },
+    "djibouti tadjoura sable blanc": {
+      "country": "Djibouti",
+      "region": "Tadjoura",
+      "site": "Sable Blanc"
+    },
+    "djibouti tolka exposed": {
+      "country": "Djibouti",
+      "region": "Tolka",
+      "site": "Exposed"
+    },
+    "djibouti tolka protected": {
+      "country": "Djibouti",
+      "region": "Tolka",
+      "site": "Protected"
+    },
+    "eilat japanese garden": {
+      "country": "Israel",
+      "region": "Eilat",
+      "site": "Japanese Garden"
+    },
+    "israel japanese garden": {
+      "country": "Israel",
+      "region": "Eilat",
+      "site": "Japanese Garden"
+    },
+    "israel, japanese garden": {
+      "country": "Israel",
+      "region": "Eilat",
+      "site": "Japanese Garden"
+    },
+    "eritrea dahret": {
+      "country": "Eritrea",
+      "region": null,
+      "site": "Dahret"
+    },
+    "eritrea gavihu": {
+      "country": "Eritrea",
+      "region": null,
+      "site": "Gavihu"
+    },
+    "eritrea green island": {
+      "country": "Eritrea",
+      "region": null,
+      "site": "Green Island"
+    },
+    "eritrea harat": {
+      "country": "Eritrea",
+      "region": null,
+      "site": "Harat"
+    },
+    "harat": {
+      "country": "Eritrea",
+      "region": null,
+      "site": "Harat"
+    },
+    "eritrea kadhu": {
+      "country": "Eritrea",
+      "region": null,
+      "site": "Kadhu"
+    },
+    "eritrea madote": {
+      "country": "Eritrea",
+      "region": null,
+      "site": "Madote"
+    },
+    "eritrea twalet": {
+      "country": "Eritrea",
+      "region": null,
+      "site": "Twalet"
+    },
+    "florida": {
+      "country": "USA",
+      "region": "Florida",
+      "site": "Florida"
+    },
+    "jordan japanese garden": {
+      "country": "Jordan",
+      "region": "Aqaba",
+      "site": "Japanese Garden"
+    },
+    "jordan king abdullah reef": {
+      "country": "Jordan",
+      "region": "Aqaba",
+      "site": "King Abdullah Reef"
+    },
+    "jordan mss reef": {
+      "country": "Jordan",
+      "region": "Aqaba",
+      "site": "MSS Reef"
+    },
+    "jordan north beach": {
+      "country": "Jordan",
+      "region": "Aqaba",
+      "site": "North Beach"
+    },
+    "jordan south phosphate mine": {
+      "country": "Jordan",
+      "region": "Aqaba",
+      "site": "South Phosphate Mine"
+    },
+    "jordan south port": {
+      "country": "Jordan",
+      "region": "Aqaba",
+      "site": "South Port"
+    },
+    "oman, not sure where exactly": {
+      "country": "Oman",
+      "region": null,
+      "site": "Unknown"
+    },
+    "sudan amber": {
+      "country": "Sudan",
+      "region": null,
+      "site": "Amber"
+    },
+    "sudan danab algirish": {
+      "country": "Sudan",
+      "region": null,
+      "site": "Danab Algirish"
+    },
+    "sudan haraorait": {
+      "country": "Sudan",
+      "region": null,
+      "site": "Harorait"
+    },
+    "sudan marsa shaikh ibrahim": {
+      "country": "Sudan",
+      "region": null,
+      "site": "Marsa Shaikh Ibrahim"
+    },
+    "sudan sanganab north": {
+      "country": "Sudan",
+      "region": null,
+      "site": "Sanganeb North"
+    },
+    "sudan sanganeb north": {
+      "country": "Sudan",
+      "region": null,
+      "site": "Sanganeb North"
+    },
+    "sudan shaab alshaikh": {
+      "country": "Sudan",
+      "region": null,
+      "site": "Shaab Alshaikh"
+    },
+    "sudan taweel": {
+      "country": "Sudan",
+      "region": null,
+      "site": "Taweel"
+    },
+    "sudan twaratit": {
+      "country": "Sudan",
+      "region": null,
+      "site": "Twartit South"
+    },
+    "sudan twartit south": {
+      "country": "Sudan",
+      "region": null,
+      "site": "Twartit South"
+    },
+    "sudan umria": {
+      "country": "Sudan",
+      "region": null,
+      "site": "Umria"
+    },
+    "sudan wenged reef": {
+      "country": "Sudan",
+      "region": null,
+      "site": "Wenged Reef"
+    }
+  }
+}

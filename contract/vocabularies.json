@@ -20,7 +20,9 @@
       "nullable": true,
       "terms": [
         {
-          "aliases": [],
+          "aliases": [
+            "excelent"
+          ],
           "code": "excellent",
           "definition": "Clear water, steady swim, the transect line visible throughout.",
           "label": "Excellent"
@@ -61,7 +63,8 @@
           "aliases": [
             "very bad",
             "verybad",
-            "terrible"
+            "terrible",
+            "extremely bad"
           ],
           "code": "very_bad",
           "definition": "No usable reconstruction is expected from this swim.",

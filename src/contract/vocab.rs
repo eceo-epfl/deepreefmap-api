@@ -89,7 +89,7 @@ pub const PASS_QUALITY: Vocabulary = Vocabulary {
             code: "excellent",
             label: "Excellent",
             definition: "Clear water, steady swim, the transect line visible throughout.",
-            aliases: &[],
+            aliases: &["excelent"],
         },
         Term {
             code: "very_good",
@@ -119,7 +119,7 @@ pub const PASS_QUALITY: Vocabulary = Vocabulary {
             code: "very_bad",
             label: "Very bad",
             definition: "No usable reconstruction is expected from this swim.",
-            aliases: &["very bad", "verybad", "terrible"],
+            aliases: &["very bad", "verybad", "terrible", "extremely bad"],
         },
     ],
 };

@@ -144,6 +144,22 @@ Preset settings are validated against `contract/preset-schema.json`, generated f
 preset form from the published copy. A lagging mirror degrades to a missing dropdown
 entry on the laptop, never a broken run: the desktop drops names it cannot offer.
 
+## Importing the field spreadsheets
+
+The historical catalogue lives in two spreadsheets: one row per clip with comma-joined
+lists of passes, and a results sheet with per-transect coordinates. `import-field-csv`
+folds them onto the schema, with `import/site_aliases.json` mapping the free-text
+places onto sites. Every imported row is console-owned and validated. Dry run by
+default; ids derive from the natural keys, so running it twice changes nothing.
+
+```bash
+cargo run --bin import-field-csv -- --videos csv_videos_timestamp_export.csv --results results.csv
+DATABASE_URL=... cargo run --bin import-field-csv -- --videos ... --results ... --apply
+```
+
+A pass whose window runs to the end of a clip has no end time the sheet can give, so it
+is noted on the clip rather than invented.
+
 ## Development
 
 ```bash
