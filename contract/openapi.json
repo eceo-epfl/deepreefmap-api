@@ -19,6 +19,33 @@
         ],
         "type": "object"
       },
+      "ArchiveOverview": {
+        "properties": {
+          "clips": {
+            "description": "Stored objects whose hash matches a clip, by `completed_at`.",
+            "items": {
+              "$ref": "#/components/schemas/ClipOverview"
+            },
+            "type": "array"
+          },
+          "runs": {
+            "description": "Runs with artefact rows, by last activity: `last_completed_at`, then `started_at`.",
+            "items": {
+              "$ref": "#/components/schemas/RunOverview"
+            },
+            "type": "array"
+          },
+          "unlinked": {
+            "$ref": "#/components/schemas/UnlinkedOverview"
+          }
+        },
+        "required": [
+          "runs",
+          "clips",
+          "unlinked"
+        ],
+        "type": "object"
+      },
       "AssignAllResponse": {
         "properties": {
           "assigned_at": {
@@ -581,6 +608,60 @@
           "level",
           "name",
           "colour"
+        ],
+        "type": "object"
+      },
+      "ClipOverview": {
+        "properties": {
+          "completed_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "content_hash": {
+            "type": "string"
+          },
+          "file_name": {
+            "type": "string"
+          },
+          "object_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "size_bytes": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "status": {
+            "type": "string"
+          },
+          "uploaded_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "uploaded_by_device_id": {
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "video_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "video_id",
+          "file_name",
+          "content_hash",
+          "object_id",
+          "status",
+          "size_bytes"
         ],
         "type": "object"
       },
@@ -3218,6 +3299,81 @@
         ],
         "type": "object"
       },
+      "RunOverview": {
+        "properties": {
+          "artifacts": {
+            "description": "How many artefact rows the run has.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "complete": {
+            "description": "How many of them link a stored object in status `complete`, `failed`, `pending`.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "device_id": {
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "failed": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "last_completed_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pass_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "pending": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "run_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "run_status": {
+            "type": "string"
+          },
+          "size_bytes": {
+            "description": "Total size of the linked objects, whatever their status.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "started_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "state": {
+            "description": "`complete` when every artefact is, `failed` when any is, `partial` when some\nare complete, `pending` otherwise.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "pass_id",
+          "run_status",
+          "artifacts",
+          "complete",
+          "failed",
+          "pending",
+          "size_bytes",
+          "state"
+        ],
+        "type": "object"
+      },
       "RunResponse": {
         "properties": {
           "camera_profile": {
@@ -4479,6 +4635,24 @@
         },
         "type": "object"
       },
+      "UnlinkedOverview": {
+        "properties": {
+          "objects": {
+            "description": "Stored objects no artefact row and no clip refers to.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "size_bytes": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "objects",
+          "size_bytes"
+        ],
+        "type": "object"
+      },
       "UploadPartResponse": {
         "properties": {
           "etag": {
@@ -5226,6 +5400,34 @@
           }
         },
         "summary": "Begin or resume an upload, deduplicated by content hash.",
+        "tags": [
+          "archive"
+        ]
+      }
+    },
+    "/archive/overview": {
+      "get": {
+        "description": "Unpaged: the whole archive comes back in one response. Deleted runs and clips are\nleft out, so an object linked only through them counts as unlinked.",
+        "operationId": "overview",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArchiveOverview"
+                }
+              }
+            },
+            "description": "Runs, clips and unlinked objects"
+          },
+          "403": {
+            "description": "Called with a device token"
+          },
+          "503": {
+            "description": "The archive is not configured"
+          }
+        },
+        "summary": "The archive grouped by what each object belongs to: runs, clips, and the rest.",
         "tags": [
           "archive"
         ]

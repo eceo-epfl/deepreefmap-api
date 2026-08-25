@@ -105,6 +105,9 @@ PUT  /api/archive/{id}/parts/{n}                 # one part's raw bytes
 POST /api/archive/{id}/complete
 GET  /api/archive/{id}/download                  # a signed fetch link on this API
 GET  /api/archive/by-hash/{content_hash}
+POST /api/archive/probe                          # state for many hashes
+POST /api/archive/runs-probe                     # artefact counts for many runs
+GET  /api/archive/overview                       # console only: by run, by clip, unlinked
 ```
 
 Keys are content-addressed, `{S3_PREFIX}/videos/imohash/{hex}` and
@@ -134,6 +137,7 @@ passes of one transect in one campaign, so there is nothing to curate by hand.
 | `preset` | Named run settings the server defines. Pull only. |
 | `device` | Enrolled desktop installation. Server-side only. |
 | `stored_object` | An archived blob and its upload state. Server-side only. |
+| `run_artifact` | One file of a run's output directory and the stored object holding it. Server-side only. |
 
 The CRUD routers speak the `Content-Range` list dialect, so `ra-data-simple-rest` works
 against them unchanged.

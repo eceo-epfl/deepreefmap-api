@@ -1,14 +1,16 @@
+use axum::middleware;
 use tower_http::limit::RequestBodyLimitLayer;
 use utoipa_axum::router::OpenApiRouter;
 
 use crate::archive::store::PART_SIZE_BYTES;
 use crate::common::AppState;
+use crate::common::auth::deny_device_crud;
 use crate::routes::CRUD_BODY_LIMIT;
 
 /// Blob upload negotiation and byte transfer. Both principals upload: laptops push
 /// footage under their device token, people upload through the console. No extra
 /// guard, so any authenticated identity passes; anonymous callers stop at
-/// `auth_middleware`.
+/// `auth_middleware`. The overview is the exception: a console view, refused to devices.
 ///
 /// # Panics
 ///
@@ -31,5 +33,13 @@ pub fn router(state: &AppState) -> OpenApiRouter {
         .routes(utoipa_axum::routes!(super::views::upload_part))
         .layer(RequestBodyLimitLayer::new(part_limit));
 
-    negotiation.merge(parts).with_state(state.clone())
+    let console = OpenApiRouter::new()
+        .routes(utoipa_axum::routes!(super::views::overview))
+        .layer(middleware::from_fn(deny_device_crud))
+        .layer(RequestBodyLimitLayer::new(CRUD_BODY_LIMIT));
+
+    negotiation
+        .merge(parts)
+        .merge(console)
+        .with_state(state.clone())
 }

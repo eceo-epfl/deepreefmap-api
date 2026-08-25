@@ -897,3 +897,178 @@ pub async fn runs_probe(
     }
     Ok(Json(RunsProbeResponse { states }))
 }
+
+#[derive(Debug, serde::Serialize, ToSchema)]
+pub struct RunOverview {
+    pub run_id: Uuid,
+    pub pass_id: Uuid,
+    pub device_id: Option<Uuid>,
+    pub started_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub run_status: String,
+    /// How many artefact rows the run has.
+    pub artifacts: i64,
+    /// How many of them link a stored object in status `complete`, `failed`, `pending`.
+    pub complete: i64,
+    pub failed: i64,
+    pub pending: i64,
+    /// Total size of the linked objects, whatever their status.
+    pub size_bytes: i64,
+    pub last_completed_at: Option<chrono::DateTime<chrono::Utc>>,
+    /// `complete` when every artefact is, `failed` when any is, `partial` when some
+    /// are complete, `pending` otherwise.
+    pub state: String,
+}
+
+#[derive(Debug, serde::Serialize, ToSchema)]
+pub struct ClipOverview {
+    pub video_id: Uuid,
+    pub file_name: String,
+    pub content_hash: String,
+    pub object_id: Uuid,
+    pub status: String,
+    pub size_bytes: i64,
+    pub completed_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub uploaded_by_device_id: Option<Uuid>,
+    pub uploaded_by: Option<String>,
+}
+
+#[derive(Debug, serde::Serialize, ToSchema)]
+pub struct UnlinkedOverview {
+    /// Stored objects no artefact row and no clip refers to.
+    pub objects: i64,
+    pub size_bytes: i64,
+}
+
+#[derive(Debug, serde::Serialize, ToSchema)]
+pub struct ArchiveOverview {
+    /// Runs with artefact rows, by last activity: `last_completed_at`, then `started_at`.
+    pub runs: Vec<RunOverview>,
+    /// Stored objects whose hash matches a clip, by `completed_at`.
+    pub clips: Vec<ClipOverview>,
+    pub unlinked: UnlinkedOverview,
+}
+
+/// Every run that has an artefact row, one line each. A run whose artefacts link no
+/// object at all still appears, with every count at zero.
+const OVERVIEW_RUNS_SQL: &str = "\
+    SELECT r.id AS run_id, r.pass_id, r.device_id, r.started_at, \
+           r.status AS run_status, \
+           COUNT(*)::BIGINT AS artifacts, \
+           (COUNT(*) FILTER (WHERE so.status = 'complete'))::BIGINT AS complete, \
+           (COUNT(*) FILTER (WHERE so.status = 'failed'))::BIGINT AS failed, \
+           (COUNT(*) FILTER (WHERE so.status = 'pending'))::BIGINT AS pending, \
+           COALESCE(SUM(so.size_bytes), 0)::BIGINT AS size_bytes, \
+           MAX(so.completed_at) AS last_completed_at \
+    FROM run_record r \
+    JOIN run_artifact ra ON ra.run_id = r.id \
+    LEFT JOIN stored_object so ON so.id = ra.stored_object_id \
+    WHERE r.deleted_at IS NULL \
+    GROUP BY r.id \
+    ORDER BY MAX(so.completed_at) DESC NULLS LAST, r.started_at DESC NULLS LAST, r.id";
+
+const OVERVIEW_CLIPS_SQL: &str = "\
+    SELECT v.id AS video_id, v.file_name, so.content_hash, so.id AS object_id, \
+           so.status, so.size_bytes, so.completed_at, so.uploaded_by_device_id, \
+           so.uploaded_by \
+    FROM stored_object so \
+    JOIN video_asset v ON v.hash = so.content_hash AND v.deleted_at IS NULL \
+    ORDER BY so.completed_at DESC NULLS LAST, so.created_at DESC, so.id";
+
+const OVERVIEW_UNLINKED_SQL: &str = "\
+    SELECT COUNT(*)::BIGINT AS objects, COALESCE(SUM(so.size_bytes), 0)::BIGINT AS size_bytes \
+    FROM stored_object so \
+    WHERE NOT EXISTS (SELECT 1 FROM run_artifact ra WHERE ra.stored_object_id = so.id) \
+      AND NOT EXISTS (SELECT 1 FROM video_asset v \
+                      WHERE v.hash = so.content_hash AND v.deleted_at IS NULL)";
+
+fn run_state(artifacts: i64, complete: i64, failed: i64) -> &'static str {
+    if complete == artifacts {
+        stored_object::STATUS_COMPLETE
+    } else if failed > 0 {
+        stored_object::STATUS_FAILED
+    } else if complete > 0 {
+        "partial"
+    } else {
+        stored_object::STATUS_PENDING
+    }
+}
+
+/// The archive grouped by what each object belongs to: runs, clips, and the rest.
+///
+/// Unpaged: the whole archive comes back in one response. Deleted runs and clips are
+/// left out, so an object linked only through them counts as unlinked.
+#[utoipa::path(
+    get,
+    path = "/archive/overview",
+    responses(
+        (status = 200, description = "Runs, clips and unlinked objects", body = ArchiveOverview),
+        (status = 403, description = "Called with a device token"),
+        (status = 503, description = "The archive is not configured"),
+    ),
+    tag = "archive"
+)]
+pub async fn overview(State(state): State<AppState>) -> AppResult<Json<ArchiveOverview>> {
+    archive(&state)?;
+    let query = |sql: &'static str| {
+        state.db.query_all_raw(sea_orm::Statement::from_string(
+            sea_orm::DatabaseBackend::Postgres,
+            sql,
+        ))
+    };
+    let run_rows = query(OVERVIEW_RUNS_SQL).await?;
+    let clip_rows = query(OVERVIEW_CLIPS_SQL).await?;
+    let unlinked_rows = query(OVERVIEW_UNLINKED_SQL).await?;
+
+    let mut runs = Vec::with_capacity(run_rows.len());
+    for row in &run_rows {
+        let artifacts: i64 = row.try_get("", "artifacts")?;
+        let complete: i64 = row.try_get("", "complete")?;
+        let failed: i64 = row.try_get("", "failed")?;
+        runs.push(RunOverview {
+            run_id: row.try_get("", "run_id")?,
+            pass_id: row.try_get("", "pass_id")?,
+            device_id: row.try_get("", "device_id")?,
+            started_at: row.try_get("", "started_at")?,
+            run_status: row.try_get("", "run_status")?,
+            artifacts,
+            complete,
+            failed,
+            pending: row.try_get("", "pending")?,
+            size_bytes: row.try_get("", "size_bytes")?,
+            last_completed_at: row.try_get("", "last_completed_at")?,
+            state: run_state(artifacts, complete, failed).to_string(),
+        });
+    }
+
+    let mut clips = Vec::with_capacity(clip_rows.len());
+    for row in &clip_rows {
+        clips.push(ClipOverview {
+            video_id: row.try_get("", "video_id")?,
+            file_name: row.try_get("", "file_name")?,
+            content_hash: row.try_get("", "content_hash")?,
+            object_id: row.try_get("", "object_id")?,
+            status: row.try_get("", "status")?,
+            size_bytes: row.try_get("", "size_bytes")?,
+            completed_at: row.try_get("", "completed_at")?,
+            uploaded_by_device_id: row.try_get("", "uploaded_by_device_id")?,
+            uploaded_by: row.try_get("", "uploaded_by")?,
+        });
+    }
+
+    let unlinked = match unlinked_rows.first() {
+        Some(row) => UnlinkedOverview {
+            objects: row.try_get("", "objects")?,
+            size_bytes: row.try_get("", "size_bytes")?,
+        },
+        None => UnlinkedOverview {
+            objects: 0,
+            size_bytes: 0,
+        },
+    };
+
+    Ok(Json(ArchiveOverview {
+        runs,
+        clips,
+        unlinked,
+    }))
+}

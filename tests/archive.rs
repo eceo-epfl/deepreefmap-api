@@ -474,6 +474,79 @@ async fn test_initiate_rejects_malformed_requests() {
     assert_eq!(status, 404, "an unknown run is not found, not bad request");
 }
 
+/// One overview for the console: each run once with its artefact counts and state,
+/// each archived clip by file name, and the objects nothing refers to as one total.
+#[tokio::test]
+async fn test_overview_groups_objects_by_run_and_clip() {
+    let db = setup_test_db().await;
+    let run_id = "33333333-3333-4333-8333-333333333333";
+    seed_run(&db, run_id).await;
+    let first = seed_object(&db, HASH, "complete").await;
+    let second_hash = HASH.replace('0', "7");
+    let second = seed_object(&db, &second_hash, "complete").await;
+    let pending_hash = HASH.replace('0', "8");
+    let pending = seed_object(&db, &pending_hash, "pending").await;
+    seed_run_artifact(&db, run_id, "ortho/cover.json", HASH, Some(&first)).await;
+    seed_run_artifact(&db, run_id, "ortho/ortho.png", &second_hash, Some(&second)).await;
+    seed_run_artifact(&db, run_id, "cloud.npz", &pending_hash, Some(&pending)).await;
+    let clip_object = seed_complete_object(&db, OTHER_HASH).await;
+    seed_video(&db, "44444444-4444-4444-8444-444444444444", OTHER_HASH, "GX010042.MP4").await;
+    let orphan_hash = HASH.replace('0', "9");
+    seed_object(&db, &orphan_hash, "complete").await;
+    let app = build_test_app_with_config_as_human(
+        db.clone(),
+        dead_archive_config(),
+        "member-sub",
+        vec![deepreefmap_api::common::auth::Role::Member],
+    );
+
+    let (status, body) = get_json(&app, "/api/archive/overview", None).await;
+    assert_eq!(status, 200, "{body}");
+    let runs = body["runs"].as_array().unwrap();
+    assert_eq!(runs.len(), 1, "{body}");
+    assert_eq!(runs[0]["run_id"], run_id);
+    assert_eq!(runs[0]["run_status"], "succeeded");
+    assert_eq!(runs[0]["artifacts"], 3);
+    assert_eq!(runs[0]["complete"], 2);
+    assert_eq!(runs[0]["failed"], 0);
+    assert_eq!(runs[0]["pending"], 1);
+    assert_eq!(runs[0]["size_bytes"], 3 * 123, "every linked object, pending included");
+    assert_eq!(runs[0]["state"], "partial");
+    assert!(runs[0]["last_completed_at"].is_string(), "{body}");
+
+    let clips = body["clips"].as_array().unwrap();
+    assert_eq!(clips.len(), 1, "{body}");
+    assert_eq!(clips[0]["file_name"], "GX010042.MP4");
+    assert_eq!(clips[0]["object_id"], clip_object);
+    assert_eq!(clips[0]["content_hash"], OTHER_HASH);
+    assert_eq!(clips[0]["status"], "complete");
+
+    assert_eq!(body["unlinked"]["objects"], 1);
+    assert_eq!(body["unlinked"]["size_bytes"], 123);
+}
+
+#[tokio::test]
+async fn test_overview_refuses_devices() {
+    let db = setup_test_db().await;
+    let app = build_test_app_with_config(db.clone(), dead_archive_config());
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&app, &code).await;
+
+    let (status, body) = get(&app, "/api/archive/overview", Some(&token)).await;
+    assert_eq!(status, 403, "a device browsed the archive: {body}");
+}
+
+async fn seed_video(db: &sea_orm::DatabaseConnection, id: &str, hash: &str, file_name: &str) {
+    exec(
+        db,
+        &format!(
+            "INSERT INTO video_asset (id, hash, file_name, created_at, updated_at) \
+             VALUES ('{id}', '{hash}', '{file_name}', NOW(), NOW())"
+        ),
+    )
+    .await;
+}
+
 /// A pass and a run for artefacts to hang off.
 async fn seed_run(db: &sea_orm::DatabaseConnection, run_id: &str) {
     exec(
