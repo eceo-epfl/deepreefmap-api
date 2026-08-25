@@ -358,6 +358,41 @@ async fn test_cover_series_buckets_by_campaign() {
 }
 
 #[tokio::test]
+async fn test_a_campaign_lists_the_transects_it_surveyed() {
+    let db = setup_test_db().await;
+    let app = build_test_app(db.clone());
+    let admin = build_test_app_as_admin(db.clone());
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&app, &code).await;
+
+    let first = create_transect(&admin, "T1").await;
+    let second = create_transect(&admin, "T2").await;
+    let campaign = create_campaign(&admin, "2024_04_eilat", "2024-04-02").await;
+    let mut swum = pass_row(&uuid("a1"), &first, "swum");
+    swum["campaign_id"] = serde_json::json!(campaign);
+    let document = push_body(&serde_json::json!({
+        "passes": [swum, pass_row(&uuid("a2"), &second, "elsewhere")],
+    }));
+    let (status, body) = post_json(&app, "/api/sync/push", &document, Some(&token)).await;
+    assert_eq!(status, 200, "{body}");
+
+    let (status, listed) = get_json(
+        &admin,
+        &format!("/api/campaigns/{campaign}/transects"),
+        None,
+    )
+    .await;
+    assert_eq!(status, 200, "{listed}");
+    let names: Vec<&str> = listed
+        .as_array()
+        .expect("a list")
+        .iter()
+        .filter_map(|t| t["name"].as_str())
+        .collect();
+    assert_eq!(names, ["T1"]);
+}
+
+#[tokio::test]
 async fn test_cover_series_rejects_an_unknown_level() {
     let db = setup_test_db().await;
     let admin = build_test_app_as_admin(db.clone());

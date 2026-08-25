@@ -6018,6 +6018,42 @@
         "summary": "Update one campaign"
       }
     },
+    "/campaigns/{id}/transects": {
+      "get": {
+        "operationId": "transects_for_campaign",
+        "parameters": [
+          {
+            "description": "Campaign id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TransectResponse"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Transects the campaign surveyed"
+          }
+        },
+        "summary": "Transects with a live pass in the campaign, by name.",
+        "tags": [
+          "transects"
+        ]
+      }
+    },
     "/changes": {
       "get": {
         "description": "Retrieves all changes.\n\nThis resource manages change items\n\nAdditional sortable columns: \n- seq\n- table_key\n- status\n- projected_seq\n- created_at\n- decided_at.\n\nAdditional filterable columns: \n- seq\n- table_key\n- row_id\n- device_id\n- author\n- status\n- reason\n- validate\n- decided_by.",

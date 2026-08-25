@@ -111,6 +111,7 @@ pub fn protected_router(state: &AppState) -> OpenApiRouter {
         .merge(entities)
         .merge(sync::router::router(state))
         .merge(changes::router::router(state))
+        .merge(campaigns::router::router(state))
         .merge(devices::router::router(state))
         .merge(cover::router::router(state))
         .merge(performance::router(state))
