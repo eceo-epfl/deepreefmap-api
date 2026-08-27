@@ -1625,6 +1625,7 @@ dependencies = [
  "csv",
  "dotenvy",
  "form_urlencoded",
+ "futures-util",
  "hmac 0.12.1",
  "http-body 1.1.0",
  "http-body-util",

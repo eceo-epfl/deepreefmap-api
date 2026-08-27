@@ -108,6 +108,8 @@ GET  /api/archive/by-hash/{content_hash}
 POST /api/archive/probe                          # state for many hashes
 POST /api/archive/runs-probe                     # artefact counts for many runs
 GET  /api/archive/overview                       # console only: by run, by clip, unlinked
+GET  /api/runs/{id}/outputs                      # console only: the run's files by group
+GET  /api/runs/{id}/outputs/files?purpose=       # console only: one group, paged
 GET  /api/runs/{id}/outputs/bundle?purpose=      # a signed link to one zip of a run
 ```
 
@@ -123,7 +125,8 @@ for a whole group of them: `purpose` takes `all` (the default), one of `Results`
 `Record` or `Working data`, or a run subdirectory such as `frames`. The zip streams
 from `/api/archive/runs/{id}/outputs.zip`, stored rather than deflated, so nothing is
 buffered on the way through. `src/archive/purpose.rs` decides which files a purpose
-covers; the console groups the outputs tab by the same rule.
+covers, and `outputs` reports the same groups with their counts and sizes so a reader
+never pages through a run's thousands of artefact rows to see what is there.
 
 ## Taxonomy
 

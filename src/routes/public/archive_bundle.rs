@@ -12,6 +12,7 @@ use chrono::Utc;
 use utoipa::IntoParams;
 use uuid::Uuid;
 
+use futures_util::StreamExt;
 use tokio_util::compat::FuturesAsyncWriteCompatExt;
 
 use crate::archive::{fetch_token, purpose};
@@ -81,12 +82,26 @@ pub async fn bundle(
     let (writer, reader) = tokio::io::duplex(PIPE_BYTES);
     let store = store.clone();
     let folder_in_zip = folder.clone();
+    let (outcome, packed) = tokio::sync::oneshot::channel();
     tokio::spawn(async move {
-        if let Err(error) = pack(writer, store, files, folder_in_zip).await {
-            // The client sees a truncated zip; the reason belongs in the log.
+        let result = pack(writer, store, files, folder_in_zip).await;
+        if let Err(error) = &result {
             tracing::warn!(%run_id, %error, "Bundle stream ended early");
         }
+        let _ = outcome.send(result);
     });
+
+    // Packing ends by dropping the writer, which the reader would take for a clean
+    // end of file: a zip with no central directory under a 200. The outcome follows
+    // the last byte, so a failure aborts the transfer instead of finishing it.
+    let body = tokio_util::io::ReaderStream::new(reader).chain(futures_util::stream::once(
+        async move {
+            match packed.await {
+                Ok(Ok(())) => Ok(bytes::Bytes::new()),
+                _ => Err(std::io::Error::other("the bundle ended before its last file")),
+            }
+        },
+    ));
 
     let filename = format!("{folder}-{}.zip", purpose::slug(&params.purpose));
     let disposition = format!("attachment; filename=\"{}\"", safe_name(&filename));
@@ -97,9 +112,7 @@ pub async fn bundle(
             HeaderValue::from_str(&disposition)
                 .unwrap_or_else(|_| HeaderValue::from_static("attachment")),
         )
-        .body(axum::body::Body::from_stream(
-            tokio_util::io::ReaderStream::new(reader),
-        ))
+        .body(axum::body::Body::from_stream(body))
         .map_err(|e| AppError::Internal(format!("bundle response: {e}")))
 }
 

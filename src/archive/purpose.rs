@@ -49,6 +49,18 @@ pub fn selects(purpose: &str, relpath: &str) -> bool {
     purpose == EVERYTHING || purpose_of(relpath) == purpose
 }
 
+/// Purposes before directories, each set in its own order.
+#[must_use]
+pub fn compare(a: &str, b: &str) -> std::cmp::Ordering {
+    let rank = |name: &str| match name {
+        RESULTS => 0,
+        RECORD => 1,
+        WORKING => 2,
+        _ => 3,
+    };
+    rank(a).cmp(&rank(b)).then_with(|| a.cmp(b))
+}
+
 /// A purpose as a filename part: lowercase, with runs of other characters as dashes.
 #[must_use]
 pub fn slug(purpose: &str) -> String {
@@ -92,6 +104,21 @@ mod tests {
         assert!(selects("frames", "frames/000001.png"));
         assert!(!selects("labels", "frames/000001.png"));
         assert!(selects(RESULTS, "ortho.png"));
+    }
+
+    #[test]
+    fn test_a_directory_key_reads_as_its_own_group() {
+        // The listing query groups by the first path segment with its slash kept, so a
+        // key stays readable here without a second copy of the rule in SQL.
+        assert_eq!(purpose_of("frames/"), "frames");
+        assert_eq!(purpose_of("labels/"), "labels");
+    }
+
+    #[test]
+    fn test_purposes_order_before_directories() {
+        let mut names = vec!["labels", WORKING, "frames", RECORD, RESULTS];
+        names.sort_by(|a, b| compare(a, b));
+        assert_eq!(names, vec![RESULTS, RECORD, WORKING, "frames", "labels"]);
     }
 
     #[test]

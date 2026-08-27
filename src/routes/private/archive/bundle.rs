@@ -11,6 +11,7 @@ use sea_orm::{ConnectionTrait, EntityTrait, Statement, Value};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
+use crate::archive::keys::relpath_is_safe;
 use crate::archive::{fetch_token, purpose};
 use crate::common::AppState;
 use crate::error::{AppError, AppResult};
@@ -75,16 +76,23 @@ pub async fn entries<C: ConnectionTrait>(
 }
 
 /// The name of the run directory the files came from, for the zip's top folder.
+///
+/// A device names it, so it is refused unless it is one safe path component: it goes
+/// on to every entry path in the zip, where a `..` would land outside the folder.
 pub async fn run_folder<C: ConnectionTrait>(db: &C, run_id: Uuid) -> AppResult<String> {
     let run = run_record::Entity::find_by_id(run_id)
         .one(db)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("No run {run_id}")))?;
-    Ok(if run.run_dir_name.is_empty() {
-        run_id.to_string()
-    } else {
+    Ok(if is_one_component(&run.run_dir_name) {
         run.run_dir_name
+    } else {
+        run_id.to_string()
     })
+}
+
+fn is_one_component(name: &str) -> bool {
+    !name.is_empty() && !name.contains('/') && relpath_is_safe(name)
 }
 
 const SIZES_SQL: &str = "\

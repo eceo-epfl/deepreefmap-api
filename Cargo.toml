@@ -102,6 +102,7 @@ tower_governor = { version = "0.8", default-features = false, features = ["axum"
 
 migration = { path = "migration" }
 async_zip = { version = "0.0.19", features = ["tokio"] }
+futures-util = { version = "0.3", default-features = false }
 
 [dev-dependencies]
 chrono = "0.4"

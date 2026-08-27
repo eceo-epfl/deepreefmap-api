@@ -1124,3 +1124,211 @@ async fn test_complete_verifies_small_objects_whole() {
         "complete"
     );
 }
+
+/// A run whose outputs cover every group the rule names, with one file per status.
+async fn seed_grouped_outputs(db: &sea_orm::DatabaseConnection, run_id: &str) {
+    seed_run(db, run_id).await;
+    let ortho = seed_complete_object(db, HASH).await;
+    let log_hash = HASH.replace('0', "5");
+    let log = seed_object(db, &log_hash, "pending").await;
+    let frame_hash = HASH.replace('0', "7");
+    let frame = seed_complete_object(db, &frame_hash).await;
+    let label_hash = HASH.replace('0', "9");
+    let label = seed_object(db, &label_hash, "failed").await;
+    seed_run_artifact(db, run_id, "ortho.png", HASH, Some(&ortho)).await;
+    seed_run_artifact(db, run_id, "run.log", &log_hash, Some(&log)).await;
+    seed_run_artifact(db, run_id, "mapping_outputs.npz", &log_hash, None).await;
+    seed_run_artifact(db, run_id, "frames/000001.png", &frame_hash, Some(&frame)).await;
+    seed_run_artifact(db, run_id, "frames/000002.png", &frame_hash, Some(&frame)).await;
+    seed_run_artifact(db, run_id, "labels/000001.png", &label_hash, Some(&label)).await;
+}
+
+fn console(db: &sea_orm::DatabaseConnection) -> axum::Router {
+    build_test_app_with_config_as_human(
+        db.clone(),
+        dead_archive_config(),
+        "member-sub",
+        vec![deepreefmap_api::common::auth::Role::Member],
+    )
+}
+
+#[tokio::test]
+async fn test_run_outputs_group_every_file_by_purpose() {
+    let db = setup_test_db().await;
+    let run_id = "77777777-7777-4777-8777-777777777777";
+    seed_grouped_outputs(&db, run_id).await;
+    let app = console(&db);
+
+    let (status, body) = get_json(&app, &format!("/api/runs/{run_id}/outputs"), None).await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(body["files"], 6, "{body}");
+    assert_eq!(body["complete"], 3, "{body}");
+    assert_eq!(body["failed"], 1, "{body}");
+    assert_eq!(body["pending"], 1, "{body}");
+    // Five linked objects of 123 bytes; the unlinked artefact has no size of its own.
+    assert_eq!(body["size_bytes"], 5 * 123, "{body}");
+
+    let groups = body["groups"].as_array().expect("groups");
+    let names: Vec<&str> = groups.iter().map(|g| g["name"].as_str().unwrap()).collect();
+    assert_eq!(
+        names,
+        vec!["Results", "Record", "Working data", "frames", "labels"],
+        "{body}"
+    );
+    assert_eq!(groups[0]["files"], 1);
+    assert_eq!(groups[0]["complete"], 1);
+    assert_eq!(groups[1]["pending"], 1, "run.log is still uploading");
+    assert_eq!(groups[2]["files"], 1, "the unlinked npz is working data");
+    assert_eq!(groups[2]["complete"], 0);
+    assert_eq!(groups[3]["files"], 2, "both frames");
+    assert_eq!(groups[4]["failed"], 1, "the label upload failed");
+}
+
+#[tokio::test]
+async fn test_run_outputs_count_past_a_list_page() {
+    let db = setup_test_db().await;
+    let run_id = "78787878-7878-4878-8878-787878787878";
+    seed_run(&db, run_id).await;
+    let ortho = seed_complete_object(&db, HASH).await;
+    seed_run_artifact(&db, run_id, "ortho.png", HASH, Some(&ortho)).await;
+    exec(
+        &db,
+        &format!(
+            "INSERT INTO run_artifact (id, run_id, relpath, content_hash, created_at, updated_at) \
+             SELECT gen_random_uuid(), '{run_id}', \
+                    'frames/' || lpad(n::text, 6, '0') || '.png', '{HASH}', NOW(), NOW() \
+             FROM generate_series(1, 1100) AS n"
+        ),
+    )
+    .await;
+    let app = console(&db);
+
+    let (status, body) = get_json(&app, &format!("/api/runs/{run_id}/outputs"), None).await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(body["files"], 1101, "{body}");
+    let groups = body["groups"].as_array().expect("groups");
+    let frames = groups.iter().find(|g| g["name"] == "frames").expect("frames");
+    assert_eq!(frames["files"], 1100, "{body}");
+    assert!(
+        groups.iter().any(|g| g["name"] == "Results"),
+        "the ortho keeps its group behind a thousand frames: {body}"
+    );
+}
+
+#[tokio::test]
+async fn test_run_output_files_list_one_group() {
+    let db = setup_test_db().await;
+    let run_id = "79797979-7979-4979-8979-797979797979";
+    seed_grouped_outputs(&db, run_id).await;
+    let app = console(&db);
+
+    let (status, body) = get_json(
+        &app,
+        &format!("/api/runs/{run_id}/outputs/files?purpose=frames&offset=1&limit=1"),
+        None,
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    let files = body["files"].as_array().expect("files");
+    assert_eq!(files.len(), 1, "{body}");
+    assert_eq!(files[0]["relpath"], "frames/000002.png", "in path order");
+    assert_eq!(files[0]["status"], "complete", "the status is joined");
+
+    let (status, body) = get_json(
+        &app,
+        &format!("/api/runs/{run_id}/outputs/files?purpose=Results"),
+        None,
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    let files = body["files"].as_array().expect("files");
+    assert_eq!(files.len(), 1, "only the root result files: {body}");
+    assert_eq!(files[0]["relpath"], "ortho.png");
+
+    let (status, body) = get_json(
+        &app,
+        &format!("/api/runs/{run_id}/outputs/files?purpose=masks"),
+        None,
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    assert!(body["files"].as_array().expect("files").is_empty(), "{body}");
+}
+
+#[tokio::test]
+async fn test_run_outputs_refuse_devices() {
+    let db = setup_test_db().await;
+    let run_id = "7a7a7a7a-7a7a-4a7a-8a7a-7a7a7a7a7a7a";
+    seed_grouped_outputs(&db, run_id).await;
+    let app = build_test_app_with_config(db.clone(), dead_archive_config());
+    let code = seed_connect_code(&db, "alice", "Field laptop").await;
+    let token = enrol_device(&app, &code).await;
+
+    let (status, body) = get(&app, &format!("/api/runs/{run_id}/outputs"), Some(&token)).await;
+    assert_eq!(status, 403, "{body}");
+    let (status, body) = get(
+        &app,
+        &format!("/api/runs/{run_id}/outputs/files?purpose=frames"),
+        Some(&token),
+    )
+    .await;
+    assert_eq!(status, 403, "{body}");
+}
+
+#[tokio::test]
+async fn test_a_bundle_folder_refuses_a_traversing_run_name() {
+    let db = setup_test_db().await;
+    let run_id = "7b7b7b7b-7b7b-4b7b-8b7b-7b7b7b7b7b7b";
+    seed_run(&db, run_id).await;
+    exec(
+        &db,
+        &format!("UPDATE run_record SET run_dir_name = '../../evil' WHERE id = '{run_id}'"),
+    )
+    .await;
+    let ortho = seed_complete_object(&db, HASH).await;
+    seed_run_artifact(&db, run_id, "ortho.png", HASH, Some(&ortho)).await;
+    let app = console(&db);
+
+    let (status, body) = get_json(&app, &format!("/api/runs/{run_id}/outputs/bundle"), None).await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(
+        body["filename"], "7b7b7b7b-7b7b-4b7b-8b7b-7b7b7b7b7b7b-all.zip",
+        "the run id stands in for a name that could escape the folder: {body}"
+    );
+}
+
+#[tokio::test]
+async fn test_a_bundle_stream_fails_loudly_when_a_file_is_gone() {
+    use http_body_util::BodyExt;
+    use tower::ServiceExt;
+
+    let db = setup_test_db().await;
+    let run_id = "7c7c7c7c-7c7c-4c7c-8c7c-7c7c7c7c7c7c";
+    seed_run(&db, run_id).await;
+    let ortho = seed_complete_object(&db, HASH).await;
+    seed_run_artifact(&db, run_id, "ortho.png", HASH, Some(&ortho)).await;
+    let app = console(&db);
+
+    let (status, body) = get_json(&app, &format!("/api/runs/{run_id}/outputs/bundle"), None).await;
+    assert_eq!(status, 200, "{body}");
+    let url = body["url"].as_str().expect("a signed url");
+    let at = url.find("/archive/runs/").expect("a bundle path");
+    let path = format!("/api{}", &url[at..]);
+
+    // The store is unreachable, so packing fails after the response has begun.
+    let response = app
+        .clone()
+        .oneshot(
+            axum::http::Request::builder()
+                .uri(&path)
+                .body(axum::body::Body::empty())
+                .expect("request builds"),
+        )
+        .await
+        .expect("router responds");
+    assert_eq!(response.status(), 200);
+    assert!(
+        response.into_body().collect().await.is_err(),
+        "a zip that never got its central directory must not read as a whole file"
+    );
+}
