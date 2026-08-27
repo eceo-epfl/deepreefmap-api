@@ -161,6 +161,51 @@ async fn test_disjoint_edits_from_console_and_device_both_land() {
 }
 
 #[tokio::test]
+async fn test_depth_at_each_end_merges_field_by_field() {
+    let db = setup_test_db().await;
+    let (app, token) = one_device(&db).await;
+    let admin = build_test_app_as_admin(db.clone());
+
+    let mut row = transect(T1, "T1", None);
+    row["start_depth_m"] = serde_json::json!(5.0);
+    let pushed = push(&app, &token, serde_json::json!({ "transects": [row] })).await;
+    let base = ack_seq(&pushed["sections"]["transects"], T1);
+
+    let (status, body) = put(
+        &admin,
+        &format!("/api/transects/{T1}"),
+        &serde_json::json!({ "end_depth_m": 11.0 }),
+        None,
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+
+    let mut row = transect(T1, "T1", Some(base));
+    row["start_depth_m"] = serde_json::json!(5.0);
+    row["depth_m"] = serde_json::json!(8.0);
+    let pushed = push(&app, &token, serde_json::json!({ "transects": [row] })).await;
+    ack_seq(&pushed["sections"]["transects"], T1);
+
+    let depth = |column: &'static str| {
+        let db = db.clone();
+        async move {
+            let value: f64 = one_value(
+                &db,
+                &format!("SELECT {column} FROM transect WHERE id = '{T1}'"),
+            )
+            .await;
+            value
+        }
+    };
+    assert!((depth("start_depth_m").await - 5.0).abs() < f64::EPSILON);
+    assert!(
+        (depth("end_depth_m").await - 11.0).abs() < f64::EPSILON,
+        "the merge dropped the console's end depth"
+    );
+    assert!((depth("depth_m").await - 8.0).abs() < f64::EPSILON); // (5 + 11) / 2
+}
+
+#[tokio::test]
 async fn test_console_edit_makes_an_overlapping_device_edit_a_proposal() {
     let db = setup_test_db().await;
     let (app, token) = one_device(&db).await;
@@ -434,7 +479,7 @@ async fn test_a_rejected_row_is_recorded_with_its_reason() {
 }
 
 #[tokio::test]
-async fn test_an_older_client_cannot_touch_a_validated_row_or_its_stamp() {
+async fn test_a_push_without_a_base_cannot_touch_a_validated_row_or_its_stamp() {
     let db = setup_test_db().await;
     let (app, token) = one_device(&db).await;
     let admin = build_test_app_as_admin(db.clone());
@@ -454,19 +499,16 @@ async fn test_an_older_client_cannot_touch_a_validated_row_or_its_stamp() {
     .await;
     assert_eq!(status, 200);
 
-    // Contract 1: no base_seq, and the stamp column is unknown to it.
+    // No base_seq: a row that never learnt of the stamp.
     let mut row = transect(T1, "Renamed", None);
     row.as_object_mut().expect("object").remove("base_seq");
     row["updated_at"] = serde_json::json!(soon());
-    let (status, body) = post_json(
-        &app,
-        "/api/sync/push",
-        &serde_json::json!({ "contract_version": 1, "sections": { "transects": [row] } }),
-        Some(&token),
-    )
-    .await;
-    assert_eq!(status, 200, "{body}");
-    assert_eq!(body["sections"]["transects"]["refused"][0], T1, "{body}");
+    let pushed = push(&app, &token, serde_json::json!({ "transects": [row] })).await;
+    assert_eq!(
+        refused(&pushed["sections"]["transects"], "proposed")[0],
+        T1,
+        "{pushed}"
+    );
     assert_eq!(name_of(&db, T1).await, "T1");
     let validated: Option<String> = one_value(
         &db,
@@ -518,10 +560,6 @@ async fn test_own_rows_come_down_to_their_device_only() {
         theirs["sections"]["passes"].is_null(),
         "another device's pass leaked: {theirs}"
     );
-
-    // Under contract 1 nothing of the kind comes down.
-    let (_, old) = get_json(&app, "/api/sync/pull", Some(&token_a)).await;
-    assert!(old["sections"]["passes"].is_null(), "{old}");
 }
 
 #[tokio::test]

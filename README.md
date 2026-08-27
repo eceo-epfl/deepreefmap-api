@@ -86,10 +86,9 @@ lists them for a curator to accept (`POST /api/changes/{seq}/accept`) or dismiss
 them is a proposal. Deletes are tombstones, because an absent row is indistinguishable
 from one a client has not seen yet.
 
-Under contract 2 a device also pulls its own rows of the upload sections back, so it
-learns what the console curated, validated or deleted, and `outbox` in the pull carries
-the decisions on its proposals. Contract 1 clients keep the older push shape and pull
-only the catalogue.
+A device also pulls its own rows of the upload sections back, so it learns what the
+console curated, validated or deleted, and `outbox` in the pull carries the decisions
+on its proposals.
 
 ## Archive
 

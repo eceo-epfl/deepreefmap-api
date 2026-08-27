@@ -49,6 +49,8 @@ struct Transect {
     name: String,
     length_m: Option<f64>,
     depth_m: Option<f64>,
+    start_depth_m: Option<f64>,
+    end_depth_m: Option<f64>,
     start: Option<(f64, f64)>,
     end: Option<(f64, f64)>,
 }
@@ -400,7 +402,7 @@ fn ingest_passes(
     let qualities = list(&row.quality);
     let directions = direction_list(&row.direction, windows.len().max(1), report);
     let lengths = list(&row.length);
-    let depth = metres(&row.depth);
+    let depth = depth_range(&row.depth);
     let day = parse_day(&row.date);
 
     let mut kept = 0;
@@ -513,7 +515,7 @@ fn transect_for(
     name: &str,
     site_id: Option<Uuid>,
     length_m: Option<f64>,
-    depth_m: Option<f64>,
+    depth: Option<DepthRange>,
     catalogue: &mut Catalogue,
 ) -> Uuid {
     let key = format!(
@@ -528,16 +530,46 @@ fn transect_for(
         name: name.to_string(),
         length_m: None,
         depth_m: None,
+        start_depth_m: None,
+        end_depth_m: None,
         start: None,
         end: None,
     });
     if entry.length_m.is_none() {
         entry.length_m = length_m;
     }
-    if entry.depth_m.is_none() {
-        entry.depth_m = depth_m;
+    if entry.depth_m.is_none()
+        && let Some(depth) = depth
+    {
+        entry.depth_m = Some(depth.mean());
+        entry.start_depth_m = depth.end.map(|_| depth.start);
+        entry.end_depth_m = depth.end;
     }
     id
+}
+
+/// A depth cell: one reading, or the readings at the two ends as `5-8`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct DepthRange {
+    start: f64,
+    end: Option<f64>,
+}
+
+impl DepthRange {
+    fn mean(self) -> f64 {
+        match self.end {
+            Some(end) => f64::midpoint(self.start, end),
+            None => self.start,
+        }
+    }
+}
+
+/// `8m` as a single reading; `5-8`, `5 - 8 m`, `5–8` as the depth at each end.
+fn depth_range(cell: &str) -> Option<DepthRange> {
+    let mut ends = cell.split(['-', '\u{2013}']).map(metres).take(2);
+    let start = ends.next().flatten()?;
+    let end = ends.next().flatten();
+    Some(DepthRange { start, end })
 }
 
 /// Comma-separated cells, trimmed, empties dropped.
@@ -604,13 +636,14 @@ fn code_for(
     worst.map(|index| vocabulary.terms[index].code)
 }
 
-/// `100m`, `50 m`, `12m` as metres.
+/// `100m`, `50 m`, `12.5m` as metres: the first number in the cell.
 fn metres(cell: &str) -> Option<f64> {
-    let digits: String = cell
+    let trimmed = cell.trim_start_matches(|c: char| !c.is_ascii_digit());
+    let number: String = trimmed
         .chars()
-        .filter(|c| c.is_ascii_digit() || *c == '.')
+        .take_while(|c| c.is_ascii_digit() || *c == '.')
         .collect();
-    digits.parse().ok().filter(|m: &f64| *m > 0.0)
+    number.parse().ok().filter(|m: &f64| *m > 0.0)
 }
 
 /// `begin-01:56` as (0, Some(116)); `04:00-end` as (240, None).
@@ -840,8 +873,8 @@ async fn write_catalogue<C: ConnectionTrait>(
         exec(
             db,
             "INSERT INTO transect (id, site_id, name, description, start_lat, start_lon, end_lat, end_lon, \
-             length_m, depth_m, validated_at, validated_by) \
-             VALUES ($1, $2, $3, '', $4, $5, $6, $7, $8, $9, NOW(), $10) ON CONFLICT DO NOTHING",
+             length_m, depth_m, start_depth_m, end_depth_m, validated_at, validated_by) \
+             VALUES ($1, $2, $3, '', $4, $5, $6, $7, $8, $9, $10, $11, NOW(), $12) ON CONFLICT DO NOTHING",
             vec![
                 transect.id.into(),
                 Value::Uuid(transect.site_id),
@@ -852,6 +885,8 @@ async fn write_catalogue<C: ConnectionTrait>(
                 Value::Double(transect.end.map(|p| p.1)),
                 Value::Double(transect.length_m),
                 Value::Double(transect.depth_m),
+                Value::Double(transect.start_depth_m),
+                Value::Double(transect.end_depth_m),
                 IMPORTER.into(),
             ],
         )
@@ -931,4 +966,54 @@ async fn exec<C: ConnectionTrait>(
     ))
     .await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{DepthRange, depth_range, metres};
+
+    #[test]
+    fn test_metres_reads_the_first_number() {
+        assert_eq!(metres("100m"), Some(100.0));
+        assert_eq!(metres("50 m"), Some(50.0));
+        assert_eq!(metres("12.5"), Some(12.5));
+        assert_eq!(metres("~8 m"), Some(8.0));
+        assert_eq!(metres(""), None);
+        assert_eq!(metres("0"), None);
+        assert_eq!(metres("n/a"), None);
+    }
+
+    #[test]
+    fn test_depth_range_single_reading() {
+        let depth = depth_range("8 m").expect("a reading");
+        assert_eq!(
+            depth,
+            DepthRange {
+                start: 8.0,
+                end: None
+            }
+        );
+        assert!((depth.mean() - 8.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_depth_range_at_each_end() {
+        let depth = depth_range("5-8").expect("a range");
+        assert_eq!(
+            depth,
+            DepthRange {
+                start: 5.0,
+                end: Some(8.0)
+            }
+        );
+        assert!((depth.mean() - 6.5).abs() < f64::EPSILON); // (5 + 8) / 2
+        assert_eq!(depth_range("5 - 8 m"), Some(depth));
+        assert_eq!(depth_range("5\u{2013}8"), Some(depth));
+    }
+
+    #[test]
+    fn test_depth_range_empty() {
+        assert_eq!(depth_range(""), None);
+        assert_eq!(depth_range("-"), None);
+    }
 }

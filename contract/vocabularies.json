@@ -1,5 +1,5 @@
 {
-  "contract_version": 3,
+  "contract_version": 1,
   "legacy_exclusions": [
     {
       "raw": "calibration",

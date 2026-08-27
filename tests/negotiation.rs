@@ -124,9 +124,22 @@ async fn test_a_narrowed_client_is_served_the_intersection() {
         .iter()
         .map(|v| v.as_str().expect("a section name"))
         .collect();
-    // A device pulls sites, campaigns, transects and presets; the client kept only
-    // the first.
-    assert_eq!(omitted, ["campaigns", "transects", "presets"], "{pulled}");
+    // A device pulls the catalogue and its own upload rows; the client kept only
+    // sites.
+    assert_eq!(
+        omitted,
+        [
+            "campaigns",
+            "transects",
+            "videos",
+            "passes",
+            "pass_videos",
+            "presets",
+            "runs",
+            "cover_rows"
+        ],
+        "{pulled}"
+    );
 }
 
 #[tokio::test]

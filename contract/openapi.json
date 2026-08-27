@@ -4434,6 +4434,13 @@
               "null"
             ]
           },
+          "end_depth_m": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
           "end_lat": {
             "format": "double",
             "type": [
@@ -4473,6 +4480,13 @@
             ]
           },
           "start_accuracy_m": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "start_depth_m": {
             "format": "double",
             "type": [
               "number",
@@ -4539,6 +4553,13 @@
               "null"
             ]
           },
+          "end_depth_m": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
           "end_lat": {
             "format": "double",
             "type": [
@@ -4581,6 +4602,13 @@
           },
           "start_accuracy_m": {
             "description": "Accuracy is per end point, as the field records have it.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "start_depth_m": {
             "format": "double",
             "type": [
               "number",
@@ -4671,6 +4699,13 @@
               "null"
             ]
           },
+          "end_depth_m": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
           "end_lat": {
             "format": "double",
             "type": [
@@ -4713,6 +4748,13 @@
           },
           "start_accuracy_m": {
             "description": "Accuracy is per end point, as the field records have it.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "start_depth_m": {
             "format": "double",
             "type": [
               "number",
@@ -4787,6 +4829,13 @@
               "null"
             ]
           },
+          "end_depth_m": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
           "end_lat": {
             "format": "double",
             "type": [
@@ -4822,6 +4871,13 @@
             ]
           },
           "start_accuracy_m": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "start_depth_m": {
             "format": "double",
             "type": [
               "number",
@@ -10131,7 +10187,7 @@
     },
     "/transects": {
       "get": {
-        "description": "Retrieves all transects.\n\nThis resource manages transect items\n\nAdditional sortable columns: \n- name\n- length_m\n- depth_m\n- created_at\n- updated_at\n- deleted_at\n- server_seq\n- validated_at.\n\nAdditional filterable columns: \n- id\n- site_id\n- name\n- length_m\n- depth_m\n- deleted_at\n- device_id\n- validated_at\n- validated_by.",
+        "description": "Retrieves all transects.\n\nThis resource manages transect items\n\nAdditional sortable columns: \n- name\n- length_m\n- depth_m\n- start_depth_m\n- end_depth_m\n- created_at\n- updated_at\n- deleted_at\n- server_seq\n- validated_at.\n\nAdditional filterable columns: \n- id\n- site_id\n- name\n- length_m\n- depth_m\n- start_depth_m\n- end_depth_m\n- deleted_at\n- device_id\n- validated_at\n- validated_by.",
         "operationId": "get_all_transects",
         "parameters": [
           {

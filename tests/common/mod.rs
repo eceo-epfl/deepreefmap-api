@@ -122,3 +122,21 @@ pub fn build_test_app_with_state(db: DatabaseConnection) -> (axum::Router, AppSt
     let app = deepreefmap_api::routes::build_router(&state);
     (app, state)
 }
+
+/// How many rows a push section acknowledged as written.
+pub fn applied(section: &serde_json::Value) -> usize {
+    section["applied"].as_array().map_or(0, Vec::len)
+}
+
+/// The ids under one refusal list of a push section: `superseded`, `proposed` or
+/// `rejected`.
+pub fn refused(section: &serde_json::Value, list: &str) -> Vec<String> {
+    section[list]
+        .as_array()
+        .map(|rows| {
+            rows.iter()
+                .map(|r| r["id"].as_str().unwrap_or_default().to_string())
+                .collect()
+        })
+        .unwrap_or_default()
+}

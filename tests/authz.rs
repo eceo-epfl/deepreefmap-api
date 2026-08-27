@@ -510,6 +510,9 @@ async fn test_push_allows_a_device() {
                     "file_name": "a.mp4",
                     "gravity": "unknown",
                     "gps": "unknown",
+                    "upside_down": false,
+                    "review": "unreviewed",
+                    "notes": "",
                     "created_at": "2026-08-01T00:00:00Z",
                     "updated_at": "2026-08-01T10:00:00Z",
                 }],
@@ -519,8 +522,8 @@ async fn test_push_allows_a_device() {
     )
     .await;
     assert_eq!(status, 200, "sync push is gated: {body}");
-    assert_eq!(body["sections"]["transects"]["applied"], 1);
-    assert_eq!(body["sections"]["videos"]["applied"], 1);
+    assert_eq!(applied(&body["sections"]["transects"]), 1);
+    assert_eq!(applied(&body["sections"]["videos"]), 1);
 }
 
 // --- The fixed device capability set ---
@@ -678,7 +681,7 @@ async fn test_sync_protocol_allows_a_device() {
     )
     .await;
     assert_eq!(status, 200, "sync push is gated: {body}");
-    assert_eq!(body["sections"]["transects"]["applied"], 1);
+    assert_eq!(applied(&body["sections"]["transects"]), 1);
 }
 
 // --- Origin-owned writes ---
@@ -698,7 +701,7 @@ async fn test_push_updates_a_device_own_row() {
         Some(&token),
     )
     .await;
-    assert_eq!(inserted["sections"]["transects"]["applied"], 1);
+    assert_eq!(applied(&inserted["sections"]["transects"]), 1);
 
     let (status, updated) = post_json(
         &app,
@@ -710,12 +713,10 @@ async fn test_push_updates_a_device_own_row() {
     )
     .await;
     assert_eq!(status, 200, "{updated}");
-    assert_eq!(updated["sections"]["transects"]["applied"], 1);
+    assert_eq!(applied(&updated["sections"]["transects"]), 1);
     assert!(
-        updated["sections"]["transects"]["refused"]
-            .as_array()
-            .expect("refused list")
-            .is_empty(),
+        refused(&updated["sections"]["transects"], "superseded").is_empty()
+            && refused(&updated["sections"]["transects"], "proposed").is_empty(),
         "a laptop was refused its own row: {updated}"
     );
 
@@ -755,16 +756,14 @@ async fn test_push_refuses_another_devices_row() {
     )
     .await;
     assert_eq!(status, 200, "{body}");
-    assert_eq!(body["sections"]["transects"]["applied"], 0);
+    assert_eq!(applied(&body["sections"]["transects"]), 0);
     assert_eq!(
-        body["sections"]["transects"]["refused"][0], id,
+        refused(&body["sections"]["transects"], "superseded")[0],
+        id,
         "the refusal was silent: {body}"
     );
-    assert!(
-        body["sections"]["transects"]["skipped"]
-            .as_array()
-            .expect("skipped list")
-            .is_empty(),
+    assert_ne!(
+        body["sections"]["transects"]["superseded"][0]["reason"], "stale",
         "an origin refusal was reported as a stale skip: {body}"
     );
 
@@ -782,7 +781,11 @@ async fn test_push_refuses_another_devices_row() {
         Some(&token_b),
     )
     .await;
-    assert_eq!(body["sections"]["transects"]["refused"][0], id, "{body}");
+    assert_eq!(
+        refused(&body["sections"]["transects"], "superseded")[0],
+        id,
+        "{body}"
+    );
     let (deleted_at, _, _) = sync_row(&db, "transect", id).await.expect("row survives");
     assert!(deleted_at.is_none(), "one laptop tombstoned another's row");
 }
@@ -802,9 +805,10 @@ async fn test_push_refuses_a_server_authored_row() {
     )
     .await;
     assert_eq!(status, 200, "{body}");
-    assert_eq!(body["sections"]["sites"]["applied"], 0);
+    assert_eq!(applied(&body["sections"]["sites"]), 0);
     assert_eq!(
-        body["sections"]["sites"]["refused"][0], id,
+        refused(&body["sections"]["sites"], "proposed")[0],
+        id,
         "a device amended a row authored on the server: {body}"
     );
 
@@ -835,7 +839,7 @@ async fn test_a_device_authors_a_site_and_a_campaign_unvalidated() {
     .await;
     assert_eq!(status, 200, "{body}");
     for section in ["sites", "campaigns"] {
-        assert_eq!(body["sections"][section]["applied"], 1, "{body}");
+        assert_eq!(applied(&body["sections"][section]), 1, "{body}");
     }
 
     let validated: Option<String> = one_value(
@@ -849,7 +853,7 @@ async fn test_a_device_authors_a_site_and_a_campaign_unvalidated() {
 }
 
 #[tokio::test]
-async fn test_pull_restricts_a_device_to_downloadable_sections() {
+async fn test_pull_gives_a_device_the_catalogue_and_its_own_rows() {
     let db = setup_test_db().await;
     let (app, token) = device(&db, "alice", "Alice laptop").await;
 
@@ -863,6 +867,7 @@ async fn test_pull_restricts_a_device_to_downloadable_sections() {
             "videos": [{
                 "id": "55555555-5555-4555-8555-555555555555",
                 "file_name": "a.mp4", "gravity": "unknown", "gps": "unknown",
+                "upside_down": false, "review": "unreviewed", "notes": "",
                 "created_at": "2026-08-01T00:00:00Z", "updated_at": "2026-08-01T10:00:00Z",
             }],
         })),
@@ -878,9 +883,9 @@ async fn test_pull_restricts_a_device_to_downloadable_sections() {
         .expect("sections object")
         .keys()
         .collect();
-    // The migration's seeded preset rides along; presets are pull only.
-    assert_eq!(sections, vec!["presets", "sites"], "{pulled}");
-    // Uploaded and never offered back, so the cursor must not claim there is more.
+    // The migration's seeded preset rides along; presets are pull only. The video
+    // comes back because this device pushed it, and only to this device.
+    assert_eq!(sections, vec!["presets", "sites", "videos"], "{pulled}");
     assert_eq!(pulled["has_more"], false, "{pulled}");
 
     // An operator still sees the lot.

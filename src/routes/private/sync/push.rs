@@ -66,24 +66,6 @@ impl SectionOutcome {
             Status::Rejected => self.rejected.push(Refusal { id, reason }),
         }
     }
-
-    /// The shape contract 1 published: counts and bare id lists under the old names.
-    fn legacy(&self) -> serde_json::Value {
-        let (stale, foreign): (Vec<_>, Vec<_>) =
-            self.superseded.iter().partition(|r| r.reason == "stale");
-        let refused: Vec<uuid::Uuid> = foreign
-            .iter()
-            .map(|r| r.id)
-            .chain(self.proposed.iter().map(|r| r.id))
-            .collect();
-        serde_json::json!({
-            "received": self.received,
-            "applied": self.applied.len(),
-            "skipped": stale.iter().map(|r| r.id).collect::<Vec<_>>(),
-            "refused": refused,
-            "conflicted": self.rejected.iter().map(|r| r.id).collect::<Vec<_>>(),
-        })
-    }
 }
 
 #[derive(Debug, serde::Serialize, ToSchema)]
@@ -173,11 +155,8 @@ pub async fn push(
             outcome.absorb(id, &decision);
         }
 
-        let rendered = if agreed >= 2 {
-            serde_json::to_value(&outcome).map_err(|e| AppError::Internal(e.to_string()))?
-        } else {
-            outcome.legacy()
-        };
+        let rendered =
+            serde_json::to_value(&outcome).map_err(|e| AppError::Internal(e.to_string()))?;
         outcomes.insert(spec.section.to_string(), rendered);
     }
 

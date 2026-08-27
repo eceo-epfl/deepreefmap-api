@@ -15,6 +15,9 @@ fn video_row(id: &str, file_name: &str) -> serde_json::Value {
         "file_name": file_name,
         "gravity": "unknown",
         "gps": "unknown",
+        "upside_down": false,
+        "review": "unreviewed",
+        "notes": "",
         "created_at": "2026-08-01T00:00:00Z",
         "updated_at": "2026-08-01T10:00:00Z",
     })

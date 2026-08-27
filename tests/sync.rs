@@ -62,13 +62,8 @@ async fn test_push_then_pull_on_another_device() {
     )
     .await;
     assert_eq!(status, 200, "push failed: {pushed}");
-    assert_eq!(pushed["sections"]["transects"]["applied"], 1);
-    assert!(
-        pushed["sections"]["transects"]["skipped"]
-            .as_array()
-            .unwrap()
-            .is_empty()
-    );
+    assert_eq!(applied(&pushed["sections"]["transects"]), 1);
+    assert!(refused(&pushed["sections"]["transects"], "superseded").is_empty());
 
     let (status, pulled) = get_json(&app, "/api/sync/pull", Some(&token_b)).await;
     assert_eq!(status, 200);
@@ -124,8 +119,11 @@ async fn test_conflict_resolves_last_write_wins_within_one_origin() {
     )
     .await;
     assert_eq!(status, 200);
-    assert_eq!(stale["sections"]["transects"]["applied"], 0);
-    assert_eq!(stale["sections"]["transects"]["skipped"][0], transect_id);
+    assert_eq!(applied(&stale["sections"]["transects"]), 0);
+    assert_eq!(
+        refused(&stale["sections"]["transects"], "superseded")[0],
+        transect_id
+    );
 
     let (_, pulled) = get_json(&app, "/api/sync/pull", Some(&token)).await;
     assert_eq!(pulled["sections"]["transects"][0]["name"], "Noon name");
@@ -139,7 +137,7 @@ async fn test_conflict_resolves_last_write_wins_within_one_origin() {
         Some(&token),
     )
     .await;
-    assert_eq!(fresh["sections"]["transects"]["applied"], 1);
+    assert_eq!(applied(&fresh["sections"]["transects"]), 1);
     let (_, pulled) = get_json(&app, "/api/sync/pull", Some(&token)).await;
     assert_eq!(pulled["sections"]["transects"][0]["name"], "Evening name");
 }
@@ -183,7 +181,7 @@ async fn test_delete_propagates_as_tombstone() {
         Some(&token_a),
     )
     .await;
-    assert_eq!(response["sections"]["transects"]["applied"], 1);
+    assert_eq!(applied(&response["sections"]["transects"]), 1);
 
     // As a row: an absent one is indistinguishable from one not yet seen.
     let (_, pulled) = get_json(
@@ -212,7 +210,8 @@ async fn test_delete_propagates_as_tombstone() {
     .await;
     assert_eq!(status, 200, "{reused}");
     assert_eq!(
-        reused["sections"]["transects"]["applied"], 1,
+        applied(&reused["sections"]["transects"]),
+        1,
         "the name did not free up after the tombstone: {reused}"
     );
 }
@@ -259,6 +258,7 @@ async fn test_push_whole_survey_in_one_call() {
                 "size_bytes": 4_000_000_000_i64, "duration_s": 353.0, "fps": 30.0,
                 "width": 1920, "height": 1080, "codec": "hvc1",
                 "gravity": "yes", "gps": "yes",
+                "upside_down": false, "review": "usable", "notes": "",
                 // A column this contract no longer carries. A device on an older
                 // build still sends it, and the push must ignore the key rather
                 // than refuse the row.
@@ -316,19 +316,18 @@ async fn test_push_whole_survey_in_one_call() {
         "cover_rows",
     ] {
         assert_eq!(
-            body["sections"][section]["applied"], 1,
+            applied(&body["sections"][section]),
+            1,
             "{section} not applied: {body}"
         );
     }
     // The two the console owns travel as ancestors: unchanged, so acknowledged and
     // nothing proposed.
     for section in ["sites", "campaigns"] {
-        assert_eq!(body["sections"][section]["applied"], 1, "{body}");
+        assert_eq!(applied(&body["sections"][section]), 1, "{body}");
         assert!(
-            body["sections"][section]["refused"]
-                .as_array()
-                .expect("refused list")
-                .is_empty(),
+            refused(&body["sections"][section], "superseded").is_empty()
+                && refused(&body["sections"][section], "proposed").is_empty(),
             "{body}"
         );
     }
@@ -404,7 +403,7 @@ async fn test_push_omitting_processing_config_stores_nulls() {
     )
     .await;
     assert_eq!(status, 200, "{body}");
-    assert_eq!(body["sections"]["runs"]["applied"], 1, "{body}");
+    assert_eq!(applied(&body["sections"]["runs"]), 1, "{body}");
 
     let admin = build_test_app_as_admin(db.clone());
     let (_, pulled) = get_json(&admin, "/api/sync/pull", None).await;
@@ -453,12 +452,14 @@ async fn test_push_child_without_parent_conflicts() {
     // since the client re-sends every ancestor.
     assert_eq!(status, 200, "{body}");
     assert_eq!(
-        body["sections"]["passes"]["conflicted"][0], orphan,
+        refused(&body["sections"]["passes"], "rejected")[0],
+        orphan,
         "{body}"
     );
-    assert_eq!(body["sections"]["passes"]["applied"], 0, "{body}");
+    assert_eq!(applied(&body["sections"]["passes"]), 0, "{body}");
     assert_eq!(
-        body["sections"]["transects"]["applied"], 1,
+        applied(&body["sections"]["transects"]),
+        1,
         "one bad row took the rest of the document with it: {body}"
     );
 
@@ -473,7 +474,7 @@ async fn test_push_child_without_parent_conflicts() {
     )
     .await;
     assert_eq!(status, 200, "{body}");
-    assert_eq!(body["sections"]["transects"]["applied"], 1, "{body}");
+    assert_eq!(applied(&body["sections"]["transects"]), 1, "{body}");
 }
 
 /// A document the server cannot parse is refused entire, since applying part of it would
@@ -535,7 +536,8 @@ async fn test_a_malformed_document_is_refused_whole_and_a_bad_row_alone() {
     .await;
     assert_eq!(status, 200, "{body}");
     assert_eq!(
-        body["sections"]["passes"]["conflicted"][0], "10101010-1010-4010-8010-101010101010",
+        refused(&body["sections"]["passes"], "rejected")[0],
+        "10101010-1010-4010-8010-101010101010",
         "{body}"
     );
 
@@ -544,6 +546,7 @@ async fn test_a_malformed_document_is_refused_whole_and_a_bad_row_alone() {
         "id": "20202020-2020-4020-8020-202020202020",
         "file_name": "GX010001.MP4", "captured_source": "guessed",
         "gravity": "unknown", "gps": "unknown",
+        "upside_down": false, "review": "unreviewed", "notes": "",
         "created_at": "2026-08-01T00:00:00Z", "updated_at": "2026-08-01T10:00:00Z",
     });
     let (status, body) = post_json(
@@ -555,7 +558,8 @@ async fn test_a_malformed_document_is_refused_whole_and_a_bad_row_alone() {
     .await;
     assert_eq!(status, 200, "{body}");
     assert_eq!(
-        body["sections"]["videos"]["conflicted"][0], "20202020-2020-4020-8020-202020202020",
+        refused(&body["sections"]["videos"], "rejected")[0],
+        "20202020-2020-4020-8020-202020202020",
         "{body}"
     );
 }
@@ -657,7 +661,8 @@ async fn test_push_from_a_device_attributes_the_device_only() {
     .await;
     assert_eq!(status, 200, "{body}");
     assert_eq!(
-        body["sections"]["transects"]["applied"], 1,
+        applied(&body["sections"]["transects"]),
+        1,
         "an old client's extra key was refused rather than ignored: {body}"
     );
 
@@ -787,10 +792,10 @@ async fn test_unique_collision_refuses_one_row_not_the_document() {
     .await;
     assert_eq!(status, 200, "one collision failed the document: {body}");
     assert_eq!(
-        body["sections"]["transects"]["conflicted"][0],
+        refused(&body["sections"]["transects"], "rejected")[0],
         "22222222-2222-4222-8222-222222222222"
     );
-    assert_eq!(body["sections"]["transects"]["applied"], 1);
+    assert_eq!(applied(&body["sections"]["transects"]), 1);
 
     let names: i64 = one_value(&db, "SELECT COUNT(*)::BIGINT FROM transect").await;
     assert_eq!(names, 2, "the surviving row did not land");
@@ -863,9 +868,13 @@ async fn test_push_refuses_the_presets_section() {
     )
     .await;
     assert_eq!(status, 200, "{body}");
-    assert_eq!(body["sections"]["presets"]["applied"], 0, "{body}");
-    assert_eq!(body["sections"]["presets"]["refused"][0], preset, "{body}");
-    assert_eq!(body["sections"]["transects"]["applied"], 1, "{body}");
+    assert_eq!(applied(&body["sections"]["presets"]), 0, "{body}");
+    assert_eq!(
+        refused(&body["sections"]["presets"], "proposed")[0],
+        preset,
+        "{body}"
+    );
+    assert_eq!(applied(&body["sections"]["transects"]), 1, "{body}");
 
     // Only the migration's seeded preset remains.
     let presets: i64 = one_value(&db, "SELECT COUNT(*)::BIGINT FROM preset").await;

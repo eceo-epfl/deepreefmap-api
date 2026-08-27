@@ -2,7 +2,9 @@ use crudcrate::{CRUDResource, EntityToModels};
 use sea_orm::entity::prelude::*;
 
 /// A survey line: two georeferenced end points plus the tape length used to scale the
-/// reconstruction. `length_m` is the tape reading, not the geodesic distance.
+/// reconstruction. `length_m` is the tape reading, not the geodesic distance. Depth is
+/// recorded at each end; `depth_m` is their mean where both are known, or the single
+/// reading the historical sheets carry.
 #[derive(
     Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize, serde::Deserialize, EntityToModels,
 )]
@@ -44,6 +46,10 @@ pub struct Model {
     pub length_m: Option<f64>,
     #[crudcrate(filterable, sortable)]
     pub depth_m: Option<f64>,
+    #[crudcrate(filterable, sortable)]
+    pub start_depth_m: Option<f64>,
+    #[crudcrate(filterable, sortable)]
+    pub end_depth_m: Option<f64>,
     #[crudcrate(exclude(create, update), sortable, on_create = chrono::Utc::now())]
     pub created_at: chrono::DateTime<chrono::Utc>,
     /// The conflict key last-write-wins resolves on. Server-stamped: `on_update` only

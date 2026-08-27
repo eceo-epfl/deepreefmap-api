@@ -1,5 +1,5 @@
 {
-  "contract_version": 3,
+  "contract_version": 1,
   "min_contract_version": 1,
   "own_rows_sections": [
     "videos",
@@ -8,7 +8,7 @@
     "runs",
     "cover_rows"
   ],
-  "own_rows_since": 2,
+  "own_rows_since": 1,
   "pull_sections": [
     "sites",
     "campaigns",
@@ -121,14 +121,14 @@
           "name": "validated_at",
           "nullable": true,
           "server_owned": true,
-          "since": 2
+          "since": 1
         },
         {
           "kind": "text",
           "name": "validated_by",
           "nullable": true,
           "server_owned": true,
-          "since": 2
+          "since": 1
         }
       ],
       "section": "sites",
@@ -204,14 +204,14 @@
           "name": "validated_at",
           "nullable": true,
           "server_owned": true,
-          "since": 2
+          "since": 1
         },
         {
           "kind": "text",
           "name": "validated_by",
           "nullable": true,
           "server_owned": true,
-          "since": 2
+          "since": 1
         }
       ],
       "section": "campaigns",
@@ -304,6 +304,20 @@
           "since": 1
         },
         {
+          "kind": "float",
+          "name": "start_depth_m",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "kind": "float",
+          "name": "end_depth_m",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
           "kind": "timestamp",
           "name": "created_at",
           "nullable": false,
@@ -336,14 +350,14 @@
           "name": "validated_at",
           "nullable": true,
           "server_owned": true,
-          "since": 2
+          "since": 1
         },
         {
           "kind": "text",
           "name": "validated_by",
           "nullable": true,
           "server_owned": true,
-          "since": 2
+          "since": 1
         }
       ],
       "section": "transects",
@@ -447,35 +461,35 @@
           "name": "camera_label",
           "nullable": true,
           "server_owned": false,
-          "since": 2
+          "since": 1
         },
         {
           "kind": "text",
           "name": "rig_position",
           "nullable": true,
           "server_owned": false,
-          "since": 2
+          "since": 1
         },
         {
           "kind": "bool",
           "name": "upside_down",
           "nullable": false,
           "server_owned": false,
-          "since": 2
+          "since": 1
         },
         {
           "kind": "text",
           "name": "review",
           "nullable": false,
           "server_owned": false,
-          "since": 2
+          "since": 1
         },
         {
           "kind": "text",
           "name": "notes",
           "nullable": false,
           "server_owned": false,
-          "since": 2
+          "since": 1
         },
         {
           "kind": "timestamp",
@@ -510,14 +524,14 @@
           "name": "validated_at",
           "nullable": true,
           "server_owned": true,
-          "since": 2
+          "since": 1
         },
         {
           "kind": "text",
           "name": "validated_by",
           "nullable": true,
           "server_owned": true,
-          "since": 2
+          "since": 1
         }
       ],
       "section": "videos",
@@ -593,7 +607,7 @@
           "name": "surveyed_on",
           "nullable": true,
           "server_owned": false,
-          "since": 2
+          "since": 1
         },
         {
           "kind": "timestamp",
@@ -628,14 +642,14 @@
           "name": "validated_at",
           "nullable": true,
           "server_owned": true,
-          "since": 2
+          "since": 1
         },
         {
           "kind": "text",
           "name": "validated_by",
           "nullable": true,
           "server_owned": true,
-          "since": 2
+          "since": 1
         }
       ],
       "section": "passes",
@@ -704,14 +718,14 @@
           "name": "validated_at",
           "nullable": true,
           "server_owned": true,
-          "since": 2
+          "since": 1
         },
         {
           "kind": "text",
           "name": "validated_by",
           "nullable": true,
           "server_owned": true,
-          "since": 2
+          "since": 1
         }
       ],
       "section": "pass_videos",
@@ -968,49 +982,49 @@
           "name": "camera_profile",
           "nullable": true,
           "server_owned": false,
-          "since": 2
+          "since": 1
         },
         {
           "kind": "float",
           "name": "pixel_size_m",
           "nullable": true,
           "server_owned": false,
-          "since": 2
+          "since": 1
         },
         {
           "kind": "text",
           "name": "scale_type",
           "nullable": true,
           "server_owned": false,
-          "since": 2
+          "since": 1
         },
         {
           "kind": "float",
           "name": "transect_length_m",
           "nullable": true,
           "server_owned": false,
-          "since": 2
+          "since": 1
         },
         {
           "kind": "float",
           "name": "crop_width_m",
           "nullable": true,
           "server_owned": false,
-          "since": 2
+          "since": 1
         },
         {
           "kind": "uuid",
           "name": "preset_id",
           "nullable": true,
           "server_owned": false,
-          "since": 2
+          "since": 1
         },
         {
           "kind": "uuid",
           "name": "batch_id",
           "nullable": true,
           "server_owned": false,
-          "since": 3
+          "since": 1
         },
         {
           "kind": "timestamp",
@@ -1045,14 +1059,14 @@
           "name": "validated_at",
           "nullable": true,
           "server_owned": true,
-          "since": 2
+          "since": 1
         },
         {
           "kind": "text",
           "name": "validated_by",
           "nullable": true,
           "server_owned": true,
-          "since": 2
+          "since": 1
         }
       ],
       "section": "runs",
@@ -1156,14 +1170,14 @@
           "name": "validated_at",
           "nullable": true,
           "server_owned": true,
-          "since": 2
+          "since": 1
         },
         {
           "kind": "text",
           "name": "validated_by",
           "nullable": true,
           "server_owned": true,
-          "since": 2
+          "since": 1
         }
       ],
       "section": "cover_rows",

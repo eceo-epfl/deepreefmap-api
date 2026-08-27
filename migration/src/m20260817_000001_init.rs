@@ -4,8 +4,15 @@ use sea_orm_migration::prelude::*;
 ///
 /// Mirrors the desktop application's survey catalogue
 /// (`deepreefmap_gui/survey/models/`), plus a `site`/`campaign` hierarchy above
-/// transects, sync columns, device enrolment, curated pass groups, server-defined
+/// transects, sync columns, the change ledger, device enrolment, server-defined
 /// presets and the blob archive.
+///
+/// A site name is unique within its country, not the world. A transect may lack
+/// coordinates and records the depth at each end. A survey event is the passes of one
+/// transect in one campaign; a pass records the day it was swum. A clip records the
+/// camera and rig position it came from, whether it was mounted upside down, and a
+/// review verdict. A run records the scale it was computed at and the session it was
+/// processed in.
 ///
 /// `updated_at` is the client's clock and what conflicts resolve on. `server_seq` is
 /// the server's, from one shared sequence, so a pull cursor is a single scalar across
@@ -23,6 +30,13 @@ const SYNC_COLUMNS: &str = r"
     server_seq   BIGINT NOT NULL DEFAULT 0
 ";
 
+/// The projection of a console entry that validated the row. Every curated table
+/// carries it; `preset` is server-authored and needs no stamp.
+const VALIDATION_COLUMNS: &str = r"
+    validated_at TIMESTAMPTZ,
+    validated_by TEXT
+";
+
 /// Tables carrying the sync columns, in foreign-key order.
 const SYNCABLE_TABLES: [&str; 9] = [
     "site",
@@ -31,9 +45,9 @@ const SYNCABLE_TABLES: [&str; 9] = [
     "video_asset",
     "transect_pass",
     "pass_video",
+    "preset",
     "run_record",
     "cover_row",
-    "preset",
 ];
 
 #[async_trait::async_trait]
@@ -55,11 +69,12 @@ impl MigrationTrait for Migration {
                 description  TEXT NOT NULL DEFAULT '',
                 latitude     DOUBLE PRECISION,
                 longitude    DOUBLE PRECISION,
-                {SYNC_COLUMNS}
+                {SYNC_COLUMNS},
+                {VALIDATION_COLUMNS}
             );
             -- Unique among live rows only: a tombstone must not hold its name.
-            CREATE UNIQUE INDEX IF NOT EXISTS site_name_lower_idx
-                ON site (LOWER(name)) WHERE deleted_at IS NULL;
+            CREATE UNIQUE INDEX IF NOT EXISTS site_country_name_lower_idx
+                ON site (LOWER(COALESCE(country, '')), LOWER(name)) WHERE deleted_at IS NULL;
             "
         ))
         .await?;
@@ -73,7 +88,8 @@ impl MigrationTrait for Migration {
                 begin_date   DATE,
                 end_date     DATE,
                 description  TEXT NOT NULL DEFAULT '',
-                {SYNC_COLUMNS}
+                {SYNC_COLUMNS},
+                {VALIDATION_COLUMNS}
             );
             CREATE UNIQUE INDEX IF NOT EXISTS campaign_name_lower_idx
                 ON campaign (LOWER(name)) WHERE deleted_at IS NULL;
@@ -82,6 +98,8 @@ impl MigrationTrait for Migration {
         .await?;
 
         // `length_m` is the tape length used for scaling, not the geodesic distance.
+        // End points are nullable: the historical lines mostly have none. `depth_m`
+        // is the mean of the two end depths where both are recorded.
         db.execute_unprepared(&format!(
             r"
             CREATE TABLE IF NOT EXISTS transect (
@@ -89,15 +107,18 @@ impl MigrationTrait for Migration {
                 site_id            UUID REFERENCES site(id),
                 name               TEXT NOT NULL,
                 description        TEXT NOT NULL DEFAULT '',
-                start_lat          DOUBLE PRECISION NOT NULL,
-                start_lon          DOUBLE PRECISION NOT NULL,
+                start_lat          DOUBLE PRECISION,
+                start_lon          DOUBLE PRECISION,
                 start_accuracy_m   DOUBLE PRECISION,
-                end_lat            DOUBLE PRECISION NOT NULL,
-                end_lon            DOUBLE PRECISION NOT NULL,
+                end_lat            DOUBLE PRECISION,
+                end_lon            DOUBLE PRECISION,
                 end_accuracy_m     DOUBLE PRECISION,
                 length_m           DOUBLE PRECISION,
                 depth_m            DOUBLE PRECISION,
+                start_depth_m      DOUBLE PRECISION,
+                end_depth_m        DOUBLE PRECISION,
                 {SYNC_COLUMNS},
+                {VALIDATION_COLUMNS},
                 CONSTRAINT transect_lat_range CHECK (
                     start_lat BETWEEN -90 AND 90 AND end_lat BETWEEN -90 AND 90
                 ),
@@ -105,7 +126,13 @@ impl MigrationTrait for Migration {
                     start_lon BETWEEN -180 AND 180 AND end_lon BETWEEN -180 AND 180
                 ),
                 CONSTRAINT transect_length_positive CHECK (length_m IS NULL OR length_m >= 0),
-                CONSTRAINT transect_depth_positive CHECK (depth_m IS NULL OR depth_m >= 0)
+                CONSTRAINT transect_depth_positive CHECK (depth_m IS NULL OR depth_m >= 0),
+                CONSTRAINT transect_start_depth_positive CHECK (
+                    start_depth_m IS NULL OR start_depth_m >= 0
+                ),
+                CONSTRAINT transect_end_depth_positive CHECK (
+                    end_depth_m IS NULL OR end_depth_m >= 0
+                )
             );
             -- Scoped to the site: two teams both naming a line 'T1' is normal.
             CREATE UNIQUE INDEX IF NOT EXISTS transect_site_name_lower_idx
@@ -133,37 +160,26 @@ impl MigrationTrait for Migration {
                 captured_source  TEXT,
                 gravity          TEXT NOT NULL DEFAULT 'unknown',
                 gps              TEXT NOT NULL DEFAULT 'unknown',
+                camera_label     TEXT,
+                rig_position     TEXT,
+                upside_down      BOOLEAN NOT NULL DEFAULT FALSE,
+                review           TEXT NOT NULL DEFAULT 'unreviewed',
+                notes            TEXT NOT NULL DEFAULT '',
                 {SYNC_COLUMNS},
+                {VALIDATION_COLUMNS},
                 -- Tri-state: 'no' is a camera that recorded none, 'unknown' is unread.
                 CONSTRAINT video_gravity_tristate CHECK (gravity IN ('yes', 'no', 'unknown')),
                 CONSTRAINT video_gps_tristate CHECK (gps IN ('yes', 'no', 'unknown')),
                 CONSTRAINT video_captured_source CHECK (captured_source IS NULL OR
-                    captured_source IN ('container', 'mtime'))
+                    captured_source IN ('container', 'mtime')),
+                CONSTRAINT video_rig_position CHECK (rig_position IS NULL OR
+                    rig_position IN ('left', 'centre', 'right')),
+                CONSTRAINT video_review CHECK (review IN ('unreviewed', 'usable', 'excluded'))
             );
             CREATE UNIQUE INDEX IF NOT EXISTS video_asset_hash_idx
                 ON video_asset (hash) WHERE hash IS NOT NULL AND deleted_at IS NULL;
             "
         ))
-        .await?;
-
-        // Not a sync table: groups are curated in the console and never replicate, so
-        // no server_seq, no trigger and no provenance columns.
-        db.execute_unprepared(
-            r"
-            CREATE TABLE IF NOT EXISTS pass_group (
-                id            UUID PRIMARY KEY,
-                name          TEXT NOT NULL,
-                period_label  TEXT,
-                description   TEXT NOT NULL DEFAULT '',
-                created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                deleted_at    TIMESTAMPTZ
-            );
-            -- Unique among live rows only: a tombstone must not hold its name.
-            CREATE UNIQUE INDEX IF NOT EXISTS pass_group_name_lower_idx
-                ON pass_group (LOWER(name)) WHERE deleted_at IS NULL;
-            ",
-        )
         .await?;
 
         // `transect_id` is nullable: footage is not always laid against a tape, and
@@ -177,14 +193,12 @@ impl MigrationTrait for Migration {
                 begin_s           DOUBLE PRECISION NOT NULL,
                 end_s             DOUBLE PRECISION NOT NULL,
                 direction         TEXT,
-                upside_down       BOOLEAN NOT NULL DEFAULT FALSE,
                 label             TEXT NOT NULL DEFAULT '',
                 notes             TEXT NOT NULL DEFAULT '',
                 quality           TEXT,
-                -- Curator-owned, so it stays out of the sync contract: a device
-                -- re-pushing its pass must never clobber the grouping.
-                survey_group_id   UUID REFERENCES pass_group(id),
+                surveyed_on       DATE,
                 {SYNC_COLUMNS},
+                {VALIDATION_COLUMNS},
                 -- Null is 'not recorded', which 38% of the field spreadsheet's rows are.
                 CONSTRAINT pass_direction CHECK (direction IS NULL OR direction IN
                     ('forward', 'reverse')),
@@ -195,8 +209,6 @@ impl MigrationTrait for Migration {
             );
             CREATE INDEX IF NOT EXISTS transect_pass_transect_idx ON transect_pass (transect_id);
             CREATE INDEX IF NOT EXISTS transect_pass_campaign_idx ON transect_pass (campaign_id);
-            CREATE INDEX IF NOT EXISTS transect_pass_survey_group_idx
-                ON transect_pass (survey_group_id);
             "
         ))
         .await?;
@@ -211,6 +223,7 @@ impl MigrationTrait for Migration {
                 video_id  UUID NOT NULL REFERENCES video_asset(id),
                 ordinal   INTEGER NOT NULL,
                 {SYNC_COLUMNS},
+                {VALIDATION_COLUMNS},
                 CONSTRAINT pass_video_ordinal_positive CHECK (ordinal >= 0)
             );
             CREATE UNIQUE INDEX IF NOT EXISTS pass_video_ordinal_idx
@@ -218,6 +231,26 @@ impl MigrationTrait for Migration {
             CREATE UNIQUE INDEX IF NOT EXISTS pass_video_unique_idx
                 ON pass_video (pass_id, video_id) WHERE deleted_at IS NULL;
             CREATE INDEX IF NOT EXISTS pass_video_video_idx ON pass_video (video_id);
+            "
+        ))
+        .await?;
+
+        // A sync table like the others: devices pull presets, never push them. A named
+        // settings document the server curates. Ahead of runs, which name the preset
+        // they ran under.
+        db.execute_unprepared(&format!(
+            r"
+            CREATE TABLE IF NOT EXISTS preset (
+                id           UUID PRIMARY KEY,
+                name         TEXT NOT NULL,
+                version      INTEGER NOT NULL DEFAULT 1,
+                settings     JSONB NOT NULL,
+                description  TEXT NOT NULL DEFAULT '',
+                {SYNC_COLUMNS}
+            );
+            -- Versions of one name coexist, so the run provenance can pin a revision.
+            CREATE UNIQUE INDEX IF NOT EXISTS preset_name_lower_version_idx
+                ON preset (LOWER(name), version) WHERE deleted_at IS NULL;
             "
         ))
         .await?;
@@ -261,12 +294,25 @@ impl MigrationTrait for Migration {
                 run_duration_s      DOUBLE PRECISION,
                 stage_durations     JSONB,
                 stage_peaks         JSONB,
+                camera_profile      TEXT,
+                pixel_size_m        DOUBLE PRECISION,
+                scale_type          TEXT,
+                transect_length_m   DOUBLE PRECISION,
+                crop_width_m        DOUBLE PRECISION,
+                preset_id           UUID REFERENCES preset(id),
+                -- The session the run was processed in, as a correlation key. A
+                -- session is one workstation's queue and has no table here, so there
+                -- is deliberately no foreign key: the row it names lives on the device.
+                batch_id            UUID,
                 {SYNC_COLUMNS},
+                {VALIDATION_COLUMNS},
                 CONSTRAINT run_status CHECK (status IN
                     ('pending', 'running', 'succeeded', 'failed', 'cancelled', 'interrupted'))
             );
             CREATE INDEX IF NOT EXISTS run_record_pass_idx ON run_record (pass_id);
             CREATE INDEX IF NOT EXISTS run_record_status_idx ON run_record (status);
+            CREATE INDEX IF NOT EXISTS run_record_batch_id_idx
+                ON run_record (batch_id) WHERE batch_id IS NOT NULL;
             "
         ))
         .await?;
@@ -286,6 +332,7 @@ impl MigrationTrait for Migration {
                 denominator    DOUBLE PRECISION,
                 metric_source  TEXT,
                 {SYNC_COLUMNS},
+                {VALIDATION_COLUMNS},
                 CONSTRAINT cover_level CHECK (level IN ('fine', 'intermediate', 'coarse')),
                 CONSTRAINT cover_estimator CHECK (estimator IN ('per_pass', 'pooled')),
                 CONSTRAINT cover_fraction_range CHECK (fraction BETWEEN 0 AND 1),
@@ -296,25 +343,6 @@ impl MigrationTrait for Migration {
                 ON cover_row (run_id, level, class_group, estimator) WHERE deleted_at IS NULL;
             CREATE INDEX IF NOT EXISTS cover_row_run_idx ON cover_row (run_id);
             CREATE INDEX IF NOT EXISTS cover_row_group_idx ON cover_row (class_group);
-            "
-        ))
-        .await?;
-
-        // A sync table like the others: devices pull presets, never push them. A named
-        // settings document the server curates.
-        db.execute_unprepared(&format!(
-            r"
-            CREATE TABLE IF NOT EXISTS preset (
-                id           UUID PRIMARY KEY,
-                name         TEXT NOT NULL,
-                version      INTEGER NOT NULL DEFAULT 1,
-                settings     JSONB NOT NULL,
-                description  TEXT NOT NULL DEFAULT '',
-                {SYNC_COLUMNS}
-            );
-            -- Versions of one name coexist, so the run provenance can pin a revision.
-            CREATE UNIQUE INDEX IF NOT EXISTS preset_name_lower_version_idx
-                ON preset (LOWER(name), version) WHERE deleted_at IS NULL;
             "
         ))
         .await?;
@@ -382,6 +410,52 @@ impl MigrationTrait for Migration {
             );
             CREATE INDEX IF NOT EXISTS connect_code_expiry_idx ON connect_code (expires_at)
                 WHERE used_at IS NULL;
+            ",
+        )
+        .await?;
+
+        // The change ledger. Every write to a replicated row is recorded here; the
+        // tables are the projection of the applied entries. `seq` draws from
+        // `sync_seq`, so one cursor orders rows and entries alike. `projected_seq` is
+        // the `server_seq` the row took when the entry was applied, which a device
+        // sends back as `base_seq`.
+        db.execute_unprepared(
+            r"
+            CREATE TABLE IF NOT EXISTS change_log (
+                seq            BIGINT PRIMARY KEY DEFAULT nextval('sync_seq'),
+                table_key      TEXT NOT NULL,
+                row_id         UUID NOT NULL,
+                -- The pushing laptop, or NULL for a console entry.
+                device_id      UUID REFERENCES device(id),
+                -- The console user, for a console entry. Subject erasure sets it NULL.
+                author         TEXT,
+                -- The row's server_seq the author last saw; 0 for a new row.
+                base_seq       BIGINT NOT NULL DEFAULT 0,
+                after_image    JSONB NOT NULL,
+                -- The fields this entry changed against its base.
+                patch          JSONB NOT NULL DEFAULT '{}'::jsonb,
+                status         TEXT NOT NULL,
+                reason         TEXT,
+                -- A console entry that stamps the row validated.
+                validate       BOOLEAN NOT NULL DEFAULT FALSE,
+                -- The server_seq the row took when this entry was applied.
+                projected_seq  BIGINT,
+                created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                -- Set when a proposal is accepted or dismissed, so a pull finds it.
+                decided_at     TIMESTAMPTZ,
+                decided_by     TEXT,
+                decided_seq    BIGINT,
+                CONSTRAINT change_log_status CHECK (status IN
+                    ('applied', 'superseded', 'proposed', 'rejected', 'dismissed'))
+            );
+            CREATE INDEX IF NOT EXISTS change_log_row_idx
+                ON change_log (table_key, row_id, seq);
+            CREATE INDEX IF NOT EXISTS change_log_proposed_idx
+                ON change_log (seq) WHERE status = 'proposed';
+            CREATE INDEX IF NOT EXISTS change_log_device_idx
+                ON change_log (device_id, seq);
+            CREATE INDEX IF NOT EXISTS change_log_decided_idx
+                ON change_log (device_id, decided_seq) WHERE decided_seq IS NOT NULL;
             ",
         )
         .await?;
@@ -523,14 +597,14 @@ impl MigrationTrait for Migration {
         for table in [
             "run_artifact",
             "stored_object",
+            "change_log",
             "connect_code",
             "device",
-            "preset",
             "cover_row",
             "run_record",
+            "preset",
             "pass_video",
             "transect_pass",
-            "pass_group",
             "video_asset",
             "transect",
             "campaign",

@@ -39,6 +39,8 @@ pub struct ColumnSpec {
 }
 
 impl ColumnSpec {
+    /// Marks a column added after the first release. Unused until the contract grows.
+    #[cfg_attr(not(test), allow(dead_code))]
     const fn since(mut self, version: u32) -> Self {
         self.since = version;
         self
@@ -96,12 +98,8 @@ const SYNC_COLUMNS: &[ColumnSpec] = &[
 
 /// The projection of a console entry that validated the row. Down only.
 const VALIDATION_COLUMNS: &[ColumnSpec] = &[
-    col("validated_at", ColumnKind::Timestamp)
-        .since(2)
-        .server_owned(),
-    col("validated_by", ColumnKind::Text)
-        .since(2)
-        .server_owned(),
+    col("validated_at", ColumnKind::Timestamp).server_owned(),
+    col("validated_by", ColumnKind::Text).server_owned(),
 ];
 
 impl TableSpec {
@@ -179,6 +177,8 @@ pub const TABLES: &[TableSpec] = &[
             col("end_accuracy_m", ColumnKind::Float),
             col("length_m", ColumnKind::Float),
             col("depth_m", ColumnKind::Float),
+            col("start_depth_m", ColumnKind::Float),
+            col("end_depth_m", ColumnKind::Float),
         ],
         curated: true,
     },
@@ -198,11 +198,11 @@ pub const TABLES: &[TableSpec] = &[
             col("captured_source", ColumnKind::Text),
             required("gravity", ColumnKind::Text),
             required("gps", ColumnKind::Text),
-            col("camera_label", ColumnKind::Text).since(2),
-            col("rig_position", ColumnKind::Text).since(2),
-            required("upside_down", ColumnKind::Bool).since(2),
-            required("review", ColumnKind::Text).since(2),
-            required("notes", ColumnKind::Text).since(2),
+            col("camera_label", ColumnKind::Text),
+            col("rig_position", ColumnKind::Text),
+            required("upside_down", ColumnKind::Bool),
+            required("review", ColumnKind::Text),
+            required("notes", ColumnKind::Text),
         ],
         curated: true,
     },
@@ -218,7 +218,7 @@ pub const TABLES: &[TableSpec] = &[
             required("label", ColumnKind::Text),
             required("notes", ColumnKind::Text),
             col("quality", ColumnKind::Text),
-            col("surveyed_on", ColumnKind::Date).since(2),
+            col("surveyed_on", ColumnKind::Date),
         ],
         curated: true,
     },
@@ -273,13 +273,13 @@ pub const TABLES: &[TableSpec] = &[
             col("run_duration_s", ColumnKind::Float),
             col("stage_durations", ColumnKind::Json),
             col("stage_peaks", ColumnKind::Json),
-            col("camera_profile", ColumnKind::Text).since(2),
-            col("pixel_size_m", ColumnKind::Float).since(2),
-            col("scale_type", ColumnKind::Text).since(2),
-            col("transect_length_m", ColumnKind::Float).since(2),
-            col("crop_width_m", ColumnKind::Float).since(2),
-            col("preset_id", ColumnKind::Uuid).since(2),
-            col("batch_id", ColumnKind::Uuid).since(3),
+            col("camera_profile", ColumnKind::Text),
+            col("pixel_size_m", ColumnKind::Float),
+            col("scale_type", ColumnKind::Text),
+            col("transect_length_m", ColumnKind::Float),
+            col("crop_width_m", ColumnKind::Float),
+            col("preset_id", ColumnKind::Uuid),
+            col("batch_id", ColumnKind::Uuid),
         ],
         curated: true,
     },
@@ -303,7 +303,7 @@ pub const TABLES: &[TableSpec] = &[
 /// Highest contract version this server speaks. A document declaring anything but the
 /// version negotiated for its exchange is refused outright: parsing under the wrong
 /// version writes plausible wrong rows instead of failing.
-pub const CONTRACT_VERSION: u32 = 3;
+pub const CONTRACT_VERSION: u32 = 1;
 
 /// Oldest contract version this server still reads. Together with [`CONTRACT_VERSION`] it
 /// is the range a client negotiates against.
@@ -325,7 +325,7 @@ pub const CLIENT_PULL_SECTIONS: &[&str] = &["sites", "campaigns", "transects", "
 pub const OWN_ROWS_SECTIONS: &[&str] = &["videos", "passes", "pass_videos", "runs", "cover_rows"];
 
 /// The contract version from which [`OWN_ROWS_SECTIONS`] travel downwards.
-pub const OWN_ROWS_SINCE: u32 = 2;
+pub const OWN_ROWS_SINCE: u32 = 1;
 
 /// Sections a device may author rows in. The rest are read on a push, never written.
 pub const CLIENT_PUSH_SECTIONS: &[&str] = &[
@@ -543,22 +543,40 @@ mod tests {
 
     #[test]
     fn test_a_column_added_later_is_hidden_from_an_older_client() {
+        const GROWN: TableSpec = TableSpec {
+            section: "grown",
+            table: "grown",
+            own_columns: &[
+                col("first", ColumnKind::Text),
+                col("later", ColumnKind::Text).since(2),
+            ],
+            curated: false,
+        };
+        let v1: Vec<&str> = GROWN.columns_at(1).iter().map(|c| c.name).collect();
+        let v2: Vec<&str> = GROWN.columns_at(2).iter().map(|c| c.name).collect();
+        assert!(v1.contains(&"first") && !v1.contains(&"later"));
+        assert!(v2.contains(&"later"));
+    }
+
+    #[test]
+    fn test_the_validation_stamp_is_read_only() {
         let spec = table_for_section("transects").expect("transects");
-        let v1: Vec<&str> = spec.columns_at(1).iter().map(|c| c.name).collect();
-        let v2: Vec<&str> = spec.columns_at(2).iter().map(|c| c.name).collect();
-        assert!(!v1.contains(&"validated_at"));
-        assert!(v2.contains(&"validated_at"));
+        let names: Vec<&str> = spec.columns().iter().map(|c| c.name).collect();
+        assert!(names.contains(&"validated_at"));
         assert!(
-            !spec.writable_at(2).iter().any(|c| c.name == "validated_at"),
+            !spec
+                .writable_at(CONTRACT_VERSION)
+                .iter()
+                .any(|c| c.name == "validated_at"),
             "a push may not write what the server owns"
         );
     }
 
     #[test]
-    fn test_own_rows_sections_travel_down_from_contract_two() {
-        assert!(!device_pulls("passes", 1));
-        assert!(device_pulls("passes", 2));
-        assert!(device_pulls("sites", 1));
+    fn test_a_device_pulls_the_catalogue_and_its_own_upload_rows() {
+        assert!(device_pulls("sites", CONTRACT_VERSION));
+        assert!(device_pulls("passes", CONTRACT_VERSION));
+        assert!(!device_pulls("nothing", CONTRACT_VERSION));
     }
 
     #[test]
