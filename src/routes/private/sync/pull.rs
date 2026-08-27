@@ -137,7 +137,7 @@ pub async fn pull(
         let statement = Statement::from_sql_and_values(
             sea_orm::DatabaseBackend::Postgres,
             &sql,
-            scope.bind(&[since.into(), bound.into()]),
+            scope.bind_rows(spec, &[since.into(), bound.into()]),
         );
 
         let rows = state.db.query_all_raw(statement).await?;
@@ -186,6 +186,17 @@ impl Scope {
             " AND device_id = $3"
         } else {
             ""
+        }
+    }
+
+    /// The binds for one section's rows: the device only where the predicate names
+    /// it. A spare bind is not harmless: the pool shares prepared statements by SQL
+    /// text, and one parsed with three parameters refuses a later two-bind call.
+    fn bind_rows(&self, spec: &TableSpec, window: &[Value; 2]) -> Vec<Value> {
+        if self.predicate(spec).is_empty() {
+            window.to_vec()
+        } else {
+            self.bind(window)
         }
     }
 
