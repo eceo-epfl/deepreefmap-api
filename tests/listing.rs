@@ -125,6 +125,7 @@ const PRESET_LIST_KEYS: &[&str] = &[
 ];
 
 const RUN_ONE_KEYS: &[&str] = &[
+    "batch_id",
     "camera_profile",
     "created_at",
     "crop_width_m",
@@ -168,6 +169,7 @@ const RUN_ONE_KEYS: &[&str] = &[
 /// The list drops the heavy provenance blobs. `preset_deviations` stays: the run list
 /// renders its Deviations chip from list rows.
 const RUN_LIST_KEYS: &[&str] = &[
+    "batch_id",
     "camera_profile",
     "created_at",
     "crop_width_m",

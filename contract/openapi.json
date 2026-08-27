@@ -3133,6 +3133,14 @@
       },
       "RunList": {
         "properties": {
+          "batch_id": {
+            "description": "The device session this run was processed in: the queue it was ordered from,\nwhich groups the runs that went through the pipeline together. A correlation\nkey, not a foreign key -- a session is one workstation's cart and has no row\nhere.",
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "camera_profile": {
             "description": "The scale the cover was measured at: the camera profile, the tape length and\ncrop width the run used, the metres per pixel that gave, and how the scale\nwas established.",
             "type": [
@@ -3435,6 +3443,14 @@
       },
       "RunResponse": {
         "properties": {
+          "batch_id": {
+            "description": "The device session this run was processed in: the queue it was ordered from,\nwhich groups the runs that went through the pipeline together. A correlation\nkey, not a foreign key -- a session is one workstation's cart and has no row\nhere.",
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "camera_profile": {
             "description": "The scale the cover was measured at: the camera profile, the tape length and\ncrop width the run used, the metres per pixel that gave, and how the scale\nwas established.",
             "type": [
@@ -8924,7 +8940,7 @@
     },
     "/runs": {
       "get": {
-        "description": "Retrieves all runs.\n\nThis resource manages run items\n\nAdditional sortable columns: \n- status\n- started_at\n- finished_at\n- run_duration_s\n- created_at\n- updated_at\n- deleted_at\n- server_seq\n- validated_at.\n\nAdditional filterable columns: \n- id\n- pass_id\n- status\n- started_at\n- finished_at\n- gui_version\n- library_version\n- segmentation_model\n- mapping_backend\n- processing_width\n- processing_height\n- fps\n- preprocess_batch_size\n- taxonomy_version\n- taxonomy_hash\n- preset_name\n- preset_version\n- preset_hash\n- camera_profile\n- scale_type\n- preset_id\n- deleted_at\n- device_id\n- validated_at\n- validated_by.",
+        "description": "Retrieves all runs.\n\nThis resource manages run items\n\nAdditional sortable columns: \n- status\n- started_at\n- finished_at\n- run_duration_s\n- created_at\n- updated_at\n- deleted_at\n- server_seq\n- validated_at.\n\nAdditional filterable columns: \n- id\n- pass_id\n- status\n- started_at\n- finished_at\n- gui_version\n- library_version\n- segmentation_model\n- mapping_backend\n- processing_width\n- processing_height\n- fps\n- preprocess_batch_size\n- taxonomy_version\n- taxonomy_hash\n- preset_name\n- preset_version\n- preset_hash\n- camera_profile\n- scale_type\n- preset_id\n- batch_id\n- deleted_at\n- device_id\n- validated_at\n- validated_by.",
         "operationId": "get_all_runs",
         "parameters": [
           {

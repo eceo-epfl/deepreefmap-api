@@ -106,6 +106,12 @@ pub struct Model {
     /// The preset row the run ran under, where the device knew it.
     #[crudcrate(filterable)]
     pub preset_id: Option<Uuid>,
+    /// The device session this run was processed in: the queue it was ordered from,
+    /// which groups the runs that went through the pipeline together. A correlation
+    /// key, not a foreign key -- a session is one workstation's cart and has no row
+    /// here.
+    #[crudcrate(filterable)]
+    pub batch_id: Option<Uuid>,
     #[crudcrate(exclude(create, update), sortable, on_create = chrono::Utc::now())]
     pub created_at: chrono::DateTime<chrono::Utc>,
     /// The conflict key last-write-wins resolves on. Server-stamped: `on_update` only

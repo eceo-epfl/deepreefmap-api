@@ -279,6 +279,7 @@ pub const TABLES: &[TableSpec] = &[
             col("transect_length_m", ColumnKind::Float).since(2),
             col("crop_width_m", ColumnKind::Float).since(2),
             col("preset_id", ColumnKind::Uuid).since(2),
+            col("batch_id", ColumnKind::Uuid).since(3),
         ],
         curated: true,
     },
@@ -302,7 +303,7 @@ pub const TABLES: &[TableSpec] = &[
 /// Highest contract version this server speaks. A document declaring anything but the
 /// version negotiated for its exchange is refused outright: parsing under the wrong
 /// version writes plausible wrong rows instead of failing.
-pub const CONTRACT_VERSION: u32 = 2;
+pub const CONTRACT_VERSION: u32 = 3;
 
 /// Oldest contract version this server still reads. Together with [`CONTRACT_VERSION`] it
 /// is the range a client negotiates against.

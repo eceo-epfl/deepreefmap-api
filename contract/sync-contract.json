@@ -1,5 +1,5 @@
 {
-  "contract_version": 2,
+  "contract_version": 3,
   "min_contract_version": 1,
   "own_rows_sections": [
     "videos",
@@ -1004,6 +1004,13 @@
           "nullable": true,
           "server_owned": false,
           "since": 2
+        },
+        {
+          "kind": "uuid",
+          "name": "batch_id",
+          "nullable": true,
+          "server_owned": false,
+          "since": 3
         },
         {
           "kind": "timestamp",
