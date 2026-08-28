@@ -5775,7 +5775,7 @@
     },
     "/archive/runs/{run_id}/outputs.zip": {
       "get": {
-        "operationId": "bundle",
+        "operationId": "stream_bundle",
         "parameters": [
           {
             "description": "Run whose outputs to stream",

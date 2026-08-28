@@ -25,7 +25,7 @@ pub fn router(state: &AppState) -> Router {
         .route("/archive/{object_id}/fetch", get(archive_fetch::fetch))
         .route(
             "/archive/runs/{run_id}/outputs.zip",
-            get(archive_bundle::bundle),
+            get(archive_bundle::stream_bundle),
         )
         .layer(RequestBodyLimitLayer::new(CRUD_BODY_LIMIT))
         .with_state(state.clone());

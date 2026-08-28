@@ -14,6 +14,9 @@ static NEXT_CLONE: AtomicU64 = AtomicU64::new(0);
 /// Small, because every test in flight holds its own pool against one server.
 const POOL_MAX: u32 = 4;
 
+/// How many times a clone waits out a session still on the template.
+const CLONE_ATTEMPTS: u32 = 40;
+
 /// A database of this test's own, cloned from the migrated template.
 ///
 /// Nothing is shared between tests, so they run in parallel and need no cleanup. The
@@ -32,15 +35,34 @@ pub async fn setup_test_db() -> DatabaseConnection {
     );
 
     let admin = connect(&maintenance_url()).await;
-    // Postgres refuses a template that has a session on it, so the builder closed its own.
-    exec(
-        &admin,
-        &format!("CREATE DATABASE {name} TEMPLATE {template}"),
-    )
-    .await;
+    clone_template(&admin, template, &name).await;
     admin.close().await.ok();
 
     connect(&url_for(&name)).await
+}
+
+/// Copy the template, waiting for the backend a just-closed pool left behind.
+///
+/// Postgres refuses a template that any session is on, and closing a pool returns
+/// before the server has reaped its backends.
+async fn clone_template(admin: &DatabaseConnection, template: &str, name: &str) {
+    let sql = format!("CREATE DATABASE {name} TEMPLATE {template}");
+    for _ in 0..CLONE_ATTEMPTS {
+        match admin
+            .execute_raw(Statement::from_string(
+                sea_orm::DatabaseBackend::Postgres,
+                sql.clone(),
+            ))
+            .await
+        {
+            Ok(_) => return,
+            Err(e) if e.to_string().contains("being accessed by other users") => {
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            }
+            Err(e) => panic!("SQL failed: {e}\nQuery: {sql}"),
+        }
+    }
+    panic!("the template stayed busy: {sql}");
 }
 
 /// Create the per-binary template and bring the schema up on it.

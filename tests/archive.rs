@@ -1213,6 +1213,17 @@ async fn test_run_outputs_count_past_a_list_page() {
         groups.iter().any(|g| g["name"] == "Results"),
         "the ortho keeps its group behind a thousand frames: {body}"
     );
+
+    let (status, body) = get_json(
+        &app,
+        &format!("/api/runs/{run_id}/outputs/files?purpose=frames&offset=1000&limit=200"),
+        None,
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    let files = body["files"].as_array().expect("files");
+    assert_eq!(files.len(), 100, "the tail past the page cap is reachable: {body}");
+    assert_eq!(files[0]["relpath"], "frames/001001.png", "{body}");
 }
 
 #[tokio::test]

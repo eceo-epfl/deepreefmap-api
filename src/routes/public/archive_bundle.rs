@@ -46,7 +46,7 @@ pub struct BundleParams {
     ),
     tag = "archive"
 )]
-pub async fn bundle(
+pub async fn stream_bundle(
     State(state): State<AppState>,
     Path(run_id): Path<Uuid>,
     Query(params): Query<BundleParams>,

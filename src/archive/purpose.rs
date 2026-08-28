@@ -1,9 +1,9 @@
 //! What a run's output file is for, read off its path in the run directory.
 //!
 //! Root files fall into three purposes; anything in a subdirectory belongs to that
-//! directory. The console groups the outputs tab by the same rule
-//! (`deepreefmap-ui/src/archive/purpose.ts`), so a bundle download packs exactly the
-//! group the reader asked for.
+//! directory. The outputs route reports the groups this rule makes and a bundle packs
+//! one of them, so the console asks for a group by name without classifying anything
+//! itself.
 
 /// The products of the run: the ortho, the cover figures, the clouds.
 pub const RESULTS: &str = "Results";

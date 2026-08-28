@@ -49,7 +49,7 @@ async fn healthz() -> StatusCode {
         private::archive::views::complete,
         private::archive::views::download,
         public::archive_fetch::fetch,
-        public::archive_bundle::bundle,
+        public::archive_bundle::stream_bundle,
         private::archive::views::by_hash,
         private::archive::views::probe,
         private::archive::views::runs_probe,
