@@ -3,8 +3,8 @@ use sea_orm::entity::prelude::*;
 
 /// A survey line: two georeferenced end points plus the tape length used to scale the
 /// reconstruction. `length_m` is the tape reading, not the geodesic distance. Depth is
-/// recorded at each end; `depth_m` is their mean where both are known, or the single
-/// reading the historical sheets carry.
+/// recorded at each end; `depth_m` is derived from them by trigger where both are
+/// known, or the single reading the historical sheets carry where they are not.
 #[derive(
     Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize, serde::Deserialize, EntityToModels,
 )]
@@ -44,8 +44,12 @@ pub struct Model {
     pub end_accuracy_m: Option<f64>,
     #[crudcrate(filterable, sortable)]
     pub length_m: Option<f64>,
+    /// The mean of the two ends wherever both are set, written by the
+    /// `transect_depth_from_ends` trigger. Accepted from a client only so a line
+    /// with no end readings still has a depth.
     #[crudcrate(filterable, sortable)]
     pub depth_m: Option<f64>,
+    /// Nullable: a line is often drawn before the dive that measures it.
     #[crudcrate(filterable, sortable)]
     pub start_depth_m: Option<f64>,
     #[crudcrate(filterable, sortable)]

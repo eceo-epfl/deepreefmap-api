@@ -147,7 +147,7 @@ passes of one transect in one campaign, so there is nothing to curate by hand.
 |---|---|
 | `site` | Reef location, unique within its country. Transect names are unique within one. |
 | `campaign` | One trip, ie. `2025_10_eritrea`. Visits many sites; a repeat visit is a new campaign. |
-| `transect` | Survey line: end points where known, plus the tape length and depth. |
+| `transect` | Survey line: end points where known, the tape length, and the depth at each end. `depth_m` is their mean, written by trigger. |
 | `video_asset` | Input clip, identified by imohash, with its camera, rig position and review verdict. Paths stay device-local. |
 | `transect_pass` | One swim: a time window over one or more clips, on a day, in a campaign. |
 | `pass_video` | Which clips a pass spans, in playing order. |

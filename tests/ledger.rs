@@ -180,9 +180,11 @@ async fn test_depth_at_each_end_merges_field_by_field() {
     .await;
     assert_eq!(status, 200, "{body}");
 
+    // The device still believes the line is 5 m at both ends. Its depth is stale
+    // for the same reason, and the merged ends are what the registry derives from.
     let mut row = transect(T1, "T1", Some(base));
     row["start_depth_m"] = serde_json::json!(5.0);
-    row["depth_m"] = serde_json::json!(8.0);
+    row["depth_m"] = serde_json::json!(5.0);
     let pushed = push(&app, &token, serde_json::json!({ "transects": [row] })).await;
     ack_seq(&pushed["sections"]["transects"], T1);
 
@@ -202,7 +204,10 @@ async fn test_depth_at_each_end_merges_field_by_field() {
         (depth("end_depth_m").await - 11.0).abs() < f64::EPSILON,
         "the merge dropped the console's end depth"
     );
-    assert!((depth("depth_m").await - 8.0).abs() < f64::EPSILON); // (5 + 11) / 2
+    assert!(
+        (depth("depth_m").await - 8.0).abs() < f64::EPSILON, // (5 + 11) / 2
+        "the depth did not follow the merged ends"
+    );
 }
 
 #[tokio::test]
@@ -446,12 +451,12 @@ async fn test_a_stale_base_on_the_same_field_is_superseded() {
 
     // Against the same stale base, another field merges over the newer name.
     let mut row = transect(T1, "First", Some(first));
-    row["depth_m"] = serde_json::json!(8.5);
+    row["start_depth_m"] = serde_json::json!(8.5);
     let pushed = push(&app, &token, serde_json::json!({ "transects": [row] })).await;
     ack_seq(&pushed["sections"]["transects"], T1);
     let depth: f64 = one_value(
         &db,
-        &format!("SELECT depth_m FROM transect WHERE id = '{T1}'"),
+        &format!("SELECT start_depth_m FROM transect WHERE id = '{T1}'"),
     )
     .await;
     assert!((depth - 8.5).abs() < f64::EPSILON);

@@ -36,6 +36,11 @@ pub struct ColumnSpec {
     pub since: u32,
     /// Travels downwards only: the server projects it, a push never writes it.
     pub server_owned: bool,
+    /// The database computes it from other columns of the same row. A device may
+    /// still send it, and it stands where the sources are absent, but it never
+    /// enters a patch: two devices agreeing on the ends and disagreeing on the
+    /// derived figure are not in conflict.
+    pub derived: bool,
 }
 
 impl ColumnSpec {
@@ -50,6 +55,11 @@ impl ColumnSpec {
         self.server_owned = true;
         self
     }
+
+    const fn derived(mut self) -> Self {
+        self.derived = true;
+        self
+    }
 }
 
 const fn col(name: &'static str, kind: ColumnKind) -> ColumnSpec {
@@ -59,6 +69,7 @@ const fn col(name: &'static str, kind: ColumnKind) -> ColumnSpec {
         nullable: true,
         since: 1,
         server_owned: false,
+        derived: false,
     }
 }
 
@@ -69,6 +80,7 @@ const fn required(name: &'static str, kind: ColumnKind) -> ColumnSpec {
         nullable: false,
         since: 1,
         server_owned: false,
+        derived: false,
     }
 }
 
@@ -176,7 +188,9 @@ pub const TABLES: &[TableSpec] = &[
             col("end_lon", ColumnKind::Float),
             col("end_accuracy_m", ColumnKind::Float),
             col("length_m", ColumnKind::Float),
-            col("depth_m", ColumnKind::Float),
+            // Written by the `transect_depth_from_ends` trigger wherever both ends
+            // are recorded, so a device's stale copy of it is not a disagreement.
+            col("depth_m", ColumnKind::Float).derived(),
             col("start_depth_m", ColumnKind::Float),
             col("end_depth_m", ColumnKind::Float),
         ],

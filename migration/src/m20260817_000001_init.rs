@@ -98,8 +98,9 @@ impl MigrationTrait for Migration {
         .await?;
 
         // `length_m` is the tape length used for scaling, not the geodesic distance.
-        // End points are nullable: the historical lines mostly have none. `depth_m`
-        // is the mean of the two end depths where both are recorded.
+        // End points are nullable: the historical lines mostly have none. So are the
+        // depths: a line is often drawn before the dive that measures it. `depth_m`
+        // is derived from the two ends by trigger below where both are recorded.
         db.execute_unprepared(&format!(
             r"
             CREATE TABLE IF NOT EXISTS transect (
@@ -140,6 +141,31 @@ impl MigrationTrait for Migration {
             CREATE INDEX IF NOT EXISTS transect_site_idx ON transect (site_id);
             "
         ))
+        .await?;
+
+        // A line measured at each end has one depth and it is their mean, so the
+        // database derives it rather than trusting three numbers to agree. In a
+        // trigger because every writer reaches the columns directly: console CRUD,
+        // `/api/sync/push` (which merges field by field, so one device may set the
+        // start and another the end), and the spreadsheet importer. A row carrying
+        // only a single historical reading keeps it: the ends are null, and the
+        // trigger leaves `depth_m` alone.
+        db.execute_unprepared(
+            r"
+            CREATE OR REPLACE FUNCTION transect_mean_depth() RETURNS TRIGGER AS $$
+            BEGIN
+                IF NEW.start_depth_m IS NOT NULL AND NEW.end_depth_m IS NOT NULL THEN
+                    NEW.depth_m := (NEW.start_depth_m + NEW.end_depth_m) / 2;
+                END IF;
+                RETURN NEW;
+            END;
+            $$ LANGUAGE plpgsql;
+
+            CREATE TRIGGER transect_depth_from_ends
+                BEFORE INSERT OR UPDATE ON transect
+                FOR EACH ROW EXECUTE FUNCTION transect_mean_depth();
+            ",
+        )
         .await?;
 
         // Identity is `hash`, the sampled imohash a device computes at ingest. It is

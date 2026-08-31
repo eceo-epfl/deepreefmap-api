@@ -549,7 +549,7 @@ async fn overlap<C: ConnectionTrait>(
 pub fn diff(base: &Image, incoming: &Image, columns: &[ColumnSpec]) -> Image {
     let mut patch = Image::new();
     for column in columns {
-        if UNDIFFED.contains(&column.name) {
+        if UNDIFFED.contains(&column.name) || column.derived {
             continue;
         }
         let before = base.get(column.name).unwrap_or(&Json::Null);
@@ -634,10 +634,21 @@ mod tests {
     #[test]
     fn test_diff_reads_absent_as_null() {
         let spec = table_for_section("transects").expect("transects");
-        let base = image(&[("depth_m", 8.0.into())]);
+        let base = image(&[("length_m", 100.0.into())]);
         let incoming = image(&[]);
         let patch = diff(&base, &incoming, &spec.writable_at(2));
-        assert_eq!(patch.get("depth_m"), Some(&Json::Null));
+        assert_eq!(patch.get("length_m"), Some(&Json::Null));
+    }
+
+    #[test]
+    fn test_diff_never_names_a_derived_field() {
+        // `depth_m` follows the two ends, so a device holding a stale copy of it is
+        // not disagreeing with anybody and its push is not a conflict.
+        let spec = table_for_section("transects").expect("transects");
+        let base = image(&[("depth_m", 8.0.into())]);
+        let incoming = image(&[("depth_m", 5.0.into())]);
+        let patch = diff(&base, &incoming, &spec.writable_at(2));
+        assert!(patch.is_empty());
     }
 
     #[test]
