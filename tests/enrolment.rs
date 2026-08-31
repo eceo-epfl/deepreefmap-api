@@ -139,7 +139,7 @@ async fn test_enrol_rejects_malformed_code() {
     let db = setup_test_db().await;
     let app = build_test_app(db.clone());
 
-    for code in ["", "not-a-code", "drm1.!!!", &"ff".repeat(32)] {
+    for code in ["", "not-a-code", "reef1.!!!", &"ff".repeat(32)] {
         let (status, body) = post_json(
             &app,
             "/api/enrol",

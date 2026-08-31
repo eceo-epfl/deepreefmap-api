@@ -9,8 +9,17 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use rand::RngExt;
 use sha2::{Digest, Sha256};
 
-/// Version tag on a connect code. Clients match on it, so a payload change is a new tag.
-const CONNECT_CODE_PREFIX: &str = "drm1.";
+/// Family tag on a connect code: the one human-legible part of the string, so it
+/// names the system to whoever is pasting it.
+pub const CONNECT_CODE_FAMILY: &str = "reef";
+
+/// Payload version. Clients match on it, so a payload change is a new version and an
+/// older client can say so rather than blaming the paste.
+pub const CONNECT_CODE_VERSION: u32 = 1;
+
+/// What every connect code starts with: `<family><version>.`, published in the
+/// contract so the desktop app and the console read it rather than repeat it.
+pub const CONNECT_CODE_PREFIX: &str = "reef1.";
 
 /// Public prefix of every device token: `drmd_<prefix>_<secret>`.
 const DEVICE_TOKEN_PREFIX: &str = "drmd_";
@@ -66,7 +75,7 @@ pub fn mint_connect_code(base_url: &str) -> MintedConnectCode {
 
 /// Recover the secret from a pasted connect code.
 ///
-/// Accepts the whole `drm1.…` string or a bare secret, since operators paste both.
+/// Accepts the whole `reef1.…` string or a bare secret, since operators paste both.
 #[must_use]
 pub fn parse_connect_code(input: &str) -> Option<String> {
     let trimmed = input.trim();
@@ -154,6 +163,14 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_connect_code_prefix_is_its_family_and_version() {
+        assert_eq!(
+            CONNECT_CODE_PREFIX,
+            format!("{CONNECT_CODE_FAMILY}{CONNECT_CODE_VERSION}.")
+        );
+    }
+
+    #[test]
     fn test_parse_connect_code_round_trip() {
         let minted = mint_connect_code("https://example.org/api");
         let secret = parse_connect_code(&minted.code).expect("minted code parses");
@@ -178,7 +195,7 @@ mod tests {
 
     #[test]
     fn test_parse_connect_code_rejects_malformed() {
-        for input in ["", "drm1.", "drm1.!!!!", "not-a-code", "drm1.YWJj"] {
+        for input in ["", "reef1.", "reef1.!!!!", "not-a-code", "reef1.YWJj"] {
             assert_eq!(parse_connect_code(input), None, "accepted {input:?}");
         }
     }

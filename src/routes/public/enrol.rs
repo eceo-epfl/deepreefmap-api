@@ -28,7 +28,7 @@ const ENROL_BODY_LIMIT: usize = 8 * 1024;
 
 /// The enrolment route with its body limit and per-IP rate limiter.
 ///
-/// Rate limited because each attempt costs an argon2 verification.
+/// Rate limited because the code is the only credential on this route.
 ///
 /// # Panics
 ///
@@ -58,7 +58,7 @@ pub fn router(state: &AppState) -> Router {
 
 #[derive(Debug, serde::Deserialize, ToSchema)]
 pub struct EnrolRequest {
-    /// The whole `drm1.…` string or its bare secret.
+    /// The whole `reef1.…` string or its bare secret.
     pub code: String,
     #[serde(default)]
     pub platform: Option<String>,
@@ -116,8 +116,8 @@ pub async fn enrol(
         // One message for unknown, expired and spent alike.
         .ok_or_else(|| AppError::Unauthorized("Invalid or expired connect code".to_string()))?;
 
-    // Spent before minting, so the row lock covers the argon2 hash rather than sitting
-    // beside it. A racing enrolment blocks here, then matches nothing.
+    // Spent before minting, so the row lock covers the token hashing rather than
+    // sitting beside it. A racing enrolment blocks here, then matches nothing.
     let spent = connect_code::Entity::update_many()
         .col_expr(connect_code::Column::UsedAt, Expr::value(Some(Utc::now())))
         .filter(connect_code::Column::Id.eq(code.id))

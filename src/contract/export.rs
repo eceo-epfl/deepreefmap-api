@@ -11,6 +11,7 @@ use sea_orm::DatabaseConnection;
 use serde_json::{Value, json};
 
 use crate::common::AppState;
+use crate::common::tokens;
 use crate::config::Config;
 use crate::contract::{preset_schema, vocab};
 use crate::routes::private::sync::schema::{self, CONTRACT_VERSION};
@@ -27,8 +28,9 @@ pub struct Artefact {
 /// Every artefact, in the order the exporter writes them.
 ///
 /// Four, and each answers a different question: `openapi.json` what the routes are,
-/// `sync-contract.json` what a client may push, `vocabularies.json` what a coded value
-/// may say and what it means, `preset-schema.json` what a preset setting accepts.
+/// `sync-contract.json` what a client may push and how it enrols, `vocabularies.json`
+/// what a coded value may say and what it means, `preset-schema.json` what a preset
+/// setting accepts.
 #[must_use]
 pub fn artefacts() -> Vec<Artefact> {
     vec![
@@ -175,6 +177,13 @@ fn sync_contract() -> Value {
         "own_rows_since": schema::OWN_ROWS_SINCE,
         "push_sections": schema::CLIENT_PUSH_SECTIONS,
         "tables": schema::table_documents(),
+        // The enrolment bootstrap. Published here because a client that cannot
+        // recognise a connect code never reaches the sections above.
+        "connect_code": {
+            "family": tokens::CONNECT_CODE_FAMILY,
+            "version": tokens::CONNECT_CODE_VERSION,
+            "prefix": tokens::CONNECT_CODE_PREFIX,
+        },
     })
 }
 
