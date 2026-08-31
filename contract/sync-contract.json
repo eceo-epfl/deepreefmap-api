@@ -4,7 +4,7 @@
     "prefix": "reef1.",
     "version": 1
   },
-  "contract_version": 1,
+  "contract_version": 2,
   "min_contract_version": 1,
   "own_rows_sections": [
     "videos",
@@ -18,7 +18,9 @@
     "sites",
     "campaigns",
     "transects",
-    "presets"
+    "presets",
+    "camera_profiles",
+    "camera_calibrations"
   ],
   "push_sections": [
     "sites",
@@ -38,6 +40,8 @@
     "passes",
     "pass_videos",
     "presets",
+    "camera_profiles",
+    "camera_calibrations",
     "runs",
     "cover_rows"
   ],
@@ -920,6 +924,194 @@
         },
         {
           "derived": false,
+          "kind": "text",
+          "name": "name",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "description",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "created_at",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "updated_at",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "deleted_at",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "uuid",
+          "name": "device_id",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        }
+      ],
+      "section": "camera_profiles",
+      "table": "camera_profile"
+    },
+    {
+      "columns": [
+        {
+          "derived": false,
+          "kind": "uuid",
+          "name": "id",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "uuid",
+          "name": "camera_profile_id",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "int",
+          "name": "version",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "json",
+          "name": "document",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "int",
+          "name": "image_width",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "int",
+          "name": "image_height",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "float",
+          "name": "reprojection_error_px",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "int",
+          "name": "registered_frames",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "source_clip",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "calibrated_at",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "description",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "created_at",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "updated_at",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "deleted_at",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "uuid",
+          "name": "device_id",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        }
+      ],
+      "section": "camera_calibrations",
+      "table": "camera_calibration"
+    },
+    {
+      "columns": [
+        {
+          "derived": false,
+          "kind": "uuid",
+          "name": "id",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
           "kind": "uuid",
           "name": "pass_id",
           "nullable": false,
@@ -1165,6 +1357,14 @@
           "nullable": true,
           "server_owned": false,
           "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "uuid",
+          "name": "camera_calibration_id",
+          "nullable": true,
+          "server_owned": false,
+          "since": 2
         },
         {
           "derived": false,

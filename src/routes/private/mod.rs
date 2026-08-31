@@ -2,6 +2,7 @@
 
 pub mod admin;
 pub mod archive;
+pub mod cameras;
 pub mod campaigns;
 pub mod changes;
 pub mod class_groups;
@@ -46,10 +47,10 @@ async fn deny_create(
 /// compose.
 pub fn protected_router(state: &AppState) -> OpenApiRouter {
     use self::{
-        archive::StoredObject, archive::run_artifact::RunArtifact, campaigns::Campaign,
-        changes::Change, cover::CoverRow, devices::Device, passes::Pass,
-        passes::pass_video::PassVideo, presets::Preset, runs::Run, sites::Site,
-        transects::Transect, videos::Video,
+        archive::StoredObject, archive::run_artifact::RunArtifact, cameras::CameraCalibration,
+        cameras::CameraProfile, campaigns::Campaign, changes::Change, cover::CoverRow,
+        devices::Device, passes::Pass, passes::pass_video::PassVideo, presets::Preset, runs::Run,
+        sites::Site, transects::Transect, videos::Video,
     };
 
     let db = &state.db;
@@ -66,6 +67,13 @@ pub fn protected_router(state: &AppState) -> OpenApiRouter {
         .nest("/pass_videos", PassVideo::router(db).layer(admin_delete()))
         // The presets devices download through sync pull.
         .nest("/presets", Preset::router(db).layer(admin_delete()))
+        // Camera profiles and their calibrations, downloaded the same way. A device
+        // publishes one through /camera_calibrations/upload, outside this guard.
+        .nest("/camera_profiles", CameraProfile::router(db).layer(admin_delete()))
+        .nest(
+            "/camera_calibrations",
+            CameraCalibration::router(db).layer(admin_delete()),
+        )
         // Clips are reported by devices; the console reviews them, never invents one.
         .nest(
             "/videos",
@@ -117,6 +125,7 @@ pub fn protected_router(state: &AppState) -> OpenApiRouter {
         .merge(performance::router(state))
         .merge(videos::router::router(state))
         .merge(archive::router::router(state))
+        .nest("/camera_calibrations", cameras::router::router(state))
         .merge(me)
         .merge(admin_views)
 }

@@ -135,6 +135,8 @@ async fn test_a_narrowed_client_is_served_the_intersection() {
             "passes",
             "pass_videos",
             "presets",
+            "camera_profiles",
+            "camera_calibrations",
             "runs",
             "cover_rows"
         ],

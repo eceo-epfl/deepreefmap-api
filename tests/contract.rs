@@ -38,7 +38,7 @@ fn curated(table: &str) -> impl Iterator<Item = &'static str> {
 
 /// The read-model schema each syncable table's rows appear as in the `OpenAPI`
 /// components.
-const RESPONSE_SCHEMAS: [(&str, &str); 9] = [
+const RESPONSE_SCHEMAS: [(&str, &str); 11] = [
     ("site", "SiteResponse"),
     ("campaign", "CampaignResponse"),
     ("transect", "TransectResponse"),
@@ -48,6 +48,8 @@ const RESPONSE_SCHEMAS: [(&str, &str); 9] = [
     ("run_record", "RunResponse"),
     ("cover_row", "CoverRowResponse"),
     ("preset", "PresetResponse"),
+    ("camera_profile", "CameraProfileResponse"),
+    ("camera_calibration", "CameraCalibrationResponse"),
 ];
 
 /// Every list endpoint the web console reads through.

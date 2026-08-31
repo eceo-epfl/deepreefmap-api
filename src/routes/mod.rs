@@ -53,6 +53,7 @@ async fn healthz() -> StatusCode {
         private::archive::views::by_hash,
         private::archive::views::probe,
         private::archive::views::runs_probe,
+        private::cameras::upload::upload,
         private::admin::erase_subject,
     ),
     components(schemas(
@@ -90,6 +91,8 @@ async fn healthz() -> StatusCode {
         private::archive::views::RunsProbeRequest,
         private::archive::views::RunArchiveState,
         private::archive::views::RunsProbeResponse,
+        private::cameras::upload::UploadRequest,
+        private::cameras::upload::UploadResponse,
         private::admin::EraseSubjectRequest,
         private::admin::EraseSubjectResponse,
     )),

@@ -883,9 +883,20 @@ async fn test_pull_gives_a_device_the_catalogue_and_its_own_rows() {
         .expect("sections object")
         .keys()
         .collect();
-    // The migration's seeded preset rides along; presets are pull only. The video
-    // comes back because this device pushed it, and only to this device.
-    assert_eq!(sections, vec!["presets", "sites", "videos"], "{pulled}");
+    // The migration's seeds ride along: the preset, and the camera profile with the
+    // calibration the pipeline packages. All three are pull only. The video comes
+    // back because this device pushed it, and only to this device.
+    assert_eq!(
+        sections,
+        vec![
+            "camera_calibrations",
+            "camera_profiles",
+            "presets",
+            "sites",
+            "videos"
+        ],
+        "{pulled}"
+    );
     assert_eq!(pulled["has_more"], false, "{pulled}");
 
     // An operator still sees the lot.

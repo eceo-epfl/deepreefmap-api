@@ -38,7 +38,7 @@ const VALIDATION_COLUMNS: &str = r"
 ";
 
 /// Tables carrying the sync columns, in foreign-key order.
-const SYNCABLE_TABLES: [&str; 9] = [
+const SYNCABLE_TABLES: [&str; 11] = [
     "site",
     "campaign",
     "transect",
@@ -46,6 +46,8 @@ const SYNCABLE_TABLES: [&str; 9] = [
     "transect_pass",
     "pass_video",
     "preset",
+    "camera_profile",
+    "camera_calibration",
     "run_record",
     "cover_row",
 ];
@@ -281,6 +283,59 @@ impl MigrationTrait for Migration {
         ))
         .await?;
 
+        // A camera profile names a rig: a body, a lens mode, a housing, a resolution.
+        // It is what `camera_profile_name` in a preset has always meant, and it holds
+        // no measurements of its own: those are its calibrations.
+        db.execute_unprepared(&format!(
+            r"
+            CREATE TABLE IF NOT EXISTS camera_profile (
+                id           UUID PRIMARY KEY,
+                name         TEXT NOT NULL,
+                description  TEXT NOT NULL DEFAULT '',
+                {SYNC_COLUMNS}
+            );
+            -- The name a preset and a run record carry, so it resolves to one profile.
+            CREATE UNIQUE INDEX IF NOT EXISTS camera_profile_name_lower_idx
+                ON camera_profile (LOWER(name)) WHERE deleted_at IS NULL;
+            "
+        ))
+        .await?;
+
+        // One measurement of one profile. Versions coexist rather than overwrite, as
+        // a preset's do: a housing change or a firmware update invalidates the last
+        // calibration without invalidating the runs made under it. `document` is the
+        // profile JSON the pipeline reads, stored as the desktop writes it.
+        db.execute_unprepared(&format!(
+            r"
+            CREATE TABLE IF NOT EXISTS camera_calibration (
+                id                    UUID PRIMARY KEY,
+                camera_profile_id     UUID NOT NULL REFERENCES camera_profile(id),
+                version               INTEGER NOT NULL DEFAULT 1,
+                document              JSONB NOT NULL,
+                image_width           INTEGER,
+                image_height          INTEGER,
+                reprojection_error_px DOUBLE PRECISION,
+                registered_frames     INTEGER,
+                source_clip           TEXT NOT NULL DEFAULT '',
+                calibrated_at         TIMESTAMPTZ,
+                description           TEXT NOT NULL DEFAULT '',
+                {SYNC_COLUMNS},
+                CONSTRAINT camera_calibration_size_positive CHECK (
+                    (image_width IS NULL OR image_width > 0)
+                    AND (image_height IS NULL OR image_height > 0)
+                ),
+                CONSTRAINT camera_calibration_error_positive CHECK (
+                    reprojection_error_px IS NULL OR reprojection_error_px >= 0
+                )
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS camera_calibration_profile_version_idx
+                ON camera_calibration (camera_profile_id, version) WHERE deleted_at IS NULL;
+            CREATE INDEX IF NOT EXISTS camera_calibration_profile_idx
+                ON camera_calibration (camera_profile_id);
+            "
+        ))
+        .await?;
+
         // A report of a reconstruction that already ran, not a request to run one.
         // The provenance columns name the software and weights behind its numbers.
         db.execute_unprepared(&format!(
@@ -326,6 +381,7 @@ impl MigrationTrait for Migration {
                 transect_length_m   DOUBLE PRECISION,
                 crop_width_m        DOUBLE PRECISION,
                 preset_id           UUID REFERENCES preset(id),
+                camera_calibration_id UUID REFERENCES camera_calibration(id),
                 -- The session the run was processed in, as a correlation key. A
                 -- session is one workstation's queue and has no table here, so there
                 -- is deliberately no foreign key: the row it names lives on the device.
@@ -613,6 +669,60 @@ impl MigrationTrait for Migration {
         )
         .await?;
 
+        // The profile the pipeline packages, and the calibration inside it, so a fresh
+        // registry can name in a preset what every install already has. Beside the
+        // preset seed and for the same reason. `document` is the file
+        // `deepreefmap/resources/camera_profiles/gopro_hero_10.json` byte for byte,
+        // which is what a device writes into `camera_profiles_dir()` on pull.
+        db.execute_unprepared(
+            r#"
+            INSERT INTO camera_profile (id, name, description)
+            SELECT '00000000-0000-4000-8000-000000000010'::uuid, 'gopro_hero_10',
+                'Bundled with the pipeline. Every install resolves this name without syncing.'
+            WHERE NOT EXISTS (
+                SELECT 1 FROM camera_profile WHERE LOWER(name) = 'gopro_hero_10'
+            );
+
+            INSERT INTO camera_calibration (
+                id, camera_profile_id, version, document, image_width, image_height,
+                reprojection_error_px, registered_frames, source_clip, description
+            )
+            SELECT '00000000-0000-4000-8000-000000000011'::uuid,
+                '00000000-0000-4000-8000-000000000010'::uuid, 1,
+                '{
+                    "name": "gopro_hero_10",
+                    "source": "colmap_radial_v1",
+                    "distorted": {
+                        "model": "RADIAL",
+                        "params": {
+                            "fx": 1243.6276334472113,
+                            "fy": 1243.6276334472113,
+                            "cx": 960.0,
+                            "cy": 540.0,
+                            "k1": 0.36223110184368823,
+                            "k2": 0.2476961799393366
+                        }
+                    },
+                    "rectified_pinhole": {
+                        "image_size": [1920, 1080],
+                        "K": [
+                            [1562.98876953125, 0.0, 959.5],
+                            [0.0, 1562.98876953125, 539.5],
+                            [0.0, 0.0, 1.0]
+                        ]
+                    }
+                }'::jsonb,
+                1920, 1080, 0.783395585447909, 100, '',
+                'The calibration the pipeline packages.'
+            WHERE NOT EXISTS (
+                SELECT 1 FROM camera_calibration
+                WHERE camera_profile_id = '00000000-0000-4000-8000-000000000010'::uuid
+                  AND version = 1
+            );
+            "#,
+        )
+        .await?;
+
         Ok(())
     }
 
@@ -623,6 +733,8 @@ impl MigrationTrait for Migration {
         for table in [
             "run_artifact",
             "stored_object",
+            "camera_calibration",
+            "camera_profile",
             "change_log",
             "connect_code",
             "device",

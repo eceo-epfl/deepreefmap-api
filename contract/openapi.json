@@ -234,6 +234,491 @@
         ],
         "type": "object"
       },
+      "CameraCalibrationCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "calibrated_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "camera_profile_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "document": {},
+          "id": {
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "image_height": {
+            "format": "int32",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "image_width": {
+            "format": "int32",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "registered_frames": {
+            "format": "int32",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "reprojection_error_px": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "source_clip": {
+            "type": "string"
+          },
+          "version": {
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "camera_profile_id",
+          "version",
+          "document",
+          "source_clip",
+          "description"
+        ],
+        "type": "object"
+      },
+      "CameraCalibrationList": {
+        "properties": {
+          "calibrated_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "camera_profile_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "deleted_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "device_id": {
+            "description": "The device that measured it, where a device published it.",
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "image_height": {
+            "format": "int32",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "image_width": {
+            "format": "int32",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "registered_frames": {
+            "format": "int32",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "reprojection_error_px": {
+            "description": "What COLMAP reported when this was measured. The one number that says whether\na calibration is worth trusting.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "server_seq": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "source_clip": {
+            "description": "The clip it was measured from, by name. Empty where nobody recorded one.",
+            "type": "string"
+          },
+          "updated_at": {
+            "description": "The conflict key last-write-wins resolves on. Server-stamped, as everywhere.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "version": {
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "camera_profile_id",
+          "version",
+          "source_clip",
+          "description",
+          "created_at",
+          "updated_at",
+          "server_seq"
+        ],
+        "type": "object"
+      },
+      "CameraCalibrationResponse": {
+        "properties": {
+          "calibrated_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "camera_profile_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "deleted_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "device_id": {
+            "description": "The device that measured it, where a device published it.",
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "document": {
+            "description": "The profile JSON itself, opaque to the registry beyond the shape check on\nwrite. Detail view only: a page of calibrations does not carry every document."
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "image_height": {
+            "format": "int32",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "image_width": {
+            "format": "int32",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "registered_frames": {
+            "format": "int32",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "reprojection_error_px": {
+            "description": "What COLMAP reported when this was measured. The one number that says whether\na calibration is worth trusting.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "server_seq": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "source_clip": {
+            "description": "The clip it was measured from, by name. Empty where nobody recorded one.",
+            "type": "string"
+          },
+          "updated_at": {
+            "description": "The conflict key last-write-wins resolves on. Server-stamped, as everywhere.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "version": {
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "camera_profile_id",
+          "version",
+          "document",
+          "source_clip",
+          "description",
+          "created_at",
+          "updated_at",
+          "server_seq"
+        ],
+        "type": "object"
+      },
+      "CameraCalibrationUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "calibrated_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "camera_profile_id": {
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "document": {},
+          "image_height": {
+            "format": "int32",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "image_width": {
+            "format": "int32",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "registered_frames": {
+            "format": "int32",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "reprojection_error_px": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "source_clip": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version": {
+            "format": "int32",
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "CameraProfileCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "description"
+        ],
+        "type": "object"
+      },
+      "CameraProfileList": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "deleted_at": {
+            "description": "The tombstone. Written only by the delete route, which administrators alone\nreach, and by `/api/sync/push`.",
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "device_id": {
+            "description": "The device that published the profile, where one did. Never accepted from a\nclient, which would otherwise forge another device.",
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "name": {
+            "description": "Resolved by a device against its own profile directory, so it follows the\nlibrary's own charset: letters, numbers, underscores and hyphens.",
+            "type": "string"
+          },
+          "server_seq": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "updated_at": {
+            "description": "The conflict key last-write-wins resolves on. Server-stamped: `on_update` only\nfires for a field the update model excludes, and a client-set stamp could pin a\nrow against every later push. `/api/sync/push` writes it directly instead.",
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "created_at",
+          "updated_at",
+          "server_seq"
+        ],
+        "type": "object"
+      },
+      "CameraProfileResponse": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "deleted_at": {
+            "description": "The tombstone. Written only by the delete route, which administrators alone\nreach, and by `/api/sync/push`.",
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "device_id": {
+            "description": "The device that published the profile, where one did. Never accepted from a\nclient, which would otherwise forge another device.",
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "name": {
+            "description": "Resolved by a device against its own profile directory, so it follows the\nlibrary's own charset: letters, numbers, underscores and hyphens.",
+            "type": "string"
+          },
+          "server_seq": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "updated_at": {
+            "description": "The conflict key last-write-wins resolves on. Server-stamped: `on_update` only\nfires for a field the update model excludes, and a client-set stamp could pin a\nrow against every later push. `/api/sync/push` writes it directly instead.",
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "created_at",
+          "updated_at",
+          "server_seq"
+        ],
+        "type": "object"
+      },
+      "CameraProfileUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
       "CampaignCreate": {
         "additionalProperties": false,
         "properties": {
@@ -3231,6 +3716,14 @@
               "null"
             ]
           },
+          "camera_calibration_id": {
+            "description": "Which measurement of the lens rectified this run's frames, where the device\nknew one. The run's own outputs carry the document; this resolves it to what\nthe console holds.",
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "camera_profile": {
             "description": "The scale the cover was measured at: the camera profile, the tape length and\ncrop width the run used, the metres per pixel that gave, and how the scale\nwas established.",
             "type": [
@@ -3580,6 +4073,14 @@
         "properties": {
           "batch_id": {
             "description": "The device session this run was processed in: the queue it was ordered from,\nwhich groups the runs that went through the pipeline together. A correlation\nkey, not a foreign key -- a session is one workstation's cart and has no row\nhere.",
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "camera_calibration_id": {
+            "description": "Which measurement of the lens rectified this run's frames, where the device\nknew one. The run's own outputs carry the document; this resolves it to what\nthe console holds.",
             "format": "uuid",
             "type": [
               "string",
@@ -4940,6 +5441,75 @@
         ],
         "type": "object"
       },
+      "UploadRequest": {
+        "properties": {
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "document": {
+            "description": "The profile JSON the desktop writes, verbatim."
+          },
+          "name": {
+            "description": "The profile this measures. Made if the registry has never seen it.",
+            "type": "string"
+          },
+          "registered_frames": {
+            "format": "int32",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "reprojection_error_px": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "source_clip": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "document"
+        ],
+        "type": "object"
+      },
+      "UploadResponse": {
+        "properties": {
+          "camera_calibration_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "camera_profile_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "created": {
+            "description": "False when this document was already the profile's calibration at this version.",
+            "type": "boolean"
+          },
+          "version": {
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "camera_profile_id",
+          "camera_calibration_id",
+          "version",
+          "created"
+        ],
+        "type": "object"
+      },
       "ValidateRequest": {
         "properties": {
           "ids": {
@@ -6063,6 +6633,1013 @@
         "tags": [
           "archive"
         ]
+      }
+    },
+    "/camera_calibrations": {
+      "get": {
+        "description": "Retrieves all camera_calibrations.\n\nThis resource manages camera_calibration items\n\nAdditional sortable columns: \n- camera_profile_id\n- version\n- image_width\n- image_height\n- reprojection_error_px\n- registered_frames\n- calibrated_at\n- created_at\n- updated_at\n- deleted_at\n- server_seq.\n\nAdditional filterable columns: \n- id\n- camera_profile_id\n- version\n- image_width\n- image_height\n- reprojection_error_px\n- registered_frames\n- calibrated_at\n- deleted_at\n- device_id.",
+        "operationId": "get_all_camera_calibrations",
+        "parameters": [
+          {
+            "description": "JSON-encoded filter for querying resources.\n\nThis parameter supports various filtering options:\n- Free text search: `{\"q\": \"search text\"}`\n- Filtering by a single ID: `{\"id\": \"550e8400-e29b-41d4-a716-446655440000\"}`\n- Filtering by multiple IDs: `{\"id\": [\"550e8400-e29b-41d4-a716-446655440000\", \"550e8400-e29b-41d4-a716-446655440001\"]}`\n- Filtering on other columns: `{\"name\": \"example\"}`",
+            "example": {
+              "id": "550e8400-e29b-41d4-a716-446655440000",
+              "name": "example",
+              "q": "search text"
+            },
+            "in": "query",
+            "name": "filter",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Range for pagination in the format \"[start, end]\".\n\nExample: `[0,9]`",
+            "example": "[0,9]",
+            "in": "query",
+            "name": "range",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Page number for standard REST pagination (1-based).\n\nExample: `1`",
+            "example": 1,
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "format": "int64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Number of items per page for standard REST pagination.\n\nExample: `10`",
+            "example": 10,
+            "in": "query",
+            "name": "per_page",
+            "required": false,
+            "schema": {
+              "format": "int64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Sort order for the results in the format `[\"column\", \"order\"]`.\n\nExample: `[\"id\", \"ASC\"]`",
+            "example": "[\"id\", \"ASC\"]",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Sort column for standard REST format.\n\nExample: `title`",
+            "example": "title",
+            "in": "query",
+            "name": "sort_by",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Sort order for standard REST format (ASC or DESC).\n\nExample: `ASC`",
+            "example": "ASC",
+            "in": "query",
+            "name": "order",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CameraCalibrationList"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "List of resources"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Get all camera_calibrations"
+      },
+      "post": {
+        "description": "Creates a new camera_calibration.\n\nThis resource manages camera_calibration items",
+        "operationId": "create_one_camera_calibration",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CameraCalibrationCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CameraCalibrationResponse"
+                }
+              }
+            },
+            "description": "Resource created successfully"
+          },
+          "409": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Duplicate record"
+          }
+        },
+        "summary": "Create one camera_calibration"
+      }
+    },
+    "/camera_calibrations/batch": {
+      "delete": {
+        "description": "Deletes many camera_calibrations by their IDs and returns array of deleted UUIDs.\n\nUse `?partial=true` for partial success mode (deletes valid items even if some fail).\n\nThis resource manages camera_calibration items",
+        "operationId": "delete_many_camera_calibrations",
+        "parameters": [
+          {
+            "description": "Enable partial success mode for batch operations.\n\nWhen `true`, the operation processes each item independently instead of\nusing all-or-nothing semantics. Items that succeed are committed even if\nother items fail.\n\nDefault: `false` (all-or-nothing)",
+            "example": false,
+            "in": "query",
+            "name": "partial",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Resources deleted successfully"
+          },
+          "207": {
+            "description": "Partial success - some items deleted, some failed"
+          },
+          "400": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Bad request - batch size exceeded"
+          },
+          "500": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Delete many camera_calibrations"
+      },
+      "patch": {
+        "description": "Updates multiple camera_calibrations in a batch. Limited to 100 items per request.\n\nUse `?partial=true` for partial success mode (commits successful items even if some fail).\n\nThis resource manages camera_calibration items",
+        "operationId": "update_many_camera_calibrations",
+        "parameters": [
+          {
+            "description": "Enable partial success mode for batch operations.\n\nWhen `true`, the operation processes each item independently instead of\nusing all-or-nothing semantics. Items that succeed are committed even if\nother items fail.\n\nDefault: `false` (all-or-nothing)",
+            "example": false,
+            "in": "query",
+            "name": "partial",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "items": {
+                  "$ref": "#/components/schemas/BatchUpdateRequest"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CameraCalibrationResponse"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Resources updated successfully"
+          },
+          "207": {
+            "description": "Partial success - some items updated, some failed"
+          },
+          "400": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Bad request - batch size exceeded or validation failed"
+          },
+          "404": {
+            "description": "One or more resources not found"
+          },
+          "409": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Duplicate record"
+          },
+          "500": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Update many camera_calibrations"
+      },
+      "post": {
+        "description": "Creates multiple camera_calibrations in a batch. Limited to 100 items per request.\n\nUse `?partial=true` for partial success mode (commits successful items even if some fail).\n\nThis resource manages camera_calibration items",
+        "operationId": "create_many_camera_calibrations",
+        "parameters": [
+          {
+            "description": "Enable partial success mode for batch operations.\n\nWhen `true`, the operation processes each item independently instead of\nusing all-or-nothing semantics. Items that succeed are committed even if\nother items fail.\n\nDefault: `false` (all-or-nothing)",
+            "example": false,
+            "in": "query",
+            "name": "partial",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "items": {
+                  "$ref": "#/components/schemas/CameraCalibrationCreate"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CameraCalibrationResponse"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Resources created successfully"
+          },
+          "207": {
+            "description": "Partial success - some items created, some failed"
+          },
+          "400": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Bad request - batch size exceeded or validation failed"
+          },
+          "409": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Duplicate record"
+          },
+          "500": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Create many camera_calibrations"
+      }
+    },
+    "/camera_calibrations/upload": {
+      "post": {
+        "operationId": "upload",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UploadRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadResponse"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "Publish a calibration made on a laptop.",
+        "tags": [
+          "camera_calibrations"
+        ]
+      }
+    },
+    "/camera_calibrations/{id}": {
+      "delete": {
+        "description": "Deletes one camera_calibration by its ID.\n\nThis resource manages camera_calibration items",
+        "operationId": "delete_one_camera_calibration",
+        "parameters": [
+          {
+            "description": "Resource identifier",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Resource deleted successfully"
+          },
+          "404": {
+            "description": "Resource not found"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Delete one camera_calibration"
+      },
+      "get": {
+        "description": "Retrieves one camera_calibration by its ID.\n\nThis resource manages camera_calibration items",
+        "operationId": "get_one_camera_calibration",
+        "parameters": [
+          {
+            "description": "Resource identifier",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CameraCalibrationResponse"
+                }
+              }
+            },
+            "description": "The requested resource"
+          },
+          "400": {
+            "description": "Bad request"
+          },
+          "404": {
+            "description": "Resource not found"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Get one camera_calibration"
+      },
+      "put": {
+        "description": "Updates one camera_calibration by its ID.\n\nThis resource manages camera_calibration items",
+        "operationId": "update_one_camera_calibration",
+        "parameters": [
+          {
+            "description": "Resource identifier",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CameraCalibrationUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CameraCalibrationResponse"
+                }
+              }
+            },
+            "description": "Resource updated successfully"
+          },
+          "404": {
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Duplicate record"
+          }
+        },
+        "summary": "Update one camera_calibration"
+      }
+    },
+    "/camera_profiles": {
+      "get": {
+        "description": "Retrieves all camera_profiles.\n\nThis resource manages camera_profile items\n\nAdditional sortable columns: \n- name\n- created_at\n- updated_at\n- deleted_at\n- server_seq.\n\nAdditional filterable columns: \n- id\n- name\n- deleted_at\n- device_id.",
+        "operationId": "get_all_camera_profiles",
+        "parameters": [
+          {
+            "description": "JSON-encoded filter for querying resources.\n\nThis parameter supports various filtering options:\n- Free text search: `{\"q\": \"search text\"}`\n- Filtering by a single ID: `{\"id\": \"550e8400-e29b-41d4-a716-446655440000\"}`\n- Filtering by multiple IDs: `{\"id\": [\"550e8400-e29b-41d4-a716-446655440000\", \"550e8400-e29b-41d4-a716-446655440001\"]}`\n- Filtering on other columns: `{\"name\": \"example\"}`",
+            "example": {
+              "id": "550e8400-e29b-41d4-a716-446655440000",
+              "name": "example",
+              "q": "search text"
+            },
+            "in": "query",
+            "name": "filter",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Range for pagination in the format \"[start, end]\".\n\nExample: `[0,9]`",
+            "example": "[0,9]",
+            "in": "query",
+            "name": "range",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Page number for standard REST pagination (1-based).\n\nExample: `1`",
+            "example": 1,
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "format": "int64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Number of items per page for standard REST pagination.\n\nExample: `10`",
+            "example": 10,
+            "in": "query",
+            "name": "per_page",
+            "required": false,
+            "schema": {
+              "format": "int64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Sort order for the results in the format `[\"column\", \"order\"]`.\n\nExample: `[\"id\", \"ASC\"]`",
+            "example": "[\"id\", \"ASC\"]",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Sort column for standard REST format.\n\nExample: `title`",
+            "example": "title",
+            "in": "query",
+            "name": "sort_by",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Sort order for standard REST format (ASC or DESC).\n\nExample: `ASC`",
+            "example": "ASC",
+            "in": "query",
+            "name": "order",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CameraProfileList"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "List of resources"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Get all camera_profiles"
+      },
+      "post": {
+        "description": "Creates a new camera_profile.\n\nThis resource manages camera_profile items",
+        "operationId": "create_one_camera_profile",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CameraProfileCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CameraProfileResponse"
+                }
+              }
+            },
+            "description": "Resource created successfully"
+          },
+          "409": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Duplicate record"
+          }
+        },
+        "summary": "Create one camera_profile"
+      }
+    },
+    "/camera_profiles/batch": {
+      "delete": {
+        "description": "Deletes many camera_profiles by their IDs and returns array of deleted UUIDs.\n\nUse `?partial=true` for partial success mode (deletes valid items even if some fail).\n\nThis resource manages camera_profile items",
+        "operationId": "delete_many_camera_profiles",
+        "parameters": [
+          {
+            "description": "Enable partial success mode for batch operations.\n\nWhen `true`, the operation processes each item independently instead of\nusing all-or-nothing semantics. Items that succeed are committed even if\nother items fail.\n\nDefault: `false` (all-or-nothing)",
+            "example": false,
+            "in": "query",
+            "name": "partial",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Resources deleted successfully"
+          },
+          "207": {
+            "description": "Partial success - some items deleted, some failed"
+          },
+          "400": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Bad request - batch size exceeded"
+          },
+          "500": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Delete many camera_profiles"
+      },
+      "patch": {
+        "description": "Updates multiple camera_profiles in a batch. Limited to 100 items per request.\n\nUse `?partial=true` for partial success mode (commits successful items even if some fail).\n\nThis resource manages camera_profile items",
+        "operationId": "update_many_camera_profiles",
+        "parameters": [
+          {
+            "description": "Enable partial success mode for batch operations.\n\nWhen `true`, the operation processes each item independently instead of\nusing all-or-nothing semantics. Items that succeed are committed even if\nother items fail.\n\nDefault: `false` (all-or-nothing)",
+            "example": false,
+            "in": "query",
+            "name": "partial",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "items": {
+                  "$ref": "#/components/schemas/BatchUpdateRequest"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CameraProfileResponse"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Resources updated successfully"
+          },
+          "207": {
+            "description": "Partial success - some items updated, some failed"
+          },
+          "400": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Bad request - batch size exceeded or validation failed"
+          },
+          "404": {
+            "description": "One or more resources not found"
+          },
+          "409": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Duplicate record"
+          },
+          "500": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Update many camera_profiles"
+      },
+      "post": {
+        "description": "Creates multiple camera_profiles in a batch. Limited to 100 items per request.\n\nUse `?partial=true` for partial success mode (commits successful items even if some fail).\n\nThis resource manages camera_profile items",
+        "operationId": "create_many_camera_profiles",
+        "parameters": [
+          {
+            "description": "Enable partial success mode for batch operations.\n\nWhen `true`, the operation processes each item independently instead of\nusing all-or-nothing semantics. Items that succeed are committed even if\nother items fail.\n\nDefault: `false` (all-or-nothing)",
+            "example": false,
+            "in": "query",
+            "name": "partial",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "items": {
+                  "$ref": "#/components/schemas/CameraProfileCreate"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CameraProfileResponse"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Resources created successfully"
+          },
+          "207": {
+            "description": "Partial success - some items created, some failed"
+          },
+          "400": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Bad request - batch size exceeded or validation failed"
+          },
+          "409": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Duplicate record"
+          },
+          "500": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Create many camera_profiles"
+      }
+    },
+    "/camera_profiles/{id}": {
+      "delete": {
+        "description": "Deletes one camera_profile by its ID.\n\nThis resource manages camera_profile items",
+        "operationId": "delete_one_camera_profile",
+        "parameters": [
+          {
+            "description": "Resource identifier",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Resource deleted successfully"
+          },
+          "404": {
+            "description": "Resource not found"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Delete one camera_profile"
+      },
+      "get": {
+        "description": "Retrieves one camera_profile by its ID.\n\nThis resource manages camera_profile items",
+        "operationId": "get_one_camera_profile",
+        "parameters": [
+          {
+            "description": "Resource identifier",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CameraProfileResponse"
+                }
+              }
+            },
+            "description": "The requested resource"
+          },
+          "400": {
+            "description": "Bad request"
+          },
+          "404": {
+            "description": "Resource not found"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Get one camera_profile"
+      },
+      "put": {
+        "description": "Updates one camera_profile by its ID.\n\nThis resource manages camera_profile items",
+        "operationId": "update_one_camera_profile",
+        "parameters": [
+          {
+            "description": "Resource identifier",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CameraProfileUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CameraProfileResponse"
+                }
+              }
+            },
+            "description": "Resource updated successfully"
+          },
+          "404": {
+            "description": "Resource not found"
+          },
+          "409": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Duplicate record"
+          }
+        },
+        "summary": "Update one camera_profile"
       }
     },
     "/campaigns": {
@@ -9135,7 +10712,7 @@
     },
     "/runs": {
       "get": {
-        "description": "Retrieves all runs.\n\nThis resource manages run items\n\nAdditional sortable columns: \n- status\n- started_at\n- finished_at\n- run_duration_s\n- created_at\n- updated_at\n- deleted_at\n- server_seq\n- validated_at.\n\nAdditional filterable columns: \n- id\n- pass_id\n- status\n- started_at\n- finished_at\n- gui_version\n- library_version\n- segmentation_model\n- mapping_backend\n- processing_width\n- processing_height\n- fps\n- preprocess_batch_size\n- taxonomy_version\n- taxonomy_hash\n- preset_name\n- preset_version\n- preset_hash\n- camera_profile\n- scale_type\n- preset_id\n- batch_id\n- deleted_at\n- device_id\n- validated_at\n- validated_by.",
+        "description": "Retrieves all runs.\n\nThis resource manages run items\n\nAdditional sortable columns: \n- status\n- started_at\n- finished_at\n- run_duration_s\n- created_at\n- updated_at\n- deleted_at\n- server_seq\n- validated_at.\n\nAdditional filterable columns: \n- id\n- pass_id\n- status\n- started_at\n- finished_at\n- gui_version\n- library_version\n- segmentation_model\n- mapping_backend\n- processing_width\n- processing_height\n- fps\n- preprocess_batch_size\n- taxonomy_version\n- taxonomy_hash\n- preset_name\n- preset_version\n- preset_hash\n- camera_profile\n- scale_type\n- preset_id\n- camera_calibration_id\n- batch_id\n- deleted_at\n- device_id\n- validated_at\n- validated_by.",
         "operationId": "get_all_runs",
         "parameters": [
           {
@@ -10779,6 +12356,37 @@
         "summary": "Cover per survey event along one transect.",
         "tags": [
           "cover"
+        ]
+      }
+    },
+    "/upload": {
+      "post": {
+        "operationId": "upload",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UploadRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadResponse"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "summary": "Publish a calibration made on a laptop.",
+        "tags": [
+          "camera_calibrations"
         ]
       }
     },

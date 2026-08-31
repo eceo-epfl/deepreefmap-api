@@ -259,6 +259,36 @@ pub const TABLES: &[TableSpec] = &[
         ],
         curated: false,
     },
+    // Pull only, like presets and for the same reason: a profile is published by the
+    // console so every laptop rectifies the same footage the same way. A device that
+    // calibrates a rig publishes it through `/api/camera_calibrations/upload`, not by
+    // authoring a row here.
+    TableSpec {
+        section: "camera_profiles",
+        table: "camera_profile",
+        own_columns: &[
+            required("name", ColumnKind::Text),
+            required("description", ColumnKind::Text),
+        ],
+        curated: false,
+    },
+    TableSpec {
+        section: "camera_calibrations",
+        table: "camera_calibration",
+        own_columns: &[
+            required("camera_profile_id", ColumnKind::Uuid),
+            required("version", ColumnKind::Int),
+            required("document", ColumnKind::Json),
+            col("image_width", ColumnKind::Int),
+            col("image_height", ColumnKind::Int),
+            col("reprojection_error_px", ColumnKind::Float),
+            col("registered_frames", ColumnKind::Int),
+            required("source_clip", ColumnKind::Text),
+            col("calibrated_at", ColumnKind::Timestamp),
+            required("description", ColumnKind::Text),
+        ],
+        curated: false,
+    },
     TableSpec {
         section: "runs",
         table: "run_record",
@@ -294,6 +324,10 @@ pub const TABLES: &[TableSpec] = &[
             col("crop_width_m", ColumnKind::Float),
             col("preset_id", ColumnKind::Uuid),
             col("batch_id", ColumnKind::Uuid),
+            // Which measurement of the lens the reconstruction was rectified with,
+            // where the device knew: the run directory carries the document itself,
+            // and this resolves it to the calibration the console holds.
+            col("camera_calibration_id", ColumnKind::Uuid).since(2),
         ],
         curated: true,
     },
@@ -317,7 +351,7 @@ pub const TABLES: &[TableSpec] = &[
 /// Highest contract version this server speaks. A document declaring anything but the
 /// version negotiated for its exchange is refused outright: parsing under the wrong
 /// version writes plausible wrong rows instead of failing.
-pub const CONTRACT_VERSION: u32 = 1;
+pub const CONTRACT_VERSION: u32 = 2;
 
 /// Oldest contract version this server still reads. Together with [`CONTRACT_VERSION`] it
 /// is the range a client negotiates against.
@@ -332,7 +366,14 @@ const _: () = assert!(
 ///
 /// A site, campaign or transect is defined on either side and shared by all. Presets
 /// travel downwards only, since the server defines them.
-pub const CLIENT_PULL_SECTIONS: &[&str] = &["sites", "campaigns", "transects", "presets"];
+pub const CLIENT_PULL_SECTIONS: &[&str] = &[
+    "sites",
+    "campaigns",
+    "transects",
+    "presets",
+    "camera_profiles",
+    "camera_calibrations",
+];
 
 /// Sections a device downloads restricted to the rows it authored, from contract 2, so
 /// it learns what the console curated, validated or deleted.
@@ -546,7 +587,7 @@ mod tests {
 
     #[test]
     fn test_every_table_carries_the_columns_a_document_needs() {
-        assert_eq!(TABLES.len(), 9);
+        assert_eq!(TABLES.len(), 11);
         for spec in TABLES {
             let names: Vec<&str> = spec.columns().iter().map(|c| c.name).collect();
             for needed in ["id", "updated_at", "deleted_at"] {

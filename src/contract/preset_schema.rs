@@ -10,7 +10,7 @@ use serde::Serialize;
 
 /// Bumped whenever a field or choice below changes, so the console and the devices
 /// can be told apart by which schema they carry.
-pub const PRESET_SCHEMA_VERSION: i32 = 1;
+pub const PRESET_SCHEMA_VERSION: i32 = 2;
 
 /// The two settings the desktop marks `publishable = False`: paths on one machine's
 /// disk, meaningless and misleading anywhere else.
@@ -51,6 +51,11 @@ pub struct PresetField {
     pub unit: &'static str,
     /// Which entry of `choices` supplies the legal values, for `kind == Enum`.
     pub choices: &'static str,
+    /// Whether `choices` is a suggestion rather than the whole set. True where the
+    /// registry, not this binary, knows what exists: camera profiles are published
+    /// into the registry and calibrated on laptops, so a compiled list can only ever
+    /// be what the pipeline happens to package.
+    pub open: bool,
     /// The `mapping_name` values this field is used with, empty meaning always.
     pub applies_when: &'static [&'static str],
     /// Null means "the model's own size" for the two processing dimensions.
@@ -74,6 +79,7 @@ const fn field(
         decimals: None,
         unit: "",
         choices: "",
+        open: false,
         applies_when: &[],
         nullable: false,
         default,
@@ -105,6 +111,19 @@ const fn choice(
     out
 }
 
+/// A choice whose whole set lives outside this binary: the compiled list is offered,
+/// and a name from elsewhere is accepted.
+const fn open_choice(
+    key: &'static str,
+    label: &'static str,
+    choices: &'static str,
+    default: Default,
+) -> PresetField {
+    let mut out = choice(key, label, choices, default);
+    out.open = true;
+    out
+}
+
 /// Every publishable setting, in the order the form shows them.
 // Values mirror the desktop's `preset_schema.py` table and `survey_preset.yaml`
 // defaults; a drift here is a dropdown offering what no laptop accepts.
@@ -129,7 +148,9 @@ pub const FIELDS: &[PresetField] = &[
         "mapping",
         Default::Str("loger_star"),
     ),
-    choice(
+    // Open: the registry holds the camera profiles, and a laptop calibrates its own.
+    // `CAMERA_PROFILES` is only what the pipeline packages.
+    open_choice(
         "camera_profile_name",
         "camera",
         "camera",
@@ -399,7 +420,8 @@ pub const MAPPING_MODELS: &[ModelChoice] = &[
     },
 ];
 
-/// The camera profiles bundled with the pipeline.
+/// The camera profiles bundled with the pipeline. Suggestions, not the whole set:
+/// the rest are published into the registry and calibrated on laptops.
 pub const CAMERA_PROFILES: &[&str] = &["gopro_hero_10"];
 
 /// Display sizes, fixed because the desktop's own combo is fixed.
@@ -466,6 +488,18 @@ fn validate_value(field: &PresetField, value: &serde_json::Value) -> Result<(), 
             let name = value
                 .as_str()
                 .ok_or_else(|| format!("{} must be a name", field.key))?;
+            if field.open {
+                // The set is elsewhere, so all this can check is that the name is one
+                // a device could resolve on its own disk.
+                return if crate::routes::private::cameras::model::name_is_resolvable(name) {
+                    Ok(())
+                } else {
+                    Err(format!(
+                        "{} must be a name of letters, numbers, underscores and hyphens,                          not {name:?}",
+                        field.key
+                    ))
+                };
+            }
             let allowed = choices_for(field.choices);
             if allowed.contains(&name) {
                 Ok(())

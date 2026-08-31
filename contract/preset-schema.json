@@ -109,6 +109,7 @@
       "maximum": 60.0,
       "minimum": 1.0,
       "nullable": false,
+      "open": false,
       "step": null,
       "unit": ""
     },
@@ -123,6 +124,7 @@
       "maximum": null,
       "minimum": null,
       "nullable": false,
+      "open": false,
       "step": null,
       "unit": ""
     },
@@ -137,6 +139,7 @@
       "maximum": null,
       "minimum": null,
       "nullable": false,
+      "open": false,
       "step": null,
       "unit": ""
     },
@@ -151,6 +154,7 @@
       "maximum": null,
       "minimum": null,
       "nullable": false,
+      "open": true,
       "step": null,
       "unit": ""
     },
@@ -165,6 +169,7 @@
       "maximum": 50.0,
       "minimum": 0.0,
       "nullable": false,
+      "open": false,
       "step": 0.1,
       "unit": "m"
     },
@@ -179,6 +184,7 @@
       "maximum": null,
       "minimum": null,
       "nullable": false,
+      "open": false,
       "step": null,
       "unit": ""
     },
@@ -193,6 +199,7 @@
       "maximum": null,
       "minimum": null,
       "nullable": false,
+      "open": false,
       "step": null,
       "unit": ""
     },
@@ -207,6 +214,7 @@
       "maximum": null,
       "minimum": null,
       "nullable": false,
+      "open": false,
       "step": null,
       "unit": ""
     },
@@ -221,6 +229,7 @@
       "maximum": 3840.0,
       "minimum": 256.0,
       "nullable": true,
+      "open": false,
       "step": 32.0,
       "unit": ""
     },
@@ -235,6 +244,7 @@
       "maximum": 2160.0,
       "minimum": 256.0,
       "nullable": true,
+      "open": false,
       "step": 32.0,
       "unit": ""
     },
@@ -249,6 +259,7 @@
       "maximum": 16.0,
       "minimum": 1.0,
       "nullable": false,
+      "open": false,
       "step": null,
       "unit": ""
     },
@@ -263,6 +274,7 @@
       "maximum": 10000.0,
       "minimum": 100.0,
       "nullable": false,
+      "open": false,
       "step": 100.0,
       "unit": ""
     },
@@ -277,6 +289,7 @@
       "maximum": null,
       "minimum": null,
       "nullable": false,
+      "open": false,
       "step": null,
       "unit": ""
     },
@@ -291,6 +304,7 @@
       "maximum": 10.0,
       "minimum": 0.0,
       "nullable": false,
+      "open": false,
       "step": 0.1,
       "unit": ""
     },
@@ -305,6 +319,7 @@
       "maximum": 200.0,
       "minimum": 1.0,
       "nullable": false,
+      "open": false,
       "step": null,
       "unit": ""
     },
@@ -319,6 +334,7 @@
       "maximum": 10.0,
       "minimum": 0.0,
       "nullable": false,
+      "open": false,
       "step": 0.001,
       "unit": "m"
     },
@@ -336,6 +352,7 @@
       "maximum": 256.0,
       "minimum": 1.0,
       "nullable": false,
+      "open": false,
       "step": null,
       "unit": ""
     },
@@ -353,6 +370,7 @@
       "maximum": 64.0,
       "minimum": 0.0,
       "nullable": false,
+      "open": false,
       "step": null,
       "unit": ""
     },
@@ -367,6 +385,7 @@
       "maximum": null,
       "minimum": null,
       "nullable": false,
+      "open": false,
       "step": null,
       "unit": ""
     },
@@ -383,6 +402,7 @@
       "maximum": 2048.0,
       "minimum": 64.0,
       "nullable": false,
+      "open": false,
       "step": 32.0,
       "unit": ""
     },
@@ -399,11 +419,12 @@
       "maximum": 2048.0,
       "minimum": 64.0,
       "nullable": false,
+      "open": false,
       "step": 32.0,
       "unit": ""
     }
   ],
-  "preset_schema_version": 1,
+  "preset_schema_version": 2,
   "unpublishable_keys": [
     "loger_model_path",
     "scs_checkpoint_path"
