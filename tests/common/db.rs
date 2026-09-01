@@ -82,6 +82,25 @@ async fn build_template() -> String {
     db.close()
         .await
         .expect("the template connection closes before it is cloned");
+
+    // Closed to connections, the way template0 is: the TimescaleDB background
+    // worker scheduler attaches to every database it can see, and a session it
+    // parks on the template makes every clone refuse. Superuser clones ignore
+    // datallowconn; whatever attached before the door shut is shown out.
+    let admin = connect(&maintenance_url()).await;
+    exec(
+        &admin,
+        &format!("ALTER DATABASE {name} WITH ALLOW_CONNECTIONS false"),
+    )
+    .await;
+    exec(
+        &admin,
+        &format!(
+            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity              WHERE datname = '{name}'"
+        ),
+    )
+    .await;
+    admin.close().await.ok();
     name
 }
 
