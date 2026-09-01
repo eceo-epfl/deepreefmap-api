@@ -8,6 +8,16 @@ mod common;
 
 use common::*;
 
+use deepreefmap_api::common::contract::CONTRACT_HEADER;
+use deepreefmap_api::routes::private::sync::schema::{CONTRACT_VERSION, MIN_CONTRACT_VERSION};
+
+fn declaring(pairs: &[(&str, &str)]) -> Vec<(String, String)> {
+    pairs
+        .iter()
+        .map(|(name, value)| ((*name).to_string(), (*value).to_string()))
+        .collect()
+}
+
 const UPLOAD: &str = "/api/camera_calibrations/upload";
 
 fn document(name: &str, focal: f64) -> serde_json::Value {
@@ -192,4 +202,75 @@ async fn test_a_device_cannot_reach_the_camera_crud_routes() {
     let (status, _) = get(&app, "/api/camera_profiles", Some(&token)).await;
 
     assert_eq!(status, 403);
+}
+
+/// A run made under a published calibration names it, so the registry can say
+/// what a reconstruction was rectified with rather than only what the profile
+/// was called on one laptop.
+#[tokio::test]
+async fn test_a_run_carries_the_calibration_it_was_rectified_with() {
+    let db = setup_test_db().await;
+    let app = build_test_app(db.clone());
+    let current = format!("{MIN_CONTRACT_VERSION}-{CONTRACT_VERSION}");
+    let headers = declaring(&[(CONTRACT_HEADER, current.as_str())]);
+    let code = seed_connect_code(&db, "alice", "Alice laptop").await;
+    let (status, _, body) = post_declaring(
+        &app,
+        "/api/enrol",
+        &serde_json::json!({ "code": code }),
+        None,
+        &headers,
+    )
+    .await;
+    assert_eq!(status, 200, "enrolment failed: {body}");
+    let enrolled: serde_json::Value = serde_json::from_str(&body).expect("JSON");
+    let token = enrolled["token"].as_str().expect("a token").to_string();
+
+    let (_, published) = publish(
+        &app,
+        &token,
+        &serde_json::json!({"name": "hero12_dome", "document": document("hero12_dome", 1243.0)}),
+    )
+    .await;
+    let calibration = published["camera_calibration_id"].as_str().unwrap();
+
+    let pass = "b1000000-0000-4000-8000-000000000000";
+    let run = "c1000000-0000-4000-8000-000000000000";
+    let push = serde_json::json!({
+        "contract_version": CONTRACT_VERSION,
+        "sections": {
+            "passes": [{
+                "id": pass,
+                "begin_s": 0.0,
+                "end_s": 120.0,
+                "upside_down": false,
+                "label": "",
+                "notes": "",
+                "created_at": "2026-08-01T00:00:00Z",
+                "updated_at": "2026-08-01T10:00:00Z",
+            }],
+            "runs": [{
+                "id": run,
+                "pass_id": pass,
+                "status": "succeeded",
+                "error": "",
+                "run_dir_name": "t1__p01",
+                "camera_profile": "hero12_dome",
+                "camera_calibration_id": calibration,
+                "created_at": "2026-08-01T00:00:00Z",
+                "updated_at": "2026-08-01T10:00:00Z",
+            }],
+        }
+    });
+    let (status, _, body) = post_declaring(&app, "/api/sync/push", &push, Some(&token), &headers).await;
+    assert_eq!(status, 200, "{body}");
+    let pushed: serde_json::Value = serde_json::from_str(&body).expect("JSON");
+    assert_eq!(applied(&pushed["sections"]["runs"]), 1, "{pushed}");
+
+    let stored: String = one_value(
+        &db,
+        &format!("SELECT camera_calibration_id::text FROM run_record WHERE id = '{run}'"),
+    )
+    .await;
+    assert_eq!(stored, calibration);
 }
