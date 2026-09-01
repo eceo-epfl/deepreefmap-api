@@ -274,3 +274,63 @@ async fn test_a_run_carries_the_calibration_it_was_rectified_with() {
     .await;
     assert_eq!(stored, calibration);
 }
+
+/// The document the pipeline bundles, `deepreefmap/resources/camera_profiles/
+/// gopro_hero_10.json` verbatim. `profile_payload` on a laptop produces exactly
+/// this, diagnostics included.
+#[allow(clippy::unreadable_literal)] // digits as the file spells them
+fn bundled_gopro_hero_10() -> serde_json::Value {
+    serde_json::json!({
+        "name": "gopro_hero_10",
+        "source": "colmap_radial_v1",
+        "distorted": {
+            "model": "RADIAL",
+            "params": {
+                "fx": 1243.6276334472113,
+                "fy": 1243.6276334472113,
+                "cx": 960.0,
+                "cy": 540.0,
+                "k1": 0.36223110184368823,
+                "k2": 0.2476961799393366
+            }
+        },
+        "rectified_pinhole": {
+            "image_size": [1920, 1080],
+            "K": [
+                [1562.98876953125, 0.0, 959.5],
+                [0.0, 1562.98876953125, 539.5],
+                [0.0, 0.0, 1.0]
+            ]
+        },
+        "diagnostics": {
+            "n_input_frames": 100,
+            "n_registered_images": 100,
+            "mean_reprojection_error_px": 0.783395585447909,
+            "camera_model": "RADIAL",
+            "source_video": "redacted-example-source-video",
+            "sampling_fps": 10,
+            "begin_s": 12.0,
+            "end_s": null,
+            "valid_roi_xywh": [0, 0, 1919, 1079]
+        }
+    })
+}
+
+/// Publishing the profile every install already bundles must be a no-op, not a
+/// second version: the seed and the packaged file are the same document.
+#[tokio::test]
+async fn test_publishing_the_bundled_profile_is_a_no_op() {
+    let db = setup_test_db().await;
+    let (app, token) = enrolled(&db).await;
+
+    let (status, body) = publish(
+        &app,
+        &token,
+        &serde_json::json!({"name": "gopro_hero_10", "document": bundled_gopro_hero_10()}),
+    )
+    .await;
+
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(body["created"], false, "the seed differs from the bundled file: {body}");
+    assert_eq!(body["version"], 1);
+}

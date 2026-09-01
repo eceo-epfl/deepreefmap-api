@@ -710,6 +710,17 @@ impl MigrationTrait for Migration {
                             [0.0, 1562.98876953125, 539.5],
                             [0.0, 0.0, 1.0]
                         ]
+                    },
+                    "diagnostics": {
+                        "n_input_frames": 100,
+                        "n_registered_images": 100,
+                        "mean_reprojection_error_px": 0.783395585447909,
+                        "camera_model": "RADIAL",
+                        "source_video": "redacted-example-source-video",
+                        "sampling_fps": 10,
+                        "begin_s": 12.0,
+                        "end_s": null,
+                        "valid_roi_xywh": [0, 0, 1919, 1079]
                     }
                 }'::jsonb,
                 1920, 1080, 0.783395585447909, 100, '',
