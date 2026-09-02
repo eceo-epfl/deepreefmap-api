@@ -327,7 +327,7 @@ pub const TABLES: &[TableSpec] = &[
             // Which measurement of the lens the reconstruction was rectified with,
             // where the device knew: the run directory carries the document itself,
             // and this resolves it to the calibration the console holds.
-            col("camera_calibration_id", ColumnKind::Uuid).since(2),
+            col("camera_calibration_id", ColumnKind::Uuid),
         ],
         curated: true,
     },
@@ -351,7 +351,7 @@ pub const TABLES: &[TableSpec] = &[
 /// Highest contract version this server speaks. A document declaring anything but the
 /// version negotiated for its exchange is refused outright: parsing under the wrong
 /// version writes plausible wrong rows instead of failing.
-pub const CONTRACT_VERSION: u32 = 2;
+pub const CONTRACT_VERSION: u32 = 1;
 
 /// Oldest contract version this server still reads. Together with [`CONTRACT_VERSION`] it
 /// is the range a client negotiates against.

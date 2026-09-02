@@ -8,15 +8,7 @@ mod common;
 
 use common::*;
 
-use deepreefmap_api::common::contract::CONTRACT_HEADER;
-use deepreefmap_api::routes::private::sync::schema::{CONTRACT_VERSION, MIN_CONTRACT_VERSION};
-
-fn declaring(pairs: &[(&str, &str)]) -> Vec<(String, String)> {
-    pairs
-        .iter()
-        .map(|(name, value)| ((*name).to_string(), (*value).to_string()))
-        .collect()
-}
+use deepreefmap_api::routes::private::sync::schema::CONTRACT_VERSION;
 
 const UPLOAD: &str = "/api/camera_calibrations/upload";
 
@@ -211,20 +203,8 @@ async fn test_a_device_cannot_reach_the_camera_crud_routes() {
 async fn test_a_run_carries_the_calibration_it_was_rectified_with() {
     let db = setup_test_db().await;
     let app = build_test_app(db.clone());
-    let current = format!("{MIN_CONTRACT_VERSION}-{CONTRACT_VERSION}");
-    let headers = declaring(&[(CONTRACT_HEADER, current.as_str())]);
     let code = seed_connect_code(&db, "alice", "Alice laptop").await;
-    let (status, _, body) = post_declaring(
-        &app,
-        "/api/enrol",
-        &serde_json::json!({ "code": code }),
-        None,
-        &headers,
-    )
-    .await;
-    assert_eq!(status, 200, "enrolment failed: {body}");
-    let enrolled: serde_json::Value = serde_json::from_str(&body).expect("JSON");
-    let token = enrolled["token"].as_str().expect("a token").to_string();
+    let token = enrol_device(&app, &code).await;
 
     let (_, published) = publish(
         &app,
@@ -262,7 +242,7 @@ async fn test_a_run_carries_the_calibration_it_was_rectified_with() {
             }],
         }
     });
-    let (status, _, body) = post_declaring(&app, "/api/sync/push", &push, Some(&token), &headers).await;
+    let (status, body) = post(&app, "/api/sync/push", &push, Some(&token)).await;
     assert_eq!(status, 200, "{body}");
     let pushed: serde_json::Value = serde_json::from_str(&body).expect("JSON");
     assert_eq!(applied(&pushed["sections"]["runs"]), 1, "{pushed}");
