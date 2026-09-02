@@ -339,11 +339,9 @@ impl MigrationTrait for Migration {
         ))
         .await?;
 
-        // Deploying is a separate act from publishing, so what a profile deploys has to
-        // hold against every writer: the console, a sync apply, the CSV import. A
-        // validator cannot check it, having no way to read another table, and a foreign
-        // key cannot either: it would make the two tables mutually referential, and
-        // liveness here is a tombstone rather than a missing row.
+        // What a profile deploys has to hold against every writer: the console, a sync
+        // apply, the import. A validator cannot read another table, and a key cannot
+        // express liveness, which here is a tombstone rather than a missing row.
         db.execute_unprepared(
             r"
             CREATE OR REPLACE FUNCTION camera_profile_deploys_its_own() RETURNS TRIGGER AS $$
