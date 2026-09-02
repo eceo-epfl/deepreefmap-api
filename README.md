@@ -154,6 +154,8 @@ passes of one transect in one campaign, so there is nothing to curate by hand.
 | `run_record` | A reconstruction that already ran, with its provenance and scale. |
 | `cover_row` | Benthic cover in long format, one row per class group. |
 | `preset` | Named run settings the server defines. Pull only. |
+| `camera_profile` | A rig, by the name a preset and a run resolve. Names which calibration laptops run it under. Pull only. |
+| `camera_calibration` | One measurement of one rig, versioned. Holds the profile JSON the pipeline reads. Pull only. |
 | `device` | Enrolled desktop installation. Server-side only. |
 | `stored_object` | An archived blob and its upload state. Server-side only. |
 | `run_artifact` | One file of a run's output directory and the stored object holding it. Server-side only. |
@@ -166,6 +168,30 @@ Preset settings are validated against `contract/preset-schema.json`, generated f
 `survey/preset_schema.py` and `models/cache.py`, and the web console builds its
 preset form from the published copy. A lagging mirror degrades to a missing dropdown
 entry on the laptop, never a broken run: the desktop drops names it cannot offer.
+
+## Cameras
+
+A camera profile is a rig: a body, a lens mode, a housing, a resolution, under the name
+a preset carries and a laptop resolves against its own profile directory. A calibration
+is one measurement of that rig, and versions coexist, so a housing change invalidates
+the last measurement without invalidating the runs made under it.
+
+Publishing and deploying are separate acts. A laptop publishes what it measured through
+`POST /api/camera_calibrations/upload`, which is idempotent on the whole document and
+takes the next version otherwise. A curator then deploys one, by setting
+`camera_profile.current_calibration_id`, and that is what every laptop materialises on
+its next pull. A profile deploying nothing follows the newest, which is what a profile
+did before deploying existed. Deploying an earlier version is the rollback.
+
+Two rules the code cannot enforce:
+
+- **A profile name is a rig, not a camera model.** Two of the same camera in different
+  housings are two names. Once a name is in the registry its calibration shadows the
+  bundled document on every laptop that syncs, so naming is the whole game. The console
+  warns when a new calibration changes the optics of a name it already holds.
+- **After release the migration seed is frozen history.** The library catches up with
+  the registry by publishing, never by editing the seeded document: editing it
+  desynchronises every deployed database from every freshly migrated one.
 
 ## Importing the field spreadsheets
 
