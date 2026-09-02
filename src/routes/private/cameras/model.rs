@@ -34,6 +34,11 @@ pub struct Model {
     pub name: String,
     #[crudcrate(fulltext)]
     pub description: String,
+    /// Which calibration laptops run this rig under. None follows the newest, which
+    /// is what a profile does until a curator deploys a particular measurement.
+    /// Excluded from create: a profile has no calibrations at the moment it is made.
+    #[crudcrate(filterable, exclude(create))]
+    pub current_calibration_id: Option<Uuid>,
     #[crudcrate(exclude(create, update), sortable, on_create = chrono::Utc::now())]
     pub created_at: chrono::DateTime<chrono::Utc>,
     /// The conflict key last-write-wins resolves on. Server-stamped: `on_update` only

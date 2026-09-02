@@ -601,6 +601,14 @@
             "format": "date-time",
             "type": "string"
           },
+          "current_calibration_id": {
+            "description": "Which calibration laptops run this rig under. None follows the newest, which\nis what a profile does until a curator deploys a particular measurement.\nExcluded from create: a profile has no calibrations at the moment it is made.",
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "deleted_at": {
             "description": "The tombstone. Written only by the delete route, which administrators alone\nreach, and by `/api/sync/push`.",
             "format": "date-time",
@@ -654,6 +662,14 @@
             "format": "date-time",
             "type": "string"
           },
+          "current_calibration_id": {
+            "description": "Which calibration laptops run this rig under. None follows the newest, which\nis what a profile does until a curator deploys a particular measurement.\nExcluded from create: a profile has no calibrations at the moment it is made.",
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "deleted_at": {
             "description": "The tombstone. Written only by the delete route, which administrators alone\nreach, and by `/api/sync/push`.",
             "format": "date-time",
@@ -704,6 +720,13 @@
       "CameraProfileUpdate": {
         "additionalProperties": false,
         "properties": {
+          "current_calibration_id": {
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "description": {
             "type": [
               "string",
@@ -7156,7 +7179,7 @@
     },
     "/camera_profiles": {
       "get": {
-        "description": "Retrieves all camera_profiles.\n\nThis resource manages camera_profile items\n\nAdditional sortable columns: \n- name\n- created_at\n- updated_at\n- deleted_at\n- server_seq.\n\nAdditional filterable columns: \n- id\n- name\n- deleted_at\n- device_id.",
+        "description": "Retrieves all camera_profiles.\n\nThis resource manages camera_profile items\n\nAdditional sortable columns: \n- name\n- created_at\n- updated_at\n- deleted_at\n- server_seq.\n\nAdditional filterable columns: \n- id\n- name\n- current_calibration_id\n- deleted_at\n- device_id.",
         "operationId": "get_all_camera_profiles",
         "parameters": [
           {

@@ -292,6 +292,9 @@ impl MigrationTrait for Migration {
                 id           UUID PRIMARY KEY,
                 name         TEXT NOT NULL,
                 description  TEXT NOT NULL DEFAULT '',
+                -- Which calibration laptops run under. NULL follows the newest, which
+                -- is what a profile does until a curator deploys a particular one.
+                current_calibration_id UUID,
                 {SYNC_COLUMNS}
             );
             -- The name a preset and a run record carry, so it resolves to one profile.
@@ -334,6 +337,52 @@ impl MigrationTrait for Migration {
                 ON camera_calibration (camera_profile_id);
             "
         ))
+        .await?;
+
+        // Deploying is a separate act from publishing, so what a profile deploys has to
+        // hold against every writer: the console, a sync apply, the CSV import. A
+        // validator cannot check it, having no way to read another table, and a foreign
+        // key cannot either: it would make the two tables mutually referential, and
+        // liveness here is a tombstone rather than a missing row.
+        db.execute_unprepared(
+            r"
+            CREATE OR REPLACE FUNCTION camera_profile_deploys_its_own() RETURNS TRIGGER AS $$
+            BEGIN
+                IF NEW.current_calibration_id IS NOT NULL AND NOT EXISTS (
+                    SELECT 1 FROM camera_calibration
+                    WHERE id = NEW.current_calibration_id
+                      AND camera_profile_id = NEW.id
+                      AND deleted_at IS NULL
+                ) THEN
+                    RAISE EXCEPTION
+                        'calibration % is not a live calibration of camera profile %',
+                        NEW.current_calibration_id, NEW.id;
+                END IF;
+                RETURN NEW;
+            END;
+            $$ LANGUAGE plpgsql;
+
+            CREATE TRIGGER camera_profile_deploys_a_live_calibration
+                BEFORE INSERT OR UPDATE ON camera_profile
+                FOR EACH ROW EXECUTE FUNCTION camera_profile_deploys_its_own();
+
+            CREATE OR REPLACE FUNCTION camera_calibration_release_pin() RETURNS TRIGGER AS $$
+            BEGIN
+                IF NEW.deleted_at IS NOT NULL AND OLD.deleted_at IS NULL THEN
+                    UPDATE camera_profile SET current_calibration_id = NULL
+                    WHERE current_calibration_id = NEW.id;
+                END IF;
+                RETURN NEW;
+            END;
+            $$ LANGUAGE plpgsql;
+
+            -- Tombstoning what a profile deploys must not strand the laptops that
+            -- resolve it: the profile falls back to following the newest.
+            CREATE TRIGGER camera_calibration_releases_its_pin
+                AFTER UPDATE ON camera_calibration
+                FOR EACH ROW EXECUTE FUNCTION camera_calibration_release_pin();
+            ",
+        )
         .await?;
 
         // A report of a reconstruction that already ran, not a request to run one.

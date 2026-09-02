@@ -314,3 +314,186 @@ async fn test_publishing_the_bundled_profile_is_a_no_op() {
     assert_eq!(body["created"], false, "the seed differs from the bundled file: {body}");
     assert_eq!(body["version"], 1);
 }
+
+/// Deploying is a curator's act, separate from publishing: a laptop publishes what
+/// it measured, and the console decides which measurement every laptop then runs
+/// under.
+#[tokio::test]
+async fn test_a_curator_deploys_one_calibration_of_a_profile() {
+    let db = setup_test_db().await;
+    let (app, token) = enrolled(&db).await;
+    let console = build_test_app_as_member(db.clone());
+
+    let (_, first) = publish(
+        &app,
+        &token,
+        &serde_json::json!({"name": "hero12_dome", "document": document("hero12_dome", 1243.0)}),
+    )
+    .await;
+    let profile = first["camera_profile_id"].as_str().expect("a profile");
+    let v1 = first["camera_calibration_id"].as_str().expect("a calibration");
+
+    let (status, body) = put(
+        &console,
+        &format!("/api/camera_profiles/{profile}"),
+        &serde_json::json!({"current_calibration_id": v1}),
+        None,
+    )
+    .await;
+
+    assert_eq!(status, 200, "{body}");
+    let stored: serde_json::Value = serde_json::from_str(&body).expect("JSON");
+    assert_eq!(stored["current_calibration_id"], v1);
+}
+
+/// A profile nobody has deployed follows the newest, which is what it did before
+/// deploying existed: publishing a rig from the field still reaches every laptop.
+#[tokio::test]
+async fn test_a_first_publication_leaves_the_profile_following_the_newest() {
+    let db = setup_test_db().await;
+    let (app, token) = enrolled(&db).await;
+    let console = build_test_app_as_member(db.clone());
+
+    let (_, published) = publish(
+        &app,
+        &token,
+        &serde_json::json!({"name": "hero12_dome", "document": document("hero12_dome", 1243.0)}),
+    )
+    .await;
+    let profile = published["camera_profile_id"].as_str().expect("a profile");
+
+    let (status, body) = get_json(&console, &format!("/api/camera_profiles/{profile}"), None).await;
+
+    assert_eq!(status, 200, "{body}");
+    assert!(body["current_calibration_id"].is_null(), "{body}");
+}
+
+/// Publishing to a deployed profile stages the measurement rather than shipping it.
+/// This is the whole point: a new calibration reaches nobody until it is deployed.
+#[tokio::test]
+async fn test_publishing_over_a_deployed_calibration_leaves_it_deployed() {
+    let db = setup_test_db().await;
+    let (app, token) = enrolled(&db).await;
+    let console = build_test_app_as_member(db.clone());
+
+    let (_, first) = publish(
+        &app,
+        &token,
+        &serde_json::json!({"name": "hero12_dome", "document": document("hero12_dome", 1243.0)}),
+    )
+    .await;
+    let profile = first["camera_profile_id"].as_str().expect("a profile");
+    let v1 = first["camera_calibration_id"].as_str().expect("a calibration").to_string();
+    let (status, body) = put(
+        &console,
+        &format!("/api/camera_profiles/{profile}"),
+        &serde_json::json!({"current_calibration_id": v1}),
+        None,
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+
+    let (_, second) = publish(
+        &app,
+        &token,
+        &serde_json::json!({"name": "hero12_dome", "document": document("hero12_dome", 1301.0)}),
+    )
+    .await;
+    assert_eq!(second["version"], 2, "{second}");
+
+    let (_, stored) = get_json(&console, &format!("/api/camera_profiles/{profile}"), None).await;
+    assert_eq!(stored["current_calibration_id"], v1, "{stored}");
+}
+
+/// A profile deploys its own measurements and only those: another rig's calibration
+/// would rectify every laptop's footage with the wrong lens.
+#[tokio::test]
+async fn test_a_profile_cannot_deploy_another_rigs_calibration() {
+    let db = setup_test_db().await;
+    let (app, token) = enrolled(&db).await;
+    let console = build_test_app_as_member(db.clone());
+
+    let (_, mine) = publish(
+        &app,
+        &token,
+        &serde_json::json!({"name": "hero12_dome", "document": document("hero12_dome", 1243.0)}),
+    )
+    .await;
+    let (_, theirs) = publish(
+        &app,
+        &token,
+        &serde_json::json!({"name": "hero12_flat", "document": document("hero12_flat", 980.0)}),
+    )
+    .await;
+    let profile = mine["camera_profile_id"].as_str().expect("a profile");
+    let other = theirs["camera_calibration_id"].as_str().expect("a calibration");
+
+    let (status, _) = put(
+        &console,
+        &format!("/api/camera_profiles/{profile}"),
+        &serde_json::json!({"current_calibration_id": other}),
+        None,
+    )
+    .await;
+
+    assert_ne!(status, 200, "another profile's calibration was deployed");
+}
+
+/// Withdrawing what a profile deploys must not strand the laptops resolving it:
+/// the profile falls back to following the newest.
+#[tokio::test]
+async fn test_withdrawing_the_deployed_calibration_releases_the_profile() {
+    let db = setup_test_db().await;
+    let (app, token) = enrolled(&db).await;
+    let console = build_test_app_as_admin(db.clone());
+
+    let (_, first) = publish(
+        &app,
+        &token,
+        &serde_json::json!({"name": "hero12_dome", "document": document("hero12_dome", 1243.0)}),
+    )
+    .await;
+    let profile = first["camera_profile_id"].as_str().expect("a profile");
+    let v1 = first["camera_calibration_id"].as_str().expect("a calibration");
+    let (status, body) = put(
+        &console,
+        &format!("/api/camera_profiles/{profile}"),
+        &serde_json::json!({"current_calibration_id": v1}),
+        None,
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+
+    let (status, body) = delete(&console, &format!("/api/camera_calibrations/{v1}"), None).await;
+    assert_eq!(status, 204, "{body}");
+
+    let (_, stored) = get_json(&console, &format!("/api/camera_profiles/{profile}"), None).await;
+    assert!(stored["current_calibration_id"].is_null(), "{stored}");
+}
+
+/// A device reads what to deploy; it never decides it. Deciding for every other
+/// laptop is the authority the console keeps.
+#[tokio::test]
+async fn test_a_device_cannot_deploy_a_calibration() {
+    let db = setup_test_db().await;
+    let (app, token) = enrolled(&db).await;
+
+    let (_, published) = publish(
+        &app,
+        &token,
+        &serde_json::json!({"name": "hero12_dome", "document": document("hero12_dome", 1243.0)}),
+    )
+    .await;
+    let profile = published["camera_profile_id"].as_str().expect("a profile");
+    let calibration = published["camera_calibration_id"].as_str().expect("a calibration");
+
+    let (status, _) = put(
+        &app,
+        &format!("/api/camera_profiles/{profile}"),
+        &serde_json::json!({"current_calibration_id": calibration}),
+        Some(&token),
+    )
+    .await;
+
+    assert_eq!(status, 403);
+}

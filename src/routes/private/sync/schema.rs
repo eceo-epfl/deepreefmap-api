@@ -269,6 +269,9 @@ pub const TABLES: &[TableSpec] = &[
         own_columns: &[
             required("name", ColumnKind::Text),
             required("description", ColumnKind::Text),
+            // Which calibration a laptop materialises for this rig. Null follows the
+            // newest, so a profile no curator has deployed behaves as it always did.
+            col("current_calibration_id", ColumnKind::Uuid),
         ],
         curated: false,
     },

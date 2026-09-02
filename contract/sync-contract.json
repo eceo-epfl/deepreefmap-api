@@ -940,6 +940,14 @@
         },
         {
           "derived": false,
+          "kind": "uuid",
+          "name": "current_calibration_id",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
           "kind": "timestamp",
           "name": "created_at",
           "nullable": false,
