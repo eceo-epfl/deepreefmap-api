@@ -490,7 +490,13 @@ async fn test_overview_groups_objects_by_run_and_clip() {
     seed_run_artifact(&db, run_id, "ortho/ortho.png", &second_hash, Some(&second)).await;
     seed_run_artifact(&db, run_id, "cloud.npz", &pending_hash, Some(&pending)).await;
     let clip_object = seed_complete_object(&db, OTHER_HASH).await;
-    seed_video(&db, "44444444-4444-4444-8444-444444444444", OTHER_HASH, "GX010042.MP4").await;
+    seed_video(
+        &db,
+        "44444444-4444-4444-8444-444444444444",
+        OTHER_HASH,
+        "GX010042.MP4",
+    )
+    .await;
     let orphan_hash = HASH.replace('0', "9");
     seed_object(&db, &orphan_hash, "complete").await;
     let app = build_test_app_with_config_as_human(
@@ -510,7 +516,11 @@ async fn test_overview_groups_objects_by_run_and_clip() {
     assert_eq!(runs[0]["complete"], 2);
     assert_eq!(runs[0]["failed"], 0);
     assert_eq!(runs[0]["pending"], 1);
-    assert_eq!(runs[0]["size_bytes"], 3 * 123, "every linked object, pending included");
+    assert_eq!(
+        runs[0]["size_bytes"],
+        3 * 123,
+        "every linked object, pending included"
+    );
     assert_eq!(runs[0]["state"], "partial");
     assert!(runs[0]["last_completed_at"].is_string(), "{body}");
 
@@ -549,7 +559,10 @@ async fn test_bundle_link_counts_the_group_it_signs() {
     assert_eq!(body["file_count"], 2, "every complete file: {body}");
     assert_eq!(body["filename"], "run-all.zip");
     let url = body["url"].as_str().expect("a signed url");
-    assert!(url.contains(&format!("/archive/runs/{run_id}/outputs.zip")), "{url}");
+    assert!(
+        url.contains(&format!("/archive/runs/{run_id}/outputs.zip")),
+        "{url}"
+    );
 
     let (status, body) = get_json(
         &app,
@@ -1207,7 +1220,10 @@ async fn test_run_outputs_count_past_a_list_page() {
     assert_eq!(status, 200, "{body}");
     assert_eq!(body["files"], 1101, "{body}");
     let groups = body["groups"].as_array().expect("groups");
-    let frames = groups.iter().find(|g| g["name"] == "frames").expect("frames");
+    let frames = groups
+        .iter()
+        .find(|g| g["name"] == "frames")
+        .expect("frames");
     assert_eq!(frames["files"], 1100, "{body}");
     assert!(
         groups.iter().any(|g| g["name"] == "Results"),
@@ -1222,7 +1238,11 @@ async fn test_run_outputs_count_past_a_list_page() {
     .await;
     assert_eq!(status, 200, "{body}");
     let files = body["files"].as_array().expect("files");
-    assert_eq!(files.len(), 100, "the tail past the page cap is reachable: {body}");
+    assert_eq!(
+        files.len(),
+        100,
+        "the tail past the page cap is reachable: {body}"
+    );
     assert_eq!(files[0]["relpath"], "frames/001001.png", "{body}");
 }
 
@@ -1263,7 +1283,10 @@ async fn test_run_output_files_list_one_group() {
     )
     .await;
     assert_eq!(status, 200, "{body}");
-    assert!(body["files"].as_array().expect("files").is_empty(), "{body}");
+    assert!(
+        body["files"].as_array().expect("files").is_empty(),
+        "{body}"
+    );
 }
 
 #[tokio::test]

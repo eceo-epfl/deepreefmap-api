@@ -4,10 +4,10 @@
 //! the archive: they are already compressed formats, and a stored entry costs one pass
 //! over the bytes with no memory held per file.
 
+use async_zip::{Compression, ZipEntryBuilder};
 use axum::extract::{Path, Query, State};
 use axum::http::{HeaderValue, header};
 use axum::response::Response;
-use async_zip::{Compression, ZipEntryBuilder};
 use chrono::Utc;
 use utoipa::IntoParams;
 use uuid::Uuid;
@@ -94,14 +94,15 @@ pub async fn stream_bundle(
     // Packing ends by dropping the writer, which the reader would take for a clean
     // end of file: a zip with no central directory under a 200. The outcome follows
     // the last byte, so a failure aborts the transfer instead of finishing it.
-    let body = tokio_util::io::ReaderStream::new(reader).chain(futures_util::stream::once(
-        async move {
+    let body =
+        tokio_util::io::ReaderStream::new(reader).chain(futures_util::stream::once(async move {
             match packed.await {
                 Ok(Ok(())) => Ok(bytes::Bytes::new()),
-                _ => Err(std::io::Error::other("the bundle ended before its last file")),
+                _ => Err(std::io::Error::other(
+                    "the bundle ended before its last file",
+                )),
             }
-        },
-    ));
+        }));
 
     let filename = format!("{folder}-{}.zip", purpose::slug(&params.purpose));
     let disposition = format!("attachment; filename=\"{}\"", safe_name(&filename));

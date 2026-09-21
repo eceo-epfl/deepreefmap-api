@@ -93,7 +93,10 @@ async fn test_publishing_the_same_document_twice_stores_one_calibration() {
 
     assert_eq!(status, 200, "{again}");
     assert_eq!(again["created"], false);
-    assert_eq!(again["camera_calibration_id"], first["camera_calibration_id"]);
+    assert_eq!(
+        again["camera_calibration_id"],
+        first["camera_calibration_id"]
+    );
 }
 
 #[tokio::test]
@@ -122,7 +125,10 @@ async fn test_a_recalibration_takes_the_next_version_and_leaves_the_last_one() {
          ON p.id = c.camera_profile_id WHERE LOWER(p.name) = 'hero12_dome'",
     )
     .await;
-    assert_eq!(held, 2, "the calibration a run was rectified with still stands");
+    assert_eq!(
+        held, 2,
+        "the calibration a run was rectified with still stands"
+    );
 }
 
 #[tokio::test]
@@ -311,7 +317,10 @@ async fn test_publishing_the_bundled_profile_is_a_no_op() {
     .await;
 
     assert_eq!(status, 200, "{body}");
-    assert_eq!(body["created"], false, "the seed differs from the bundled file: {body}");
+    assert_eq!(
+        body["created"], false,
+        "the seed differs from the bundled file: {body}"
+    );
     assert_eq!(body["version"], 1);
 }
 
@@ -331,7 +340,9 @@ async fn test_a_curator_deploys_one_calibration_of_a_profile() {
     )
     .await;
     let profile = first["camera_profile_id"].as_str().expect("a profile");
-    let v1 = first["camera_calibration_id"].as_str().expect("a calibration");
+    let v1 = first["camera_calibration_id"]
+        .as_str()
+        .expect("a calibration");
 
     let (status, body) = put(
         &console,
@@ -383,7 +394,10 @@ async fn test_publishing_over_a_deployed_calibration_leaves_it_deployed() {
     )
     .await;
     let profile = first["camera_profile_id"].as_str().expect("a profile");
-    let v1 = first["camera_calibration_id"].as_str().expect("a calibration").to_string();
+    let v1 = first["camera_calibration_id"]
+        .as_str()
+        .expect("a calibration")
+        .to_string();
     let (status, body) = put(
         &console,
         &format!("/api/camera_profiles/{profile}"),
@@ -426,7 +440,9 @@ async fn test_a_profile_cannot_deploy_another_rigs_calibration() {
     )
     .await;
     let profile = mine["camera_profile_id"].as_str().expect("a profile");
-    let other = theirs["camera_calibration_id"].as_str().expect("a calibration");
+    let other = theirs["camera_calibration_id"]
+        .as_str()
+        .expect("a calibration");
 
     let (status, _) = put(
         &console,
@@ -454,7 +470,9 @@ async fn test_withdrawing_the_deployed_calibration_releases_the_profile() {
     )
     .await;
     let profile = first["camera_profile_id"].as_str().expect("a profile");
-    let v1 = first["camera_calibration_id"].as_str().expect("a calibration");
+    let v1 = first["camera_calibration_id"]
+        .as_str()
+        .expect("a calibration");
     let (status, body) = put(
         &console,
         &format!("/api/camera_profiles/{profile}"),
@@ -485,7 +503,9 @@ async fn test_a_device_cannot_deploy_a_calibration() {
     )
     .await;
     let profile = published["camera_profile_id"].as_str().expect("a profile");
-    let calibration = published["camera_calibration_id"].as_str().expect("a calibration");
+    let calibration = published["camera_calibration_id"]
+        .as_str()
+        .expect("a calibration");
 
     let (status, _) = put(
         &app,

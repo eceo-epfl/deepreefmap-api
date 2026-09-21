@@ -69,7 +69,10 @@ pub fn protected_router(state: &AppState) -> OpenApiRouter {
         .nest("/presets", Preset::router(db).layer(admin_delete()))
         // Camera profiles and their calibrations, downloaded the same way. A device
         // publishes one through /camera_calibrations/upload, outside this guard.
-        .nest("/camera_profiles", CameraProfile::router(db).layer(admin_delete()))
+        .nest(
+            "/camera_profiles",
+            CameraProfile::router(db).layer(admin_delete()),
+        )
         .nest(
             "/camera_calibrations",
             CameraCalibration::router(db).layer(admin_delete()),

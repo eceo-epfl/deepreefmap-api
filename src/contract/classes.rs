@@ -91,7 +91,11 @@ pub static CLASS_GROUPS: LazyLock<Vec<ClassGroup>> = LazyLock::new(|| {
                 _ => class.name,
             };
             if !seen.iter().any(|group| group.name == name) {
-                seen.push(ClassGroup { level, name, colour: class.colour });
+                seen.push(ClassGroup {
+                    level,
+                    name,
+                    colour: class.colour,
+                });
             }
         }
         seen.sort_by_key(|group| group.name);
@@ -172,7 +176,11 @@ mod tests {
                     _ => class.name == group.name,
                 })
                 .expect("every group comes from a class");
-            assert_eq!(group.colour, first.colour, "{} at {}", group.name, group.level);
+            assert_eq!(
+                group.colour, first.colour,
+                "{} at {}",
+                group.name, group.level
+            );
         }
     }
 

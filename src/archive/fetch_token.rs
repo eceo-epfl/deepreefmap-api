@@ -42,7 +42,10 @@ fn bundle_claim(run_id: Uuid, purpose: &str, expires: i64) -> String {
 /// The signature for one run's output bundle, as lowercase hex.
 #[must_use]
 pub fn sign_bundle(secret: &[u8], run_id: Uuid, purpose: &str, expires: i64) -> String {
-    hex(signature_over(secret, &bundle_claim(run_id, purpose, expires)))
+    hex(signature_over(
+        secret,
+        &bundle_claim(run_id, purpose, expires),
+    ))
 }
 
 /// Whether `sig` is the live signature for this bundle.
@@ -123,8 +126,22 @@ mod tests {
         let sig = sign_bundle(SECRET, object(), "Results", 1_000);
         assert!(verify_bundle(SECRET, object(), "Results", 1_000, &sig, 999));
         assert!(!verify_bundle(SECRET, object(), "frames", 1_000, &sig, 999));
-        assert!(!verify_bundle(SECRET, Uuid::new_v4(), "Results", 1_000, &sig, 999));
-        assert!(!verify_bundle(SECRET, object(), "Results", 1_000, &sig, 1_001));
+        assert!(!verify_bundle(
+            SECRET,
+            Uuid::new_v4(),
+            "Results",
+            1_000,
+            &sig,
+            999
+        ));
+        assert!(!verify_bundle(
+            SECRET,
+            object(),
+            "Results",
+            1_000,
+            &sig,
+            1_001
+        ));
     }
 
     #[test]
