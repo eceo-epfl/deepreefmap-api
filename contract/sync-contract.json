@@ -4,7 +4,7 @@
     "prefix": "reef1.",
     "version": 1
   },
-  "contract_version": 1,
+  "contract_version": 2,
   "min_contract_version": 1,
   "own_rows_sections": [
     "videos",
@@ -1309,6 +1309,14 @@
           "nullable": true,
           "server_owned": false,
           "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "json",
+          "name": "performance_observation",
+          "nullable": true,
+          "server_owned": false,
+          "since": 2
         },
         {
           "derived": false,

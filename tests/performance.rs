@@ -801,3 +801,141 @@ async fn test_summary_refuses_a_device_token() {
     let (status, body) = get(&device_app, "/api/performance/summary", Some(&token)).await;
     assert_eq!(status, 403, "a device browsed the fleet: {body}");
 }
+
+#[tokio::test]
+async fn test_comparison_consolidates_workloads_and_filters_evidence() {
+    let db = setup_test_db().await;
+    let member = build_test_app_as_member(db.clone());
+    let device_app = build_test_app(db.clone());
+    seed_pass(&db).await;
+    let (device, _) = seed_device(&db, &device_app, "comparison", "Comparison", "GPU").await;
+    for (duration, ram) in [(100.0, 10), (400.0, 30)] {
+        seed_run(
+            &db,
+            &device,
+            "succeeded",
+            "seg",
+            "map",
+            "2026-09-21T12:00:00Z",
+            Some(duration),
+            &peaks(ram, 0, None),
+        )
+        .await;
+    }
+    exec(&db, "UPDATE run_record SET performance_observation = jsonb_build_object(
+        'version', 1, 'settings', jsonb_build_object('fps', 5, 'processing_width', 1000, 'processing_height', 500,
+            'preprocess_batch_size', 4, 'mapping_backend', 'map', 'segmentation_model', 'seg', 'mode', 'semantic'),
+        'hardware', jsonb_build_object('total_ram_bytes', 100), 'basis', 'process',
+        'timing_complete', true, 'frames', CASE WHEN run_duration_s = 100 THEN 100 ELSE 200 END)").await;
+    let (status, body) = get_json(&member, "/api/performance/comparison", None).await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(body["configurations"].as_array().unwrap().len(), 1);
+    assert_eq!(body["baseline"]["count"], 2);
+    assert_eq!(body["baseline"]["stats"]["ram"]["median"], 20.0);
+    assert_eq!(
+        body["baseline"]["stats"]["seconds_per_frame"]["median"],
+        1.5
+    );
+    let id = body["baseline"]["configuration"]["id"].as_str().unwrap();
+    let (status, evidence) = get_json(
+        &member,
+        &format!("/api/performance/evidence?baseline={id}&min_frames=150"),
+        None,
+    )
+    .await;
+    assert_eq!(status, 200, "{evidence}");
+    assert_eq!(evidence["total"], 1);
+    assert_eq!(evidence["rows"][0]["frames"], 200.0);
+    let (_, empty) = get_json(
+        &member,
+        &format!("/api/performance/evidence?baseline={id}&offset=50"),
+        None,
+    )
+    .await;
+    assert_eq!(empty["total"], 2);
+    assert_eq!(empty["rows"].as_array().unwrap().len(), 0);
+    let (status, _) = get_json(
+        &member,
+        "/api/performance/comparison?min_frames=20&max_frames=10",
+        None,
+    )
+    .await;
+    assert_eq!(status, 400);
+    seed_run(
+        &db,
+        &device,
+        "succeeded",
+        "seg",
+        "map",
+        "2026-09-22T12:00:00Z",
+        Some(50.0),
+        &peaks(5, 0, None),
+    )
+    .await;
+    exec(&db, "UPDATE run_record SET performance_observation = jsonb_set(
+        (SELECT performance_observation FROM run_record WHERE run_duration_s = 100), '{settings,fps}', '10'::jsonb)
+        WHERE run_duration_s = 50").await;
+    let (status, compared) = get_json(
+        &member,
+        &format!("/api/performance/comparison?baseline={id}&parameter=fps"),
+        None,
+    )
+    .await;
+    assert_eq!(status, 200, "{compared}");
+    assert_eq!(compared["alternatives"].as_array().unwrap().len(), 1);
+    let (_, different) = get_json(
+        &member,
+        &format!("/api/performance/comparison?baseline={id}&parameter=resolution"),
+        None,
+    )
+    .await;
+    assert!(different["alternatives"].as_array().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn test_performance_observation_sync_preserves_older_clients() {
+    let db = setup_test_db().await;
+    let app = build_test_app(db.clone());
+    let member = build_test_app_as_member(db.clone());
+    seed_pass(&db).await;
+    let (_, token) = seed_device(&db, &app, "sync-performance", "Sync performance", "GPU").await;
+    let id = uuid::Uuid::new_v4().to_string();
+    let meta = serde_json::json!({"version": 1, "basis": "process", "frames": 150,
+        "timing_complete": true, "hardware": {"total_ram_bytes": 100},
+        "settings": {"processing_width": 1000, "processing_height": 500, "fps": 5,
+            "preprocess_batch_size": 4, "mapping_backend": "map", "segmentation_model": "seg", "mode": "semantic"}});
+    let row = serde_json::json!({"id": id, "pass_id": PASS, "status": "succeeded",
+        "run_dir_name": "run", "error": "", "created_at": "2026-09-21T12:00:00Z",
+        "updated_at": "2026-09-21T12:00:00Z", "run_duration_s": 300,
+        "stage_peaks": {"mapping": {"ram_bytes": 20}}, "performance_observation": meta});
+    let mut headers = negotiation();
+    headers[0].1 = "1-2".to_owned();
+    let body = serde_json::json!({"contract_version": 2, "sections": {"runs": [row]}});
+    let (status, _, pushed) =
+        post_declaring(&app, "/api/sync/push", &body, Some(&token), &headers).await;
+    assert_eq!(status, 200, "{pushed}");
+    let (status, summary) = get_json(&member, "/api/performance/comparison", None).await;
+    assert_eq!(status, 200, "{summary}");
+    assert_eq!(
+        summary["baseline"]["configuration"]["known"], true,
+        "{summary}"
+    );
+    assert_eq!(
+        summary["baseline"]["stats"]["seconds_per_frame"]["median"],
+        2.0
+    );
+    let (status, _, pulled) =
+        get_declaring(&app, "/api/sync/pull?since=0", Some(&token), &headers).await;
+    assert_eq!(status, 200, "{pulled}");
+    let document: serde_json::Value = serde_json::from_str(&pulled).unwrap();
+    assert_eq!(
+        document["sections"]["runs"][0]["performance_observation"],
+        meta
+    );
+    let (_, older) = get_json(&app, "/api/sync/pull?since=0", Some(&token)).await;
+    assert!(
+        older["sections"]["runs"][0]
+            .get("performance_observation")
+            .is_none()
+    );
+}

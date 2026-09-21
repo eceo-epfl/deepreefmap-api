@@ -93,6 +93,10 @@ pub struct Model {
     #[sea_orm(column_type = "JsonBinary", nullable)]
     #[crudcrate(exclude(list))]
     pub stage_peaks: Option<serde_json::Value>,
+    /// Run-time settings, hardware and measurement eligibility.
+    #[sea_orm(column_type = "JsonBinary", nullable)]
+    #[crudcrate(exclude(list))]
+    pub performance_observation: Option<serde_json::Value>,
     /// The scale the cover was measured at: the camera profile, the tape length and
     /// crop width the run used, the metres per pixel that gave, and how the scale
     /// was established.

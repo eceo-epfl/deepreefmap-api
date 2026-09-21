@@ -1277,6 +1277,46 @@
         ],
         "type": "object"
       },
+      "ConfigurationSummary": {
+        "properties": {
+          "completed": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "configuration": {
+            "$ref": "#/components/schemas/PerformanceEvidence"
+          },
+          "count": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "failed": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "stats": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Distribution"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "workload": {
+            "$ref": "#/components/schemas/Distribution"
+          }
+        },
+        "required": [
+          "configuration",
+          "count",
+          "completed",
+          "failed",
+          "workload",
+          "stats"
+        ],
+        "type": "object"
+      },
       "CoverRowList": {
         "properties": {
           "class_group": {
@@ -1815,6 +1855,53 @@
           "id",
           "name",
           "created_at"
+        ],
+        "type": "object"
+      },
+      "Distribution": {
+        "properties": {
+          "max": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "median": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "min": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "n": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "q1": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "q3": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "n"
         ],
         "type": "object"
       },
@@ -2890,6 +2977,154 @@
             ]
           }
         },
+        "type": "object"
+      },
+      "PerformanceComparison": {
+        "properties": {
+          "alternatives": {
+            "items": {
+              "$ref": "#/components/schemas/ConfigurationSummary"
+            },
+            "type": "array"
+          },
+          "baseline": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ConfigurationSummary"
+              }
+            ]
+          },
+          "configurations": {
+            "items": {
+              "$ref": "#/components/schemas/PerformanceEvidence"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "configurations",
+          "alternatives"
+        ],
+        "type": "object"
+      },
+      "PerformanceEvidence": {
+        "properties": {
+          "basis": {
+            "type": "string"
+          },
+          "device_id": {
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "device_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "duration_s": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "frames": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "hardware": {},
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "known": {
+            "type": "boolean"
+          },
+          "ram": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "recorded_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "seconds_per_frame": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "settings": {},
+          "status": {
+            "type": "string"
+          },
+          "swap": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "timing_note": {
+            "type": "string"
+          },
+          "vram": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "settings",
+          "hardware",
+          "basis",
+          "known",
+          "status",
+          "timing_note"
+        ],
+        "type": "object"
+      },
+      "PerformanceEvidencePage": {
+        "properties": {
+          "offset": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/PerformanceEvidence"
+            },
+            "type": "array"
+          },
+          "total": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "rows",
+          "total",
+          "offset"
+        ],
         "type": "object"
       },
       "PerformanceGroup": {
@@ -4189,6 +4424,9 @@
           "pass_id": {
             "format": "uuid",
             "type": "string"
+          },
+          "performance_observation": {
+            "description": "Run-time settings, hardware and measurement eligibility."
           },
           "pixel_size_m": {
             "format": "double",
@@ -6141,7 +6379,7 @@
       "name": "MIT"
     },
     "title": "DeepReefMap API",
-    "version": "0.3.0"
+    "version": "0.3.1"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -10037,6 +10275,242 @@
           }
         },
         "summary": "Update one pass"
+      }
+    },
+    "/performance/comparison": {
+      "get": {
+        "operationId": "comparison",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "device_id",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "preset_name",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "preset_version",
+            "required": false,
+            "schema": {
+              "format": "int32",
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "baseline",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "parameter",
+            "required": false,
+            "schema": {
+              "enum": [
+                "resolution",
+                "fps",
+                "batch",
+                "models"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "min_frames",
+            "required": false,
+            "schema": {
+              "format": "int32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "max_frames",
+            "required": false,
+            "schema": {
+              "format": "int32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PerformanceComparison"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": [
+          "performance"
+        ]
+      }
+    },
+    "/performance/evidence": {
+      "get": {
+        "operationId": "evidence",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "device_id",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "preset_name",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "preset_version",
+            "required": false,
+            "schema": {
+              "format": "int32",
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "baseline",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "parameter",
+            "required": false,
+            "schema": {
+              "enum": [
+                "resolution",
+                "fps",
+                "batch",
+                "models"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "min_frames",
+            "required": false,
+            "schema": {
+              "format": "int32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "max_frames",
+            "required": false,
+            "schema": {
+              "format": "int32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PerformanceEvidencePage"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": [
+          "performance"
+        ]
       }
     },
     "/performance/summary": {

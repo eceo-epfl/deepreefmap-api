@@ -11,6 +11,7 @@ pub mod devices;
 pub mod me;
 pub mod passes;
 pub mod performance;
+pub mod performance_comparison;
 pub mod presets;
 pub mod runs;
 pub mod sites;
@@ -126,6 +127,7 @@ pub fn protected_router(state: &AppState) -> OpenApiRouter {
         .merge(devices::router::router(state))
         .merge(cover::router::router(state))
         .merge(performance::router(state))
+        .merge(performance_comparison::router(state))
         .merge(videos::router::router(state))
         .merge(archive::router::router(state))
         .nest("/camera_calibrations", cameras::router::router(state))
