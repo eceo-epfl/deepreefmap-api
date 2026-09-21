@@ -1,0 +1,432 @@
+{
+  "choices": {
+    "camera": [
+      "gopro_hero_10"
+    ],
+    "mapping": [
+      {
+        "approx_size_mb": 326,
+        "description": "SC-SfMLearner depth + pose estimation",
+        "gated": false,
+        "gpu_only": false,
+        "hf_repos": [
+          "EPFL-ECEO/deepreefmap-sfm-net"
+        ],
+        "name": "scsfmlearner"
+      },
+      {
+        "approx_size_mb": 4787,
+        "description": "LoGeR depth + pose estimation (GPU required)",
+        "gated": false,
+        "gpu_only": true,
+        "hf_repos": [
+          "Junyi42/LoGeR"
+        ],
+        "name": "loger"
+      },
+      {
+        "approx_size_mb": 4787,
+        "description": "LoGeR* (longer-context variant, GPU required)",
+        "gated": false,
+        "gpu_only": true,
+        "hf_repos": [
+          "Junyi42/LoGeR"
+        ],
+        "name": "loger_star"
+      }
+    ],
+    "resolution": [
+      "Native",
+      "Half",
+      "Quarter",
+      "Custom"
+    ],
+    "segmentation": [
+      {
+        "approx_size_mb": 110,
+        "description": "SegFormer B2 (lightweight, no auth required)",
+        "gated": false,
+        "gpu_only": false,
+        "hf_repos": [
+          "EPFL-ECEO/segformer-b2-finetuned-coralscapes-1024-1024"
+        ],
+        "name": "segformer-b2"
+      },
+      {
+        "approx_size_mb": 339,
+        "description": "SegFormer B5 (larger, no auth required)",
+        "gated": false,
+        "gpu_only": false,
+        "hf_repos": [
+          "EPFL-ECEO/segformer-b5-finetuned-coralscapes-1024-1024"
+        ],
+        "name": "segformer-b5"
+      },
+      {
+        "approx_size_mb": 257,
+        "description": "DINOv3 ViT-S DPT (requires HF login)",
+        "gated": true,
+        "gpu_only": false,
+        "hf_repos": [
+          "EPFL-ECEO/coralscapes-vit-s-dpt",
+          "facebook/dinov3-vits16-pretrain-lvd1689m"
+        ],
+        "name": "coralscapes-vit-s-dpt"
+      },
+      {
+        "approx_size_mb": 786,
+        "description": "DINOv3 ViT-B DPT (requires HF login)",
+        "gated": true,
+        "gpu_only": false,
+        "hf_repos": [
+          "EPFL-ECEO/coralscapes-vit-b-dpt",
+          "facebook/dinov3-vitb16-pretrain-lvd1689m"
+        ],
+        "name": "coralscapes-vit-b-dpt"
+      },
+      {
+        "approx_size_mb": 2542,
+        "description": "DINOv3 ViT-L DPT (largest, requires HF login)",
+        "gated": true,
+        "gpu_only": false,
+        "hf_repos": [
+          "EPFL-ECEO/coralscapes-vit-l-dpt",
+          "facebook/dinov3-vitl16-pretrain-lvd1689m"
+        ],
+        "name": "coralscapes-vit-l-dpt"
+      }
+    ]
+  },
+  "fields": [
+    {
+      "applies_when": [],
+      "choices": "",
+      "decimals": null,
+      "default": 5,
+      "key": "fps",
+      "kind": "int",
+      "label": "frames per second",
+      "maximum": 60.0,
+      "minimum": 1.0,
+      "nullable": false,
+      "open": false,
+      "step": null,
+      "unit": ""
+    },
+    {
+      "applies_when": [],
+      "choices": "segmentation",
+      "decimals": null,
+      "default": "coralscapes-vit-b-dpt",
+      "key": "segmentation_name",
+      "kind": "enum",
+      "label": "coral identification model",
+      "maximum": null,
+      "minimum": null,
+      "nullable": false,
+      "open": false,
+      "step": null,
+      "unit": ""
+    },
+    {
+      "applies_when": [],
+      "choices": "mapping",
+      "decimals": null,
+      "default": "loger_star",
+      "key": "mapping_name",
+      "kind": "enum",
+      "label": "processing method",
+      "maximum": null,
+      "minimum": null,
+      "nullable": false,
+      "open": false,
+      "step": null,
+      "unit": ""
+    },
+    {
+      "applies_when": [],
+      "choices": "camera",
+      "decimals": null,
+      "default": "gopro_hero_10",
+      "key": "camera_profile_name",
+      "kind": "enum",
+      "label": "camera",
+      "maximum": null,
+      "minimum": null,
+      "nullable": false,
+      "open": true,
+      "step": null,
+      "unit": ""
+    },
+    {
+      "applies_when": [],
+      "choices": "",
+      "decimals": 2,
+      "default": 1.0,
+      "key": "transect_crop_width",
+      "kind": "float",
+      "label": "transect width",
+      "maximum": 50.0,
+      "minimum": 0.0,
+      "nullable": false,
+      "open": false,
+      "step": 0.1,
+      "unit": "m"
+    },
+    {
+      "applies_when": [],
+      "choices": "",
+      "decimals": null,
+      "default": false,
+      "key": "enable_tsdf",
+      "kind": "bool",
+      "label": "surface fusion",
+      "maximum": null,
+      "minimum": null,
+      "nullable": false,
+      "open": false,
+      "step": null,
+      "unit": ""
+    },
+    {
+      "applies_when": [],
+      "choices": "",
+      "decimals": null,
+      "default": false,
+      "key": "skip_segmentation",
+      "kind": "bool",
+      "label": "skipping coral identification",
+      "maximum": null,
+      "minimum": null,
+      "nullable": false,
+      "open": false,
+      "step": null,
+      "unit": ""
+    },
+    {
+      "applies_when": [],
+      "choices": "resolution",
+      "decimals": null,
+      "default": "Native",
+      "key": "resolution_preset",
+      "kind": "enum",
+      "label": "image resolution",
+      "maximum": null,
+      "minimum": null,
+      "nullable": false,
+      "open": false,
+      "step": null,
+      "unit": ""
+    },
+    {
+      "applies_when": [],
+      "choices": "",
+      "decimals": null,
+      "default": null,
+      "key": "processing_width",
+      "kind": "int",
+      "label": "image width",
+      "maximum": 3840.0,
+      "minimum": 256.0,
+      "nullable": true,
+      "open": false,
+      "step": 32.0,
+      "unit": ""
+    },
+    {
+      "applies_when": [],
+      "choices": "",
+      "decimals": null,
+      "default": null,
+      "key": "processing_height",
+      "kind": "int",
+      "label": "image height",
+      "maximum": 2160.0,
+      "minimum": 256.0,
+      "nullable": true,
+      "open": false,
+      "step": 32.0,
+      "unit": ""
+    },
+    {
+      "applies_when": [],
+      "choices": "",
+      "decimals": null,
+      "default": 4,
+      "key": "preprocess_batch_size",
+      "kind": "int",
+      "label": "frames processed at once",
+      "maximum": 16.0,
+      "minimum": 1.0,
+      "nullable": false,
+      "open": false,
+      "step": null,
+      "unit": ""
+    },
+    {
+      "applies_when": [],
+      "choices": "",
+      "decimals": null,
+      "default": 2000,
+      "key": "grid_bins",
+      "kind": "int",
+      "label": "map detail",
+      "maximum": 10000.0,
+      "minimum": 100.0,
+      "nullable": false,
+      "open": false,
+      "step": 100.0,
+      "unit": ""
+    },
+    {
+      "applies_when": [],
+      "choices": "",
+      "decimals": null,
+      "default": false,
+      "key": "require_gravity_telemetry",
+      "kind": "bool",
+      "label": "requiring camera tilt data",
+      "maximum": null,
+      "minimum": null,
+      "nullable": false,
+      "open": false,
+      "step": null,
+      "unit": ""
+    },
+    {
+      "applies_when": [],
+      "choices": "",
+      "decimals": 2,
+      "default": 0.0,
+      "key": "replacement_radius_factor",
+      "kind": "float",
+      "label": "replacement radius factor",
+      "maximum": 10.0,
+      "minimum": 0.0,
+      "nullable": false,
+      "open": false,
+      "step": 0.1,
+      "unit": ""
+    },
+    {
+      "applies_when": [],
+      "choices": "",
+      "decimals": null,
+      "default": 30,
+      "key": "replacement_radius_estimation_frames",
+      "kind": "int",
+      "label": "replacement radius estimation frames",
+      "maximum": 200.0,
+      "minimum": 1.0,
+      "nullable": false,
+      "open": false,
+      "step": null,
+      "unit": ""
+    },
+    {
+      "applies_when": [],
+      "choices": "",
+      "decimals": 4,
+      "default": 0.0,
+      "key": "replacement_radius_override",
+      "kind": "float",
+      "label": "replacement radius override",
+      "maximum": 10.0,
+      "minimum": 0.0,
+      "nullable": false,
+      "open": false,
+      "step": 0.001,
+      "unit": "m"
+    },
+    {
+      "applies_when": [
+        "loger",
+        "loger_star"
+      ],
+      "choices": "",
+      "decimals": null,
+      "default": 32,
+      "key": "loger_window_size",
+      "kind": "int",
+      "label": "loger window size",
+      "maximum": 256.0,
+      "minimum": 1.0,
+      "nullable": false,
+      "open": false,
+      "step": null,
+      "unit": ""
+    },
+    {
+      "applies_when": [
+        "loger",
+        "loger_star"
+      ],
+      "choices": "",
+      "decimals": null,
+      "default": 3,
+      "key": "loger_overlap_size",
+      "kind": "int",
+      "label": "loger overlap size",
+      "maximum": 64.0,
+      "minimum": 0.0,
+      "nullable": false,
+      "open": false,
+      "step": null,
+      "unit": ""
+    },
+    {
+      "applies_when": [],
+      "choices": "",
+      "decimals": null,
+      "default": false,
+      "key": "refine_intrinsics_from_mapper",
+      "kind": "bool",
+      "label": "camera lens refinement",
+      "maximum": null,
+      "minimum": null,
+      "nullable": false,
+      "open": false,
+      "step": null,
+      "unit": ""
+    },
+    {
+      "applies_when": [
+        "scsfmlearner"
+      ],
+      "choices": "",
+      "decimals": null,
+      "default": 512,
+      "key": "scs_target_width",
+      "kind": "int",
+      "label": "scs target width",
+      "maximum": 2048.0,
+      "minimum": 64.0,
+      "nullable": false,
+      "open": false,
+      "step": 32.0,
+      "unit": ""
+    },
+    {
+      "applies_when": [
+        "scsfmlearner"
+      ],
+      "choices": "",
+      "decimals": null,
+      "default": 256,
+      "key": "scs_target_height",
+      "kind": "int",
+      "label": "scs target height",
+      "maximum": 2048.0,
+      "minimum": 64.0,
+      "nullable": false,
+      "open": false,
+      "step": 32.0,
+      "unit": ""
+    }
+  ],
+  "preset_schema_version": 2,
+  "unpublishable_keys": [
+    "loger_model_path",
+    "scs_checkpoint_path"
+  ]
+}

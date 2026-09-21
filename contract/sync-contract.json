@@ -1,0 +1,1556 @@
+{
+  "connect_code": {
+    "family": "reef",
+    "prefix": "reef1.",
+    "version": 1
+  },
+  "contract_version": 1,
+  "min_contract_version": 1,
+  "own_rows_sections": [
+    "videos",
+    "passes",
+    "pass_videos",
+    "runs",
+    "cover_rows"
+  ],
+  "own_rows_since": 1,
+  "pull_sections": [
+    "sites",
+    "campaigns",
+    "transects",
+    "presets",
+    "camera_profiles",
+    "camera_calibrations"
+  ],
+  "push_sections": [
+    "sites",
+    "campaigns",
+    "transects",
+    "videos",
+    "passes",
+    "pass_videos",
+    "runs",
+    "cover_rows"
+  ],
+  "sections": [
+    "sites",
+    "campaigns",
+    "transects",
+    "videos",
+    "passes",
+    "pass_videos",
+    "presets",
+    "camera_profiles",
+    "camera_calibrations",
+    "runs",
+    "cover_rows"
+  ],
+  "tables": [
+    {
+      "columns": [
+        {
+          "derived": false,
+          "kind": "uuid",
+          "name": "id",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "name",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "country",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "region",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "description",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "float",
+          "name": "latitude",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "float",
+          "name": "longitude",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "created_at",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "updated_at",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "deleted_at",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "uuid",
+          "name": "device_id",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "validated_at",
+          "nullable": true,
+          "server_owned": true,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "validated_by",
+          "nullable": true,
+          "server_owned": true,
+          "since": 1
+        }
+      ],
+      "section": "sites",
+      "table": "site"
+    },
+    {
+      "columns": [
+        {
+          "derived": false,
+          "kind": "uuid",
+          "name": "id",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "name",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "date",
+          "name": "begin_date",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "date",
+          "name": "end_date",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "description",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "created_at",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "updated_at",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "deleted_at",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "uuid",
+          "name": "device_id",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "validated_at",
+          "nullable": true,
+          "server_owned": true,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "validated_by",
+          "nullable": true,
+          "server_owned": true,
+          "since": 1
+        }
+      ],
+      "section": "campaigns",
+      "table": "campaign"
+    },
+    {
+      "columns": [
+        {
+          "derived": false,
+          "kind": "uuid",
+          "name": "id",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "uuid",
+          "name": "site_id",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "name",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "description",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "float",
+          "name": "start_lat",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "float",
+          "name": "start_lon",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "float",
+          "name": "start_accuracy_m",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "float",
+          "name": "end_lat",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "float",
+          "name": "end_lon",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "float",
+          "name": "end_accuracy_m",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "float",
+          "name": "length_m",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": true,
+          "kind": "float",
+          "name": "depth_m",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "float",
+          "name": "start_depth_m",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "float",
+          "name": "end_depth_m",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "created_at",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "updated_at",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "deleted_at",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "uuid",
+          "name": "device_id",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "validated_at",
+          "nullable": true,
+          "server_owned": true,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "validated_by",
+          "nullable": true,
+          "server_owned": true,
+          "since": 1
+        }
+      ],
+      "section": "transects",
+      "table": "transect"
+    },
+    {
+      "columns": [
+        {
+          "derived": false,
+          "kind": "uuid",
+          "name": "id",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "hash",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "file_name",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "big_int",
+          "name": "size_bytes",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "float",
+          "name": "duration_s",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "float",
+          "name": "fps",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "int",
+          "name": "width",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "int",
+          "name": "height",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "codec",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "captured_at",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "captured_source",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "gravity",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "gps",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "camera_label",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "rig_position",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "bool",
+          "name": "upside_down",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "review",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "notes",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "created_at",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "updated_at",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "deleted_at",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "uuid",
+          "name": "device_id",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "validated_at",
+          "nullable": true,
+          "server_owned": true,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "validated_by",
+          "nullable": true,
+          "server_owned": true,
+          "since": 1
+        }
+      ],
+      "section": "videos",
+      "table": "video_asset"
+    },
+    {
+      "columns": [
+        {
+          "derived": false,
+          "kind": "uuid",
+          "name": "id",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "uuid",
+          "name": "transect_id",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "uuid",
+          "name": "campaign_id",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "float",
+          "name": "begin_s",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "float",
+          "name": "end_s",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "direction",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "label",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "notes",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "quality",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "date",
+          "name": "surveyed_on",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "created_at",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "updated_at",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "deleted_at",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "uuid",
+          "name": "device_id",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "validated_at",
+          "nullable": true,
+          "server_owned": true,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "validated_by",
+          "nullable": true,
+          "server_owned": true,
+          "since": 1
+        }
+      ],
+      "section": "passes",
+      "table": "transect_pass"
+    },
+    {
+      "columns": [
+        {
+          "derived": false,
+          "kind": "uuid",
+          "name": "id",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "uuid",
+          "name": "pass_id",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "uuid",
+          "name": "video_id",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "int",
+          "name": "ordinal",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "created_at",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "updated_at",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "deleted_at",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "uuid",
+          "name": "device_id",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "validated_at",
+          "nullable": true,
+          "server_owned": true,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "validated_by",
+          "nullable": true,
+          "server_owned": true,
+          "since": 1
+        }
+      ],
+      "section": "pass_videos",
+      "table": "pass_video"
+    },
+    {
+      "columns": [
+        {
+          "derived": false,
+          "kind": "uuid",
+          "name": "id",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "name",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "int",
+          "name": "version",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "json",
+          "name": "settings",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "description",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "created_at",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "updated_at",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "deleted_at",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "uuid",
+          "name": "device_id",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        }
+      ],
+      "section": "presets",
+      "table": "preset"
+    },
+    {
+      "columns": [
+        {
+          "derived": false,
+          "kind": "uuid",
+          "name": "id",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "name",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "description",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "uuid",
+          "name": "current_calibration_id",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "created_at",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "updated_at",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "deleted_at",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "uuid",
+          "name": "device_id",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        }
+      ],
+      "section": "camera_profiles",
+      "table": "camera_profile"
+    },
+    {
+      "columns": [
+        {
+          "derived": false,
+          "kind": "uuid",
+          "name": "id",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "uuid",
+          "name": "camera_profile_id",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "int",
+          "name": "version",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "json",
+          "name": "document",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "int",
+          "name": "image_width",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "int",
+          "name": "image_height",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "float",
+          "name": "reprojection_error_px",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "int",
+          "name": "registered_frames",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "source_clip",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "calibrated_at",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "description",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "created_at",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "updated_at",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "deleted_at",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "uuid",
+          "name": "device_id",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        }
+      ],
+      "section": "camera_calibrations",
+      "table": "camera_calibration"
+    },
+    {
+      "columns": [
+        {
+          "derived": false,
+          "kind": "uuid",
+          "name": "id",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "uuid",
+          "name": "pass_id",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "status",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "started_at",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "finished_at",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "error",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "run_dir_name",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "gui_version",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "library_version",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "segmentation_model",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "mapping_backend",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "int",
+          "name": "processing_width",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "int",
+          "name": "processing_height",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "int",
+          "name": "fps",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "int",
+          "name": "preprocess_batch_size",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "int",
+          "name": "taxonomy_version",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "taxonomy_hash",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "json",
+          "name": "model_revisions",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "preset_name",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "json",
+          "name": "preset_deviations",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "int",
+          "name": "preset_version",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "preset_hash",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "float",
+          "name": "run_duration_s",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "json",
+          "name": "stage_durations",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "json",
+          "name": "stage_peaks",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "camera_profile",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "float",
+          "name": "pixel_size_m",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "scale_type",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "float",
+          "name": "transect_length_m",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "float",
+          "name": "crop_width_m",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "uuid",
+          "name": "preset_id",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "uuid",
+          "name": "batch_id",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "uuid",
+          "name": "camera_calibration_id",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "created_at",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "updated_at",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "deleted_at",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "uuid",
+          "name": "device_id",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "validated_at",
+          "nullable": true,
+          "server_owned": true,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "validated_by",
+          "nullable": true,
+          "server_owned": true,
+          "since": 1
+        }
+      ],
+      "section": "runs",
+      "table": "run_record"
+    },
+    {
+      "columns": [
+        {
+          "derived": false,
+          "kind": "uuid",
+          "name": "id",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "uuid",
+          "name": "run_id",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "level",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "class_group",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "estimator",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "float",
+          "name": "fraction",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "float",
+          "name": "point_count",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "float",
+          "name": "denominator",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "metric_source",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "created_at",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "updated_at",
+          "nullable": false,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "deleted_at",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "uuid",
+          "name": "device_id",
+          "nullable": true,
+          "server_owned": false,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "timestamp",
+          "name": "validated_at",
+          "nullable": true,
+          "server_owned": true,
+          "since": 1
+        },
+        {
+          "derived": false,
+          "kind": "text",
+          "name": "validated_by",
+          "nullable": true,
+          "server_owned": true,
+          "since": 1
+        }
+      ],
+      "section": "cover_rows",
+      "table": "cover_row"
+    }
+  ]
+}

@@ -1,0 +1,191 @@
+//! Deletion as a tombstone, for every syncable table.
+
+use axum::{
+    extract::Request,
+    http::uri::{PathAndQuery, Uri},
+    middleware::Next,
+    response::Response,
+};
+use crudcrate::ScopeCondition;
+use sea_orm::Condition;
+use sea_orm::sea_query::{Alias, Expr, ExprTrait};
+
+/// Scope every read to live rows.
+///
+/// The generated handlers merge the scope into the page, its `Content-Range` total and
+/// get-one, so the two cannot disagree. Safe methods only: crudcrate refuses any write
+/// carrying a scope, and deletes must stay unscoped so `soft_delete_one` can restate an
+/// existing tombstone.
+pub async fn hide_tombstones(mut request: Request, next: Next) -> Response {
+    if request.method().is_safe() {
+        if let Some(uri) = strip_deleted_at_filter(request.uri()) {
+            *request.uri_mut() = uri;
+        }
+        // Unqualified column, since every query behind this layer is single-table.
+        // Revisit before adopting dot-notation joined filters.
+        request.extensions_mut().insert(ScopeCondition::new(
+            Condition::all().add(Expr::col(Alias::new("deleted_at")).is_null()),
+        ));
+    }
+    next.run(request).await
+}
+
+/// Drop any caller-sent `deleted_at` filter: `/api/sync/pull` is the only route that
+/// hands out tombstones. A filter that does not parse is dropped whole.
+fn strip_deleted_at_filter(uri: &Uri) -> Option<Uri> {
+    let query = uri.query()?;
+    let raw = form_urlencoded::parse(query.as_bytes())
+        .find(|(key, _)| key == "filter")?
+        .1
+        .into_owned();
+
+    let mut rebuilt = form_urlencoded::Serializer::new(String::new());
+    for (key, value) in form_urlencoded::parse(query.as_bytes()) {
+        if key != "filter" {
+            rebuilt.append_pair(&key, &value);
+        }
+    }
+    if let Ok(mut filter) = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(&raw)
+    {
+        filter.remove("deleted_at");
+        rebuilt.append_pair("filter", &serde_json::Value::Object(filter).to_string());
+    }
+
+    let mut parts = uri.clone().into_parts();
+    parts.path_and_query =
+        Some(PathAndQuery::try_from(format!("{}?{}", uri.path(), rebuilt.finish())).ok()?);
+    Uri::from_parts(parts).ok()
+}
+
+/// Generate the delete hooks a syncable entity needs. Reads are filtered by the scope
+/// [`hide_tombstones`] injects, so no read hook exists.
+///
+/// Invoke in the model module, beside the `DeriveEntityModel` and the api struct it names.
+#[macro_export]
+macro_rules! soft_delete_hooks {
+    ($api_struct:ident, $section:literal) => {
+        /// Tombstone one row, returning its id.
+        ///
+        /// A client that already holds a row learns of its deletion only by pulling the row
+        /// back with `deleted_at` set, so the row itself must stay. Already-tombstoned and
+        /// repeat calls succeed unchanged.
+        ///
+        /// # Errors
+        ///
+        /// Returns `ApiError::NotFound` when no such row exists.
+        pub async fn soft_delete_one(
+            db: &sea_orm::DatabaseConnection,
+            id: uuid::Uuid,
+        ) -> Result<uuid::Uuid, crudcrate::ApiError> {
+            let tombstoned = soft_delete_many(db, vec![id]).await?;
+            if tombstoned.is_empty()
+                && !$crate::common::soft_delete::row_exists::<Entity>(db, Column::Id, id).await?
+            {
+                return Err(crudcrate::ApiError::not_found(
+                    <$api_struct as crudcrate::CRUDResource>::RESOURCE_NAME_SINGULAR,
+                    Some(id.to_string()),
+                ));
+            }
+            Ok(id)
+        }
+
+        /// Tombstone many rows, returning the ids that existed.
+        ///
+        /// # Errors
+        ///
+        /// Returns `ApiError::BadRequest` when the batch exceeds the resource's limit.
+        pub async fn soft_delete_many(
+            db: &sea_orm::DatabaseConnection,
+            ids: Vec<uuid::Uuid>,
+        ) -> Result<Vec<uuid::Uuid>, crudcrate::ApiError> {
+            use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect, sea_query::Expr};
+
+            let limit = <$api_struct as crudcrate::CRUDResource>::batch_limit();
+            if ids.len() > limit {
+                return Err(crudcrate::ApiError::bad_request(format!(
+                    "Batch delete limited to {limit} items. Received {} items.",
+                    ids.len()
+                )));
+            }
+            if ids.is_empty() {
+                return Ok(vec![]);
+            }
+
+            let existing: Vec<uuid::Uuid> = Entity::find()
+                .select_only()
+                .column(Column::Id)
+                .filter(Column::Id.is_in(ids.clone()))
+                .into_tuple()
+                .all(db)
+                .await
+                .map_err(crudcrate::ApiError::database)?;
+            if existing.is_empty() {
+                return Ok(vec![]);
+            }
+
+            // `updated_at` moves too, so the UPDATE trigger stamps a fresh `server_seq`
+            // and the tombstone reaches pulls.
+            let now = chrono::Utc::now();
+            Entity::update_many()
+                .col_expr(Column::DeletedAt, Expr::value(now))
+                .col_expr(Column::UpdatedAt, Expr::value(now))
+                .filter(Column::Id.is_in(existing.clone()))
+                .filter(Column::DeletedAt.is_null())
+                .exec(db)
+                .await
+                .map_err(crudcrate::ApiError::database)?;
+
+            let existing: std::collections::HashSet<uuid::Uuid> = existing.into_iter().collect();
+            let mut seen = std::collections::HashSet::new();
+            let tombstoned: Vec<uuid::Uuid> = ids
+                .into_iter()
+                .filter(|id| existing.contains(id) && seen.insert(*id))
+                .collect();
+            $crate::common::soft_delete::record_tombstones(db, $section, &tombstoned).await?;
+            Ok(tombstoned)
+        }
+    };
+}
+
+/// Record tombstones in the ledger for a replicated section; a console-only table has
+/// no section and nothing to record.
+///
+/// # Errors
+///
+/// Returns the ledger's database error.
+pub async fn record_tombstones(
+    db: &sea_orm::DatabaseConnection,
+    section: &str,
+    ids: &[uuid::Uuid],
+) -> Result<(), crudcrate::ApiError> {
+    if section.is_empty() {
+        return Ok(());
+    }
+    crate::common::ledger::record_deleted(db, section, ids).await
+}
+
+/// Whether a row is present at all, tombstoned or not.
+///
+/// # Errors
+///
+/// Returns `ApiError::Database` when the query fails.
+pub async fn row_exists<E>(
+    db: &sea_orm::DatabaseConnection,
+    id_column: E::Column,
+    id: uuid::Uuid,
+) -> Result<bool, crudcrate::ApiError>
+where
+    E: sea_orm::EntityTrait,
+{
+    use sea_orm::{ColumnTrait, QueryFilter, QuerySelect};
+
+    let found = E::find()
+        .select_only()
+        .column(id_column)
+        .filter(id_column.eq(id))
+        .into_tuple::<uuid::Uuid>()
+        .one(db)
+        .await
+        .map_err(crudcrate::ApiError::database)?;
+    Ok(found.is_some())
+}

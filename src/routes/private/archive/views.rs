@@ -1,0 +1,1074 @@
+//! Upload negotiation and byte transfer for the blob archive.
+//!
+//! Devices and people both upload, but neither is trusted: no route here deletes or
+//! overwrites, every byte flows through the API under the caller's own credential
+//! (the object store is never reachable by a client), and a claimed hash is verified
+//! server-side before the object counts as stored.
+
+use axum::{
+    Json,
+    extract::{Path, State},
+};
+use chrono::Utc;
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, Set, sea_query::Expr,
+};
+use std::sync::Arc;
+use utoipa::ToSchema;
+use uuid::Uuid;
+
+use super::{model as stored_object, run_artifact};
+use crate::archive::fetch_token;
+use crate::archive::keys::{artifact_key, is_content_hash, video_key};
+use crate::archive::store::{ArchiveStore, PART_SIZE_BYTES};
+use crate::common::AppState;
+use crate::common::auth::{AuthContext, Origin};
+use crate::error::{AppError, AppResult};
+use crate::routes::private::runs::model as run_record;
+
+/// The configured store, or the refusal every `/archive` route gives without one.
+fn archive(state: &AppState) -> AppResult<&Arc<ArchiveStore>> {
+    state.archive.as_ref().ok_or_else(|| {
+        AppError::Unavailable(
+            "The archive is not configured on this registry: set S3_URL, S3_BUCKET_ID, \
+             S3_ACCESS_KEY, S3_SECRET_KEY and S3_PREFIX"
+                .to_string(),
+        )
+    })
+}
+
+#[derive(Debug, serde::Deserialize, ToSchema)]
+pub struct InitiateRequest {
+    /// imohash of the file, 32 lowercase hex characters. A device already holds this
+    /// for every clip it has ingested, which is what a blob and a `video_asset` meet on.
+    pub content_hash: String,
+    pub size_bytes: i64,
+    /// `video` or `artifact`.
+    pub kind: String,
+    /// Required for kind `artifact`.
+    #[serde(default)]
+    pub run_id: Option<Uuid>,
+    /// Required for kind `artifact`. Path inside the run directory.
+    #[serde(default)]
+    pub relpath: Option<String>,
+}
+
+#[derive(Debug, serde::Serialize, ToSchema)]
+pub struct InitiateResponse {
+    pub object_id: Uuid,
+    /// `pending` with parts to upload, or `complete` when the content is already
+    /// archived and nothing need be sent.
+    pub status: String,
+    pub upload_id: Option<String>,
+    pub part_size_bytes: Option<i64>,
+    /// Part numbers already stored, which a resuming client skips. The rest are
+    /// PUT to `/archive/{object_id}/parts/{part_number}` in any order.
+    pub parts_done: Vec<i32>,
+}
+
+/// Begin or resume an upload, deduplicated by content hash.
+///
+/// Content already archived answers `complete` with no upload at all. An unfinished
+/// upload of the same content resumes wherever it stopped, whoever started it.
+#[utoipa::path(
+    post,
+    path = "/archive/initiate",
+    request_body = InitiateRequest,
+    responses(
+        (status = 200, description = "Upload state and any URLs still needed", body = InitiateResponse),
+        (status = 400, description = "Malformed hash, size, kind or relpath"),
+        (status = 404, description = "No such run"),
+        (status = 409, description = "Conflicting concurrent initiate"),
+        (status = 503, description = "The archive is not configured"),
+    ),
+    tag = "archive"
+)]
+pub async fn initiate(
+    State(state): State<AppState>,
+    axum::Extension(auth): axum::Extension<AuthContext>,
+    Json(body): Json<InitiateRequest>,
+) -> AppResult<Json<InitiateResponse>> {
+    let store = archive(&state)?.clone();
+    if !is_content_hash(&body.content_hash) {
+        return Err(AppError::BadRequest(
+            "content_hash must be 32 lowercase hex characters".to_string(),
+        ));
+    }
+    let max = state.config.archive_max_object_bytes;
+    if body.size_bytes < 1 || body.size_bytes > max {
+        return Err(AppError::BadRequest(format!(
+            "size_bytes must be between 1 and {max}"
+        )));
+    }
+
+    let (key, linkage) = resolve_target(&state, &store, &body).await?;
+    let response = negotiate(&state, &store, &auth, &body, key).await?;
+
+    if let Some((run_id, relpath)) = linkage {
+        upsert_run_artifact(&state.db, run_id, &relpath, &body, response.object_id).await?;
+    }
+
+    Ok(Json(response))
+}
+
+/// The key an upload of this content would go to, and the artefact linkage the request
+/// asks for. Both validated before any row or S3 state is touched.
+async fn resolve_target(
+    state: &AppState,
+    store: &ArchiveStore,
+    body: &InitiateRequest,
+) -> AppResult<(String, Option<(Uuid, String)>)> {
+    match body.kind.as_str() {
+        stored_object::KIND_VIDEO => Ok((video_key(&store.prefix, &body.content_hash), None)),
+        stored_object::KIND_ARTIFACT => {
+            let (Some(run_id), Some(relpath)) = (body.run_id, body.relpath.as_deref()) else {
+                return Err(AppError::BadRequest(
+                    "kind artifact requires run_id and relpath".to_string(),
+                ));
+            };
+            let key = artifact_key(&store.prefix, run_id, relpath).ok_or_else(|| {
+                AppError::BadRequest(
+                    "relpath must be a plain relative path inside the run directory".to_string(),
+                )
+            })?;
+            let run_exists = run_record::Entity::find_by_id(run_id)
+                .one(&state.db)
+                .await?
+                .is_some();
+            if !run_exists {
+                return Err(AppError::NotFound(format!("No run {run_id}")));
+            }
+            Ok((key, Some((run_id, relpath.to_string()))))
+        }
+        other => Err(AppError::BadRequest(format!(
+            "Unknown kind {other}: expected video or artifact"
+        ))),
+    }
+}
+
+/// Answer for the content's current state: dedup, resume, restart or a new upload.
+async fn negotiate(
+    state: &AppState,
+    store: &Arc<ArchiveStore>,
+    auth: &AuthContext,
+    body: &InitiateRequest,
+    key: String,
+) -> AppResult<InitiateResponse> {
+    let existing = stored_object::Entity::find()
+        .filter(stored_object::Column::ContentHash.eq(&body.content_hash))
+        .one(&state.db)
+        .await?;
+
+    match existing {
+        // The dedup answer: the content is archived, nothing travels.
+        Some(row) if row.status == stored_object::STATUS_COMPLETE => {
+            Ok(answer(row.id, stored_object::STATUS_COMPLETE))
+        }
+        Some(row) if row.status == stored_object::STATUS_PENDING => {
+            if row.size_bytes != body.size_bytes {
+                return Err(AppError::Conflict(format!(
+                    "This content was initiated with size {}, not {}",
+                    row.size_bytes, body.size_bytes
+                )));
+            }
+            resume(state, store, row).await
+        }
+        // A failed upload starts over on the same row.
+        Some(row) => {
+            if let Some(old_upload) = row.s3_upload_id.as_deref() {
+                store.abort_multipart(&row.s3_key, old_upload).await;
+            }
+            let size = body.size_bytes;
+            let mut restart: stored_object::ActiveModel = row.into();
+            restart.size_bytes = Set(size);
+            attribute(&mut restart, auth);
+            let restarted = restart.update(&state.db).await?;
+            fresh_upload(state, store, restarted).await
+        }
+        None => {
+            let mut new_row = stored_object::ActiveModel {
+                id: Set(Uuid::new_v4()),
+                content_hash: Set(body.content_hash.clone()),
+                size_bytes: Set(body.size_bytes),
+                kind: Set(body.kind.clone()),
+                status: Set(stored_object::STATUS_PENDING.to_string()),
+                s3_key: Set(key.clone()),
+                s3_upload_id: Set(None),
+                part_size_bytes: Set(Some(PART_SIZE_BYTES)),
+                created_at: Set(Utc::now()),
+                updated_at: Set(Utc::now()),
+                last_part_at: Set(None),
+                completed_at: Set(None),
+                failure: Set(None),
+                ..Default::default()
+            };
+            attribute(&mut new_row, auth);
+            let inserted = match new_row.insert(&state.db).await {
+                Ok(row) => row,
+                // A racing initiate of the same content won the unique index.
+                Err(e)
+                    if matches!(
+                        e.sql_err(),
+                        Some(sea_orm::SqlErr::UniqueConstraintViolation(_))
+                    ) =>
+                {
+                    return Err(AppError::Conflict(
+                        "This content is being initiated concurrently: retry".to_string(),
+                    ));
+                }
+                Err(e) => return Err(e.into()),
+            };
+            fresh_upload(state, store, inserted).await
+        }
+    }
+}
+
+/// Who is sending the bytes, for the audit columns.
+fn attribute(row: &mut stored_object::ActiveModel, auth: &AuthContext) {
+    match auth.origin() {
+        Origin::Human { sub } => {
+            row.uploaded_by = Set(Some(sub.to_string()));
+            row.uploaded_by_device_id = Set(None);
+        }
+        Origin::Device { device_id, .. } => {
+            row.uploaded_by = Set(None);
+            row.uploaded_by_device_id = Set(Some(device_id));
+        }
+    }
+}
+
+fn answer(object_id: Uuid, status: &str) -> InitiateResponse {
+    InitiateResponse {
+        object_id,
+        status: status.to_string(),
+        upload_id: None,
+        part_size_bytes: None,
+        parts_done: Vec::new(),
+    }
+}
+
+/// How many parts a `size_bytes` upload takes at `part_size`.
+fn part_count(size_bytes: i64, part_size: i64) -> AppResult<i32> {
+    i32::try_from((size_bytes + part_size - 1) / part_size)
+        .map_err(|_| AppError::BadRequest("size_bytes needs too many parts".to_string()))
+}
+
+/// Resume a pending upload: report the parts S3 already holds, so the client sends
+/// only the rest.
+///
+/// An upload S3 no longer knows starts over, losing progress rather than wedging.
+async fn resume(
+    state: &AppState,
+    store: &ArchiveStore,
+    row: stored_object::Model,
+) -> AppResult<InitiateResponse> {
+    let done = match row.s3_upload_id.as_deref() {
+        Some(upload_id) => store
+            .uploaded_part_numbers(&row.s3_key, upload_id)
+            .await
+            .ok(),
+        None => None,
+    };
+    let Some(parts_done) = done else {
+        return fresh_upload(state, store, row).await;
+    };
+    let upload_id = row.s3_upload_id.clone().expect("checked above");
+    let part_size = row.part_size_bytes.unwrap_or(PART_SIZE_BYTES);
+    let object_id = row.id;
+
+    // Resume counts as part activity, so the reaper's idle clock restarts.
+    let mut touch: stored_object::ActiveModel = row.into();
+    touch.last_part_at = Set(Some(Utc::now()));
+    touch.updated_at = Set(Utc::now());
+    touch.update(&state.db).await?;
+
+    Ok(InitiateResponse {
+        object_id,
+        status: stored_object::STATUS_PENDING.to_string(),
+        upload_id: Some(upload_id),
+        part_size_bytes: Some(part_size),
+        parts_done,
+    })
+}
+
+/// Open a new multipart upload for a pending row.
+async fn fresh_upload(
+    state: &AppState,
+    store: &ArchiveStore,
+    row: stored_object::Model,
+) -> AppResult<InitiateResponse> {
+    part_count(row.size_bytes, PART_SIZE_BYTES)?;
+    let upload_id = store.create_multipart(&row.s3_key).await?;
+
+    let object_id = row.id;
+    let mut update: stored_object::ActiveModel = row.into();
+    update.status = Set(stored_object::STATUS_PENDING.to_string());
+    update.s3_upload_id = Set(Some(upload_id.clone()));
+    update.part_size_bytes = Set(Some(PART_SIZE_BYTES));
+    update.last_part_at = Set(Some(Utc::now()));
+    update.updated_at = Set(Utc::now());
+    update.completed_at = Set(None);
+    update.failure = Set(None);
+    update.update(&state.db).await?;
+
+    Ok(InitiateResponse {
+        object_id,
+        status: stored_object::STATUS_PENDING.to_string(),
+        upload_id: Some(upload_id),
+        part_size_bytes: Some(PART_SIZE_BYTES),
+        parts_done: Vec::new(),
+    })
+}
+
+/// An axum request body made `Sync` for the S3 SDK's streaming bound. Sound:
+/// `poll_frame` takes `&mut self`, so the body is only ever moved, never shared.
+struct SyncBody(sync_wrapper::SyncWrapper<axum::body::Body>);
+
+impl http_body::Body for SyncBody {
+    type Data = bytes::Bytes;
+    type Error = axum::Error;
+
+    fn poll_frame(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Result<http_body::Frame<Self::Data>, Self::Error>>> {
+        std::pin::Pin::new(self.0.get_mut()).poll_frame(cx)
+    }
+}
+
+#[derive(Debug, serde::Serialize, ToSchema)]
+pub struct UploadPartResponse {
+    pub part_number: i32,
+    /// The `ETag` the store recorded, which is the part's MD5 on every store this
+    /// registry deploys against, so the sender can verify what landed.
+    pub etag: String,
+}
+
+/// Store one part's raw bytes.
+///
+/// The body streams through to the object store under the registry's own
+/// credential: clients never reach the store themselves, so every byte arrives
+/// under the caller's authenticated identity. Parts may arrive in any order and
+/// re-sending one overwrites it, which is how a retry works.
+#[utoipa::path(
+    put,
+    path = "/archive/{object_id}/parts/{part_number}",
+    request_body(content = Vec<u8>, content_type = "application/octet-stream", description = "The part's raw bytes"),
+    params(
+        ("object_id" = Uuid, Path, description = "Pending object the part belongs to"),
+        ("part_number" = i32, Path, description = "1-based part number"),
+    ),
+    responses(
+        (status = 200, description = "Part stored", body = UploadPartResponse),
+        (status = 400, description = "Part number out of range"),
+        (status = 409, description = "The object is not pending"),
+        (status = 411, description = "Content-Length is required"),
+        (status = 413, description = "Larger than the negotiated part size"),
+        (status = 503, description = "The archive is not configured"),
+    ),
+    tag = "archive"
+)]
+pub async fn upload_part(
+    State(state): State<AppState>,
+    Path((object_id, part_number)): Path<(Uuid, i32)>,
+    headers: axum::http::HeaderMap,
+    body: axum::body::Body,
+) -> AppResult<Json<UploadPartResponse>> {
+    let store = archive(&state)?.clone();
+    let row = stored_object::Entity::find_by_id(object_id)
+        .one(&state.db)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("No object {object_id}")))?;
+    if row.status != stored_object::STATUS_PENDING {
+        return Err(AppError::Conflict(format!(
+            "Object is {}, not pending: initiate before uploading",
+            row.status
+        )));
+    }
+    let Some(upload_id) = row.s3_upload_id.clone() else {
+        return Err(AppError::Conflict(
+            "This object has no open upload: re-initiate".to_string(),
+        ));
+    };
+    let part_size = row.part_size_bytes.unwrap_or(PART_SIZE_BYTES);
+    let count = part_count(row.size_bytes, part_size)?;
+    if part_number < 1 || part_number > count {
+        return Err(AppError::BadRequest(format!(
+            "part_number must be between 1 and {count}"
+        )));
+    }
+
+    // A streamed body is unsized and S3 will not take a part without a length, so
+    // the client must declare it. The transport enforces it as a ceiling too.
+    let content_length: i64 = headers
+        .get(axum::http::header::CONTENT_LENGTH)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.parse().ok())
+        .ok_or_else(|| AppError::LengthRequired("Content-Length is required".to_string()))?;
+    if content_length < 1 || content_length > part_size {
+        return Err(AppError::PayloadTooLarge(format!(
+            "A part is between 1 and {part_size} bytes, not {content_length}"
+        )));
+    }
+
+    let etag = store
+        .upload_part(
+            &row.s3_key,
+            &upload_id,
+            part_number,
+            content_length,
+            aws_sdk_s3::primitives::ByteStream::from_body_1_x(SyncBody(
+                sync_wrapper::SyncWrapper::new(body),
+            )),
+        )
+        .await?;
+
+    // Part activity restarts the reaper's idle clock.
+    let mut touch: stored_object::ActiveModel = row.into();
+    touch.last_part_at = Set(Some(Utc::now()));
+    touch.updated_at = Set(Utc::now());
+    touch.update(&state.db).await?;
+
+    Ok(Json(UploadPartResponse { part_number, etag }))
+}
+
+/// Record which blob a run directory path holds.
+///
+/// One row per `(run_id, relpath)`. An existing row keeps its link while the object it
+/// names is complete, so a later upload cannot silently replace a verified artefact.
+async fn upsert_run_artifact<C: ConnectionTrait>(
+    db: &C,
+    run_id: Uuid,
+    relpath: &str,
+    body: &InitiateRequest,
+    object_id: Uuid,
+) -> AppResult<()> {
+    let existing = run_artifact::Entity::find()
+        .filter(run_artifact::Column::RunId.eq(run_id))
+        .filter(run_artifact::Column::Relpath.eq(relpath))
+        .one(db)
+        .await?;
+
+    let Some(row) = existing else {
+        run_artifact::ActiveModel {
+            id: Set(Uuid::new_v4()),
+            run_id: Set(run_id),
+            relpath: Set(relpath.to_string()),
+            kind: Set(None),
+            size_bytes: Set(Some(body.size_bytes)),
+            content_hash: Set(body.content_hash.clone()),
+            stored_object_id: Set(Some(object_id)),
+            created_at: Set(Utc::now()),
+            updated_at: Set(Utc::now()),
+        }
+        .insert(db)
+        .await?;
+        return Ok(());
+    };
+
+    if let Some(linked) = row.stored_object_id
+        && linked != object_id
+    {
+        let linked_complete = stored_object::Entity::find_by_id(linked)
+            .filter(stored_object::Column::Status.eq(stored_object::STATUS_COMPLETE))
+            .one(db)
+            .await?
+            .is_some();
+        if linked_complete {
+            return Ok(());
+        }
+    }
+
+    let mut update: run_artifact::ActiveModel = row.into();
+    update.content_hash = Set(body.content_hash.clone());
+    update.size_bytes = Set(Some(body.size_bytes));
+    update.stored_object_id = Set(Some(object_id));
+    update.updated_at = Set(Utc::now());
+    update.update(db).await?;
+    Ok(())
+}
+
+#[derive(Debug, serde::Deserialize, ToSchema)]
+pub struct CompletedPartBody {
+    pub part_number: i32,
+    pub etag: String,
+}
+
+#[derive(Debug, serde::Deserialize, ToSchema)]
+pub struct CompleteRequest {
+    /// Accepted for compatibility and ignored: the server assembles from its
+    /// own `ListParts`, because a resuming client cannot know the `ETag`s of
+    /// parts an earlier attempt sent.
+    #[serde(default)]
+    pub parts: Vec<CompletedPartBody>,
+}
+
+#[derive(Debug, serde::Serialize, ToSchema)]
+pub struct CompleteResponse {
+    pub object_id: Uuid,
+    /// `complete`: S3 assembled the parts into the finished object.
+    pub status: String,
+}
+
+/// Assemble the uploaded parts into the finished object and verify them.
+///
+/// S3 checked every part against the `ETag` it answered as the part arrived, so an
+/// assembly it accepts is the bytes the client sent. Whether those bytes are the
+/// content the client claimed is checked here: the stored size must match the
+/// initiated one, and the imohash re-computed from the stored object must match the
+/// claimed hash, before the object counts as `complete`. A mismatch deletes the
+/// object, fails the row and answers 409, so a wrong upload can never poison a
+/// content-addressed key another device would dedup against.
+#[utoipa::path(
+    post,
+    path = "/archive/{object_id}/complete",
+    params(("object_id" = Uuid, Path, description = "Object being uploaded")),
+    request_body = CompleteRequest,
+    responses(
+        (status = 200, description = "Parts assembled and verified against the claimed hash", body = CompleteResponse),
+        (status = 404, description = "No such object"),
+        (status = 409, description = "The object is not pending, or its content does not match the claimed size or hash"),
+        (status = 503, description = "The archive is not configured"),
+    ),
+    tag = "archive"
+)]
+pub async fn complete(
+    State(state): State<AppState>,
+    Path(object_id): Path<Uuid>,
+    Json(_body): Json<CompleteRequest>,
+) -> AppResult<Json<CompleteResponse>> {
+    let store = archive(&state)?.clone();
+    let row = stored_object::Entity::find_by_id(object_id)
+        .one(&state.db)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("No object {object_id}")))?;
+    if row.status != stored_object::STATUS_PENDING {
+        return Err(AppError::Conflict(format!(
+            "Object is {}, not pending",
+            row.status
+        )));
+    }
+    let upload_id = row
+        .s3_upload_id
+        .clone()
+        .ok_or_else(|| AppError::Conflict("Object has no open upload".to_string()))?;
+
+    match store.complete_multipart(&row.s3_key, &upload_id).await {
+        Ok(0) => {
+            return Err(AppError::Conflict(
+                "Nothing has been uploaded for this object yet".to_string(),
+            ));
+        }
+        Ok(_) => {}
+        // A prior attempt may have assembled and then failed transiently during
+        // verification: the multipart upload is gone but the object exists. Verify
+        // what is stored rather than wedging the row.
+        Err(assembly_error) => {
+            if store.object_size(&row.s3_key).await?.is_none() {
+                return Err(assembly_error);
+            }
+        }
+    }
+
+    let stored_size = store
+        .object_size(&row.s3_key)
+        .await?
+        .ok_or_else(|| AppError::Internal("The assembled object is missing".to_string()))?;
+    if stored_size != row.size_bytes {
+        let claimed = row.size_bytes;
+        return fail_verification(
+            &state,
+            &store,
+            row,
+            format!("Uploaded {stored_size} bytes, not the {claimed} initiated"),
+        )
+        .await;
+    }
+    let computed = store.computed_imohash(&row.s3_key, stored_size).await?;
+    if computed != row.content_hash {
+        let claimed = row.content_hash.clone();
+        return fail_verification(
+            &state,
+            &store,
+            row,
+            format!("Uploaded content hashes to {computed}, not the {claimed} claimed"),
+        )
+        .await;
+    }
+
+    // Guarded on status, so a racing complete flips the row exactly once.
+    let flipped = stored_object::Entity::update_many()
+        .col_expr(
+            stored_object::Column::Status,
+            Expr::value(stored_object::STATUS_COMPLETE),
+        )
+        .col_expr(
+            stored_object::Column::S3UploadId,
+            Expr::value(Option::<String>::None),
+        )
+        .col_expr(stored_object::Column::CompletedAt, Expr::value(Utc::now()))
+        .col_expr(stored_object::Column::UpdatedAt, Expr::value(Utc::now()))
+        .filter(stored_object::Column::Id.eq(object_id))
+        .filter(stored_object::Column::Status.eq(stored_object::STATUS_PENDING))
+        .exec(&state.db)
+        .await?;
+    if flipped.rows_affected != 1 {
+        return Err(AppError::Conflict(
+            "Object is no longer pending".to_string(),
+        ));
+    }
+
+    Ok(Json(CompleteResponse {
+        object_id,
+        status: stored_object::STATUS_COMPLETE.to_string(),
+    }))
+}
+
+/// The uploaded bytes are not the claimed content: remove them, fail the row and
+/// tell the client to start over. Nothing wrong may sit at a content-addressed key.
+async fn fail_verification(
+    state: &AppState,
+    store: &ArchiveStore,
+    row: stored_object::Model,
+    why: String,
+) -> AppResult<Json<CompleteResponse>> {
+    store.delete_object(&row.s3_key).await;
+    let mut update: stored_object::ActiveModel = row.into();
+    update.status = Set(stored_object::STATUS_FAILED.to_string());
+    update.s3_upload_id = Set(None);
+    update.failure = Set(Some(why.clone()));
+    update.updated_at = Set(Utc::now());
+    update.update(&state.db).await?;
+    Err(AppError::Conflict(format!(
+        "{why}: re-initiate to upload again"
+    )))
+}
+
+#[derive(Debug, serde::Serialize, ToSchema)]
+pub struct DownloadResponse {
+    /// A fetch link on this registry itself, signed for one object and a few
+    /// minutes. The object store is never addressed by a client.
+    pub url: String,
+}
+
+/// A short-lived download URL for a verified object.
+///
+/// The URL points back at this registry's own `/archive/{id}/fetch` route with an
+/// HMAC signature in the query, so a browser navigation needs no bearer header
+/// while the object store stays unreachable.
+#[utoipa::path(
+    get,
+    path = "/archive/{object_id}/download",
+    params(("object_id" = Uuid, Path, description = "Object to download")),
+    responses(
+        (status = 200, description = "Signed fetch URL on this registry", body = DownloadResponse),
+        (status = 404, description = "No such object"),
+        (status = 409, description = "The object is not complete yet"),
+        (status = 503, description = "The archive is not configured"),
+    ),
+    tag = "archive"
+)]
+pub async fn download(
+    State(state): State<AppState>,
+    Path(object_id): Path<Uuid>,
+) -> AppResult<Json<DownloadResponse>> {
+    let store = archive(&state)?;
+    let row = stored_object::Entity::find_by_id(object_id)
+        .one(&state.db)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("No object {object_id}")))?;
+    if row.status != stored_object::STATUS_COMPLETE {
+        return Err(AppError::Conflict(format!(
+            "Object is {}, not complete",
+            row.status
+        )));
+    }
+
+    let expires = Utc::now().timestamp() + fetch_token::FETCH_TTL_SECONDS;
+    let sig = fetch_token::sign(store.fetch_secret(), object_id, expires);
+    // `PUBLIC_BASE_URL` carries the `/api` prefix, like the address in a connect
+    // code. Relative when unset; the desktop client joins it onto its base URL.
+    let path = format!("/archive/{object_id}/fetch?expires={expires}&sig={sig}");
+    let url = match state.config.public_base_url.as_deref() {
+        Some(base) => format!("{}{path}", base.trim_end_matches('/')),
+        None => path,
+    };
+    Ok(Json(DownloadResponse { url }))
+}
+
+#[derive(Debug, serde::Serialize, ToSchema)]
+pub struct ByHashResponse {
+    pub object_id: Uuid,
+    pub status: String,
+    pub completed_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+/// Whether content with this hash is archived. Cheap, for badges.
+#[utoipa::path(
+    get,
+    path = "/archive/by-hash/{content_hash}",
+    params(("content_hash" = String, Path, description = "imohash, 32 lowercase hex")),
+    responses(
+        (status = 200, description = "The object's state", body = ByHashResponse),
+        (status = 400, description = "Malformed hash"),
+        (status = 404, description = "Nothing archived under this hash"),
+        (status = 503, description = "The archive is not configured"),
+    ),
+    tag = "archive"
+)]
+pub async fn by_hash(
+    State(state): State<AppState>,
+    Path(content_hash): Path<String>,
+) -> AppResult<Json<ByHashResponse>> {
+    archive(&state)?;
+    if !is_content_hash(&content_hash) {
+        return Err(AppError::BadRequest(
+            "content_hash must be 32 lowercase hex characters".to_string(),
+        ));
+    }
+    let row = stored_object::Entity::find()
+        .filter(stored_object::Column::ContentHash.eq(&content_hash))
+        .one(&state.db)
+        .await?
+        .ok_or_else(|| AppError::NotFound("Nothing archived under this hash".to_string()))?;
+    Ok(Json(ByHashResponse {
+        object_id: row.id,
+        status: row.status,
+        completed_at: row.completed_at,
+    }))
+}
+
+/// Ceiling on one probe, so a badge refresh cannot become an unbounded query.
+const PROBE_MAX_HASHES: usize = 500;
+/// Ceiling on one runs probe, sized to a page of runs in the console.
+const PROBE_MAX_RUNS: usize = 200;
+
+#[derive(Debug, serde::Deserialize, ToSchema)]
+pub struct ProbeRequest {
+    /// Content hashes to look up, 32 lowercase hex each, at most 500.
+    pub hashes: Vec<String>,
+}
+
+#[derive(Debug, serde::Serialize, ToSchema)]
+pub struct ProbeState {
+    pub object_id: Uuid,
+    pub status: String,
+    pub completed_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+#[derive(Debug, serde::Serialize, ToSchema)]
+pub struct ProbeResponse {
+    /// One entry per hash that has a row. Hashes never seen are simply absent.
+    pub states: std::collections::HashMap<String, ProbeState>,
+}
+
+/// Archive state for many hashes at once, so badges cost one request per page.
+#[utoipa::path(
+    post,
+    path = "/archive/probe",
+    request_body = ProbeRequest,
+    responses(
+        (status = 200, description = "State per known hash", body = ProbeResponse),
+        (status = 400, description = "Malformed hash or too many of them"),
+        (status = 503, description = "The archive is not configured"),
+    ),
+    tag = "archive"
+)]
+pub async fn probe(
+    State(state): State<AppState>,
+    Json(body): Json<ProbeRequest>,
+) -> AppResult<Json<ProbeResponse>> {
+    archive(&state)?;
+    if body.hashes.len() > PROBE_MAX_HASHES {
+        return Err(AppError::BadRequest(format!(
+            "At most {PROBE_MAX_HASHES} hashes per probe"
+        )));
+    }
+    if let Some(bad) = body.hashes.iter().find(|hash| !is_content_hash(hash)) {
+        return Err(AppError::BadRequest(format!(
+            "{bad}: content_hash must be 32 lowercase hex characters"
+        )));
+    }
+    let states = stored_object::Entity::find()
+        .filter(stored_object::Column::ContentHash.is_in(&body.hashes))
+        .all(&state.db)
+        .await?
+        .into_iter()
+        .map(|row| {
+            (
+                row.content_hash,
+                ProbeState {
+                    object_id: row.id,
+                    status: row.status,
+                    completed_at: row.completed_at,
+                },
+            )
+        })
+        .collect();
+    Ok(Json(ProbeResponse { states }))
+}
+
+#[derive(Debug, serde::Deserialize, ToSchema)]
+pub struct RunsProbeRequest {
+    /// Runs to look up, at most 200.
+    pub run_ids: Vec<Uuid>,
+}
+
+#[derive(Debug, serde::Serialize, ToSchema)]
+pub struct RunArchiveState {
+    /// How many artefact rows the run has.
+    pub artifacts: i64,
+    /// How many of them link a stored object in status `complete`.
+    pub complete: i64,
+    /// And how many link one in status `failed`.
+    pub failed: i64,
+}
+
+#[derive(Debug, serde::Serialize, ToSchema)]
+pub struct RunsProbeResponse {
+    /// One entry per run id with artefact rows. Runs without any are absent.
+    pub states: std::collections::HashMap<String, RunArchiveState>,
+}
+
+/// Archive state for many runs at once: artefact counts, grouped in one query.
+#[utoipa::path(
+    post,
+    path = "/archive/runs-probe",
+    request_body = RunsProbeRequest,
+    responses(
+        (status = 200, description = "Counts per run with artefacts", body = RunsProbeResponse),
+        (status = 400, description = "Too many run ids"),
+        (status = 503, description = "The archive is not configured"),
+    ),
+    tag = "archive"
+)]
+pub async fn runs_probe(
+    State(state): State<AppState>,
+    Json(body): Json<RunsProbeRequest>,
+) -> AppResult<Json<RunsProbeResponse>> {
+    archive(&state)?;
+    if body.run_ids.len() > PROBE_MAX_RUNS {
+        return Err(AppError::BadRequest(format!(
+            "At most {PROBE_MAX_RUNS} run ids per probe"
+        )));
+    }
+    if body.run_ids.is_empty() {
+        return Ok(Json(RunsProbeResponse {
+            states: std::collections::HashMap::new(),
+        }));
+    }
+
+    // Only compile-time status constants and generated placeholders are interpolated.
+    let placeholders: Vec<String> = (1..=body.run_ids.len()).map(|i| format!("${i}")).collect();
+    let sql = format!(
+        "SELECT ra.run_id, \
+                COUNT(*) AS artifacts, \
+                COUNT(*) FILTER (WHERE so.status = '{complete}') AS complete, \
+                COUNT(*) FILTER (WHERE so.status = '{failed}') AS failed \
+         FROM run_artifact ra \
+         LEFT JOIN stored_object so ON so.id = ra.stored_object_id \
+         WHERE ra.run_id IN ({ids}) \
+         GROUP BY ra.run_id",
+        complete = stored_object::STATUS_COMPLETE,
+        failed = stored_object::STATUS_FAILED,
+        ids = placeholders.join(", "),
+    );
+    let binds: Vec<sea_orm::Value> = body.run_ids.iter().map(|id| (*id).into()).collect();
+    let found = state
+        .db
+        .query_all_raw(sea_orm::Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            &sql,
+            binds,
+        ))
+        .await?;
+
+    let mut states = std::collections::HashMap::with_capacity(found.len());
+    for row in &found {
+        let run_id: Uuid = row.try_get("", "run_id")?;
+        states.insert(
+            run_id.to_string(),
+            RunArchiveState {
+                artifacts: row.try_get("", "artifacts")?,
+                complete: row.try_get("", "complete")?,
+                failed: row.try_get("", "failed")?,
+            },
+        );
+    }
+    Ok(Json(RunsProbeResponse { states }))
+}
+
+#[derive(Debug, serde::Serialize, ToSchema)]
+pub struct RunOverview {
+    pub run_id: Uuid,
+    pub pass_id: Uuid,
+    pub device_id: Option<Uuid>,
+    pub started_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub run_status: String,
+    /// How many artefact rows the run has.
+    pub artifacts: i64,
+    /// How many of them link a stored object in status `complete`, `failed`, `pending`.
+    pub complete: i64,
+    pub failed: i64,
+    pub pending: i64,
+    /// Total size of the linked objects, whatever their status.
+    pub size_bytes: i64,
+    pub last_completed_at: Option<chrono::DateTime<chrono::Utc>>,
+    /// `complete` when every artefact is, `failed` when any is, `partial` when some
+    /// are complete, `pending` otherwise.
+    pub state: String,
+}
+
+#[derive(Debug, serde::Serialize, ToSchema)]
+pub struct ClipOverview {
+    pub video_id: Uuid,
+    pub file_name: String,
+    pub content_hash: String,
+    pub object_id: Uuid,
+    pub status: String,
+    pub size_bytes: i64,
+    pub completed_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub uploaded_by_device_id: Option<Uuid>,
+    pub uploaded_by: Option<String>,
+}
+
+#[derive(Debug, serde::Serialize, ToSchema)]
+pub struct UnlinkedOverview {
+    /// Stored objects no artefact row and no clip refers to.
+    pub objects: i64,
+    pub size_bytes: i64,
+}
+
+#[derive(Debug, serde::Serialize, ToSchema)]
+pub struct ArchiveOverview {
+    /// Runs with artefact rows, by last activity: `last_completed_at`, then `started_at`.
+    pub runs: Vec<RunOverview>,
+    /// Stored objects whose hash matches a clip, by `completed_at`.
+    pub clips: Vec<ClipOverview>,
+    pub unlinked: UnlinkedOverview,
+}
+
+/// Every run that has an artefact row, one line each. A run whose artefacts link no
+/// object at all still appears, with every count at zero.
+const OVERVIEW_RUNS_SQL: &str = "\
+    SELECT r.id AS run_id, r.pass_id, r.device_id, r.started_at, \
+           r.status AS run_status, \
+           COUNT(*)::BIGINT AS artifacts, \
+           (COUNT(*) FILTER (WHERE so.status = 'complete'))::BIGINT AS complete, \
+           (COUNT(*) FILTER (WHERE so.status = 'failed'))::BIGINT AS failed, \
+           (COUNT(*) FILTER (WHERE so.status = 'pending'))::BIGINT AS pending, \
+           COALESCE(SUM(so.size_bytes), 0)::BIGINT AS size_bytes, \
+           MAX(so.completed_at) AS last_completed_at \
+    FROM run_record r \
+    JOIN run_artifact ra ON ra.run_id = r.id \
+    LEFT JOIN stored_object so ON so.id = ra.stored_object_id \
+    WHERE r.deleted_at IS NULL \
+    GROUP BY r.id \
+    ORDER BY MAX(so.completed_at) DESC NULLS LAST, r.started_at DESC NULLS LAST, r.id";
+
+const OVERVIEW_CLIPS_SQL: &str = "\
+    SELECT v.id AS video_id, v.file_name, so.content_hash, so.id AS object_id, \
+           so.status, so.size_bytes, so.completed_at, so.uploaded_by_device_id, \
+           so.uploaded_by \
+    FROM stored_object so \
+    JOIN video_asset v ON v.hash = so.content_hash AND v.deleted_at IS NULL \
+    ORDER BY so.completed_at DESC NULLS LAST, so.created_at DESC, so.id";
+
+const OVERVIEW_UNLINKED_SQL: &str = "\
+    SELECT COUNT(*)::BIGINT AS objects, COALESCE(SUM(so.size_bytes), 0)::BIGINT AS size_bytes \
+    FROM stored_object so \
+    WHERE NOT EXISTS (SELECT 1 FROM run_artifact ra WHERE ra.stored_object_id = so.id) \
+      AND NOT EXISTS (SELECT 1 FROM video_asset v \
+                      WHERE v.hash = so.content_hash AND v.deleted_at IS NULL)";
+
+fn run_state(artifacts: i64, complete: i64, failed: i64) -> &'static str {
+    if complete == artifacts {
+        stored_object::STATUS_COMPLETE
+    } else if failed > 0 {
+        stored_object::STATUS_FAILED
+    } else if complete > 0 {
+        "partial"
+    } else {
+        stored_object::STATUS_PENDING
+    }
+}
+
+/// The archive grouped by what each object belongs to: runs, clips, and the rest.
+///
+/// Unpaged: the whole archive comes back in one response. Deleted runs and clips are
+/// left out, so an object linked only through them counts as unlinked.
+#[utoipa::path(
+    get,
+    path = "/archive/overview",
+    responses(
+        (status = 200, description = "Runs, clips and unlinked objects", body = ArchiveOverview),
+        (status = 403, description = "Called with a device token"),
+        (status = 503, description = "The archive is not configured"),
+    ),
+    tag = "archive"
+)]
+pub async fn overview(State(state): State<AppState>) -> AppResult<Json<ArchiveOverview>> {
+    archive(&state)?;
+    let query = |sql: &'static str| {
+        state.db.query_all_raw(sea_orm::Statement::from_string(
+            sea_orm::DatabaseBackend::Postgres,
+            sql,
+        ))
+    };
+    let run_rows = query(OVERVIEW_RUNS_SQL).await?;
+    let clip_rows = query(OVERVIEW_CLIPS_SQL).await?;
+    let unlinked_rows = query(OVERVIEW_UNLINKED_SQL).await?;
+
+    let mut runs = Vec::with_capacity(run_rows.len());
+    for row in &run_rows {
+        let artifacts: i64 = row.try_get("", "artifacts")?;
+        let complete: i64 = row.try_get("", "complete")?;
+        let failed: i64 = row.try_get("", "failed")?;
+        runs.push(RunOverview {
+            run_id: row.try_get("", "run_id")?,
+            pass_id: row.try_get("", "pass_id")?,
+            device_id: row.try_get("", "device_id")?,
+            started_at: row.try_get("", "started_at")?,
+            run_status: row.try_get("", "run_status")?,
+            artifacts,
+            complete,
+            failed,
+            pending: row.try_get("", "pending")?,
+            size_bytes: row.try_get("", "size_bytes")?,
+            last_completed_at: row.try_get("", "last_completed_at")?,
+            state: run_state(artifacts, complete, failed).to_string(),
+        });
+    }
+
+    let mut clips = Vec::with_capacity(clip_rows.len());
+    for row in &clip_rows {
+        clips.push(ClipOverview {
+            video_id: row.try_get("", "video_id")?,
+            file_name: row.try_get("", "file_name")?,
+            content_hash: row.try_get("", "content_hash")?,
+            object_id: row.try_get("", "object_id")?,
+            status: row.try_get("", "status")?,
+            size_bytes: row.try_get("", "size_bytes")?,
+            completed_at: row.try_get("", "completed_at")?,
+            uploaded_by_device_id: row.try_get("", "uploaded_by_device_id")?,
+            uploaded_by: row.try_get("", "uploaded_by")?,
+        });
+    }
+
+    let unlinked = match unlinked_rows.first() {
+        Some(row) => UnlinkedOverview {
+            objects: row.try_get("", "objects")?,
+            size_bytes: row.try_get("", "size_bytes")?,
+        },
+        None => UnlinkedOverview {
+            objects: 0,
+            size_bytes: 0,
+        },
+    };
+
+    Ok(Json(ArchiveOverview {
+        runs,
+        clips,
+        unlinked,
+    }))
+}
