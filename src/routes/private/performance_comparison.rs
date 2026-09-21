@@ -360,6 +360,7 @@ fn baseline<'a>(
 #[derive(Serialize, ToSchema)]
 pub struct PerformanceComparison {
     pub configurations: Vec<PerformanceEvidence>,
+    pub groups: Vec<ConfigurationSummary>,
     pub baseline: Option<ConfigurationSummary>,
     pub alternatives: Vec<ConfigurationSummary>,
 }
@@ -381,6 +382,7 @@ async fn comparison(
     let selected_key = selected.map(identity);
     let mut summary = None;
     let mut alternatives = Vec::new();
+    let mut summaries = Vec::new();
     for (key, members) in groups {
         let matching: Vec<_> = members
             .into_iter()
@@ -389,6 +391,7 @@ async fn comparison(
         if matching.is_empty() {
             continue;
         }
+        summaries.push(summarize(&matching));
         if Some(&key) == selected_key.as_ref() {
             summary = Some(summarize(&matching));
         } else if selected.is_some_and(|base| comparable(base, matching[0], query.parameter)) {
@@ -397,6 +400,7 @@ async fn comparison(
     }
     Ok(Json(PerformanceComparison {
         configurations,
+        groups: summaries,
         baseline: summary,
         alternatives,
     }))

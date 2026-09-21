@@ -9,9 +9,11 @@ use axum::{
     Json,
     extract::{Path, State},
 };
+use base64::Engine;
 use chrono::Utc;
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, Set, sea_query::Expr,
+    ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseTransaction, EntityTrait, QueryFilter,
+    Set, sea_query::Expr,
 };
 use std::sync::Arc;
 use utoipa::ToSchema;
@@ -20,7 +22,8 @@ use uuid::Uuid;
 use super::{model as stored_object, run_artifact};
 use crate::archive::fetch_token;
 use crate::archive::keys::{artifact_key, is_content_hash, video_key};
-use crate::archive::store::{ArchiveStore, PART_SIZE_BYTES};
+use crate::archive::locks::upload_guard;
+use crate::archive::store::{ArchiveStore, PART_SIZE_BYTES, UploadedPart};
 use crate::common::AppState;
 use crate::common::auth::{AuthContext, Origin};
 use crate::error::{AppError, AppResult};
@@ -64,6 +67,7 @@ pub struct InitiateResponse {
     /// Part numbers already stored, which a resuming client skips. The rest are
     /// PUT to `/archive/{object_id}/parts/{part_number}` in any order.
     pub parts_done: Vec<i32>,
+    pub uploaded_parts: Vec<UploadedPart>,
 }
 
 /// Begin or resume an upload, deduplicated by content hash.
@@ -102,12 +106,14 @@ pub async fn initiate(
     }
 
     let (key, linkage) = resolve_target(&state, &store, &body).await?;
-    let response = negotiate(&state, &store, &auth, &body, key).await?;
+    let guard = upload_guard(&state, &body.content_hash, false).await?;
+    let response = negotiate(&guard, &store, &auth, &body, key).await?;
 
     if let Some((run_id, relpath)) = linkage {
-        upsert_run_artifact(&state.db, run_id, &relpath, &body, response.object_id).await?;
+        upsert_run_artifact(&guard, run_id, &relpath, &body, response.object_id).await?;
     }
 
+    guard.commit().await?;
     Ok(Json(response))
 }
 
@@ -148,7 +154,7 @@ async fn resolve_target(
 
 /// Answer for the content's current state: dedup, resume, restart or a new upload.
 async fn negotiate(
-    state: &AppState,
+    db: &impl ConnectionTrait,
     store: &Arc<ArchiveStore>,
     auth: &AuthContext,
     body: &InitiateRequest,
@@ -156,7 +162,7 @@ async fn negotiate(
 ) -> AppResult<InitiateResponse> {
     let existing = stored_object::Entity::find()
         .filter(stored_object::Column::ContentHash.eq(&body.content_hash))
-        .one(&state.db)
+        .one(db)
         .await?;
 
     match existing {
@@ -171,7 +177,7 @@ async fn negotiate(
                     row.size_bytes, body.size_bytes
                 )));
             }
-            resume(state, store, row).await
+            resume(db, store, row).await
         }
         // A failed upload starts over on the same row.
         Some(row) => {
@@ -182,8 +188,8 @@ async fn negotiate(
             let mut restart: stored_object::ActiveModel = row.into();
             restart.size_bytes = Set(size);
             attribute(&mut restart, auth);
-            let restarted = restart.update(&state.db).await?;
-            fresh_upload(state, store, restarted).await
+            let restarted = restart.update(db).await?;
+            fresh_upload(db, store, restarted).await
         }
         None => {
             let mut new_row = stored_object::ActiveModel {
@@ -203,7 +209,7 @@ async fn negotiate(
                 ..Default::default()
             };
             attribute(&mut new_row, auth);
-            let inserted = match new_row.insert(&state.db).await {
+            let inserted = match new_row.insert(db).await {
                 Ok(row) => row,
                 // A racing initiate of the same content won the unique index.
                 Err(e)
@@ -218,7 +224,7 @@ async fn negotiate(
                 }
                 Err(e) => return Err(e.into()),
             };
-            fresh_upload(state, store, inserted).await
+            fresh_upload(db, store, inserted).await
         }
     }
 }
@@ -244,6 +250,7 @@ fn answer(object_id: Uuid, status: &str) -> InitiateResponse {
         upload_id: None,
         part_size_bytes: None,
         parts_done: Vec::new(),
+        uploaded_parts: Vec::new(),
     }
 }
 
@@ -258,19 +265,23 @@ fn part_count(size_bytes: i64, part_size: i64) -> AppResult<i32> {
 ///
 /// An upload S3 no longer knows starts over, losing progress rather than wedging.
 async fn resume(
-    state: &AppState,
+    db: &impl ConnectionTrait,
     store: &ArchiveStore,
     row: stored_object::Model,
 ) -> AppResult<InitiateResponse> {
     let done = match row.s3_upload_id.as_deref() {
-        Some(upload_id) => store
-            .uploaded_part_numbers(&row.s3_key, upload_id)
-            .await
-            .ok(),
+        Some(upload_id) => match store.uploaded_parts(&row.s3_key, upload_id).await {
+            Ok(parts) => Some(parts),
+            Err(AppError::Archive {
+                code: "archive_upload_missing",
+                ..
+            }) => None,
+            Err(error) => return Err(error),
+        },
         None => None,
     };
     let Some(parts_done) = done else {
-        return fresh_upload(state, store, row).await;
+        return fresh_upload(db, store, row).await;
     };
     let upload_id = row.s3_upload_id.clone().expect("checked above");
     let part_size = row.part_size_bytes.unwrap_or(PART_SIZE_BYTES);
@@ -280,20 +291,21 @@ async fn resume(
     let mut touch: stored_object::ActiveModel = row.into();
     touch.last_part_at = Set(Some(Utc::now()));
     touch.updated_at = Set(Utc::now());
-    touch.update(&state.db).await?;
+    touch.update(db).await?;
 
     Ok(InitiateResponse {
         object_id,
         status: stored_object::STATUS_PENDING.to_string(),
         upload_id: Some(upload_id),
         part_size_bytes: Some(part_size),
-        parts_done,
+        parts_done: parts_done.iter().map(|part| part.part_number).collect(),
+        uploaded_parts: parts_done,
     })
 }
 
 /// Open a new multipart upload for a pending row.
 async fn fresh_upload(
-    state: &AppState,
+    db: &impl ConnectionTrait,
     store: &ArchiveStore,
     row: stored_object::Model,
 ) -> AppResult<InitiateResponse> {
@@ -309,7 +321,7 @@ async fn fresh_upload(
     update.updated_at = Set(Utc::now());
     update.completed_at = Set(None);
     update.failure = Set(None);
-    update.update(&state.db).await?;
+    update.update(db).await?;
 
     Ok(InitiateResponse {
         object_id,
@@ -317,6 +329,7 @@ async fn fresh_upload(
         upload_id: Some(upload_id),
         part_size_bytes: Some(PART_SIZE_BYTES),
         parts_done: Vec::new(),
+        uploaded_parts: Vec::new(),
     })
 }
 
@@ -339,8 +352,7 @@ impl http_body::Body for SyncBody {
 #[derive(Debug, serde::Serialize, ToSchema)]
 pub struct UploadPartResponse {
     pub part_number: i32,
-    /// The `ETag` the store recorded, which is the part's MD5 on every store this
-    /// registry deploys against, so the sender can verify what landed.
+    /// The storage receipt. Clients validate MD5-compatible receipts before resuming.
     pub etag: String,
 }
 
@@ -357,6 +369,7 @@ pub struct UploadPartResponse {
     params(
         ("object_id" = Uuid, Path, description = "Pending object the part belongs to"),
         ("part_number" = i32, Path, description = "1-based part number"),
+        ("Content-MD5" = Option<String>, Header, description = "Base64-encoded MD5 of the part bytes, verified by storage"),
     ),
     responses(
         (status = 200, description = "Part stored", body = UploadPartResponse),
@@ -377,6 +390,11 @@ pub async fn upload_part(
     let store = archive(&state)?.clone();
     let row = stored_object::Entity::find_by_id(object_id)
         .one(&state.db)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("No object {object_id}")))?;
+    let guard = upload_guard(&state, &row.content_hash, true).await?;
+    let row = stored_object::Entity::find_by_id(object_id)
+        .one(&guard)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("No object {object_id}")))?;
     if row.status != stored_object::STATUS_PENDING {
@@ -411,12 +429,19 @@ pub async fn upload_part(
         )));
     }
 
+    let expected = part_size.min(row.size_bytes - i64::from(part_number - 1) * part_size);
+    if content_length != expected {
+        return Err(AppError::BadRequest(format!(
+            "Part {part_number} must contain {expected} bytes"
+        )));
+    }
     let etag = store
         .upload_part(
             &row.s3_key,
             &upload_id,
             part_number,
             content_length,
+            content_md5(&headers)?,
             aws_sdk_s3::primitives::ByteStream::from_body_1_x(SyncBody(
                 sync_wrapper::SyncWrapper::new(body),
             )),
@@ -427,8 +452,9 @@ pub async fn upload_part(
     let mut touch: stored_object::ActiveModel = row.into();
     touch.last_part_at = Set(Some(Utc::now()));
     touch.updated_at = Set(Utc::now());
-    touch.update(&state.db).await?;
+    touch.update(&guard).await?;
 
+    guard.commit().await?;
     Ok(Json(UploadPartResponse { part_number, etag }))
 }
 
@@ -542,6 +568,17 @@ pub async fn complete(
         .one(&state.db)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("No object {object_id}")))?;
+    let guard = upload_guard(&state, &row.content_hash, false).await?;
+    let row = stored_object::Entity::find_by_id(object_id)
+        .one(&guard)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("No object {object_id}")))?;
+    if row.status == stored_object::STATUS_COMPLETE {
+        return Ok(Json(CompleteResponse {
+            object_id,
+            status: row.status,
+        }));
+    }
     if row.status != stored_object::STATUS_PENDING {
         return Err(AppError::Conflict(format!(
             "Object is {}, not pending",
@@ -553,7 +590,15 @@ pub async fn complete(
         .clone()
         .ok_or_else(|| AppError::Conflict("Object has no open upload".to_string()))?;
 
-    match store.complete_multipart(&row.s3_key, &upload_id).await {
+    match store
+        .complete_multipart(
+            &row.s3_key,
+            &upload_id,
+            row.size_bytes,
+            row.part_size_bytes.unwrap_or(PART_SIZE_BYTES),
+        )
+        .await
+    {
         Ok(0) => {
             return Err(AppError::Conflict(
                 "Nothing has been uploaded for this object yet".to_string(),
@@ -577,7 +622,7 @@ pub async fn complete(
     if stored_size != row.size_bytes {
         let claimed = row.size_bytes;
         return fail_verification(
-            &state,
+            guard,
             &store,
             row,
             format!("Uploaded {stored_size} bytes, not the {claimed} initiated"),
@@ -588,7 +633,7 @@ pub async fn complete(
     if computed != row.content_hash {
         let claimed = row.content_hash.clone();
         return fail_verification(
-            &state,
+            guard,
             &store,
             row,
             format!("Uploaded content hashes to {computed}, not the {claimed} claimed"),
@@ -610,7 +655,7 @@ pub async fn complete(
         .col_expr(stored_object::Column::UpdatedAt, Expr::value(Utc::now()))
         .filter(stored_object::Column::Id.eq(object_id))
         .filter(stored_object::Column::Status.eq(stored_object::STATUS_PENDING))
-        .exec(&state.db)
+        .exec(&guard)
         .await?;
     if flipped.rows_affected != 1 {
         return Err(AppError::Conflict(
@@ -618,6 +663,7 @@ pub async fn complete(
         ));
     }
 
+    guard.commit().await?;
     Ok(Json(CompleteResponse {
         object_id,
         status: stored_object::STATUS_COMPLETE.to_string(),
@@ -627,7 +673,7 @@ pub async fn complete(
 /// The uploaded bytes are not the claimed content: remove them, fail the row and
 /// tell the client to start over. Nothing wrong may sit at a content-addressed key.
 async fn fail_verification(
-    state: &AppState,
+    transaction: DatabaseTransaction,
     store: &ArchiveStore,
     row: stored_object::Model,
     why: String,
@@ -638,10 +684,12 @@ async fn fail_verification(
     update.s3_upload_id = Set(None);
     update.failure = Set(Some(why.clone()));
     update.updated_at = Set(Utc::now());
-    update.update(&state.db).await?;
-    Err(AppError::Conflict(format!(
-        "{why}: re-initiate to upload again"
-    )))
+    update.update(&transaction).await?;
+    transaction.commit().await?;
+    Err(AppError::Archive {
+        code: "archive_integrity",
+        message: format!("{why}: re-initiate to upload again"),
+    })
 }
 
 #[derive(Debug, serde::Serialize, ToSchema)]
@@ -1071,4 +1119,22 @@ pub async fn overview(State(state): State<AppState>) -> AppResult<Json<ArchiveOv
         clips,
         unlinked,
     }))
+}
+
+fn content_md5(headers: &axum::http::HeaderMap) -> AppResult<Option<String>> {
+    let Some(value) = headers.get("content-md5") else {
+        return Ok(None);
+    };
+    let encoded = value
+        .to_str()
+        .map_err(|_| AppError::BadRequest("Invalid Content-MD5".to_string()))?;
+    let decoded = base64::engine::general_purpose::STANDARD
+        .decode(encoded)
+        .map_err(|_| AppError::BadRequest("Invalid Content-MD5".to_string()))?;
+    if decoded.len() != 16 {
+        return Err(AppError::BadRequest(
+            "Content-MD5 must encode 16 bytes".to_string(),
+        ));
+    }
+    Ok(Some(encoded.to_string()))
 }

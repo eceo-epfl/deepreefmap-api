@@ -16,6 +16,9 @@ pub enum AppError {
     #[error("Internal error: {0}")]
     Internal(String),
 
+    #[error("Archive error ({code}): {message}")]
+    Archive { code: &'static str, message: String },
+
     #[error("Configuration error: {0}")]
     Config(#[from] crate::config::ConfigError),
 
@@ -46,6 +49,14 @@ impl IntoResponse for AppError {
         // Database and internal errors are logged with detail and answered without
         // it: the detail is for the operator, not the caller.
         let (status, message) = match &self {
+            Self::Archive { code, message } => {
+                let status = if *code == "archive_integrity" {
+                    StatusCode::CONFLICT
+                } else {
+                    StatusCode::BAD_GATEWAY
+                };
+                return (status, Json(json!({ "error": message, "code": code }))).into_response();
+            }
             Self::Database(e) => {
                 tracing::error!("Database error: {e:?}");
                 (

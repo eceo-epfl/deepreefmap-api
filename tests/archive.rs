@@ -747,7 +747,11 @@ fn s3_archive_config() -> Option<ArchiveConfig> {
         bucket: var("S3_BUCKET_ID")?,
         access_key: var("S3_ACCESS_KEY")?,
         secret_key: var("S3_SECRET_KEY")?,
-        prefix: format!("test-{}", uuid::Uuid::new_v4()),
+        prefix: format!(
+            "{}/{}",
+            var("S3_TEST_PREFIX").unwrap_or_else(|| "archive-test".to_string()),
+            uuid::Uuid::new_v4()
+        ),
     })
 }
 
@@ -1078,20 +1082,15 @@ async fn test_complete_refuses_a_short_upload() {
     assert_eq!(status, 200, "{body}");
     let object_id = body["object_id"].as_str().unwrap().to_string();
 
-    upload_parts(&app, &token, &body, &content).await;
-    let (status, body) = post_json(
+    let (status, body) = put_bytes(
         &app,
-        &format!("/api/archive/{object_id}/complete"),
-        &serde_json::json!({ "parts": [] }),
+        &format!("/api/archive/{object_id}/parts/1"),
+        content,
         Some(&token),
     )
     .await;
-    assert_eq!(status, 409, "{body}");
-    let error = body["error"].as_str().unwrap();
-    assert!(
-        error.contains("bytes"),
-        "the refusal names the sizes: {error}"
-    );
+    assert_eq!(status, 400, "{body}");
+    assert!(body.contains("bytes"));
 }
 
 /// A file under the sampling threshold verifies down the whole-file path.
@@ -1365,4 +1364,96 @@ async fn test_a_bundle_stream_fails_loudly_when_a_file_is_gone() {
         response.into_body().collect().await.is_err(),
         "a zip that never got its central directory must not read as a whole file"
     );
+}
+
+#[tokio::test]
+async fn test_complete_is_idempotent_without_storage_calls() {
+    let db = setup_test_db().await;
+    let object_id = seed_complete_object(&db, HASH).await;
+    let app = build_test_app_with_config_as_human(
+        db,
+        dead_archive_config(),
+        "alice",
+        vec![deepreefmap_api::common::auth::Role::Administrator],
+    );
+    let (status, body) = post_json(
+        &app,
+        &format!("/api/archive/{object_id}/complete"),
+        &serde_json::json!({"parts": []}),
+        None,
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(body["status"], "complete");
+}
+
+#[tokio::test]
+async fn test_upload_locks_coordinate_independent_api_states() {
+    let db = setup_test_db().await;
+    let first = deepreefmap_api::common::AppState::new(db.clone(), test_config(), None);
+    let second = deepreefmap_api::common::AppState::new(db, test_config(), None);
+    let shared = deepreefmap_api::archive::locks::upload_guard(&first, HASH, true)
+        .await
+        .unwrap();
+    let parallel = deepreefmap_api::archive::locks::upload_guard(&second, HASH, true)
+        .await
+        .unwrap();
+    assert!(
+        deepreefmap_api::archive::locks::upload_guard(&second, HASH, false)
+            .await
+            .is_err()
+    );
+    parallel.rollback().await.unwrap();
+    shared.rollback().await.unwrap();
+    let exclusive = deepreefmap_api::archive::locks::upload_guard(&second, HASH, false)
+        .await
+        .unwrap();
+    assert!(
+        deepreefmap_api::archive::locks::upload_guard(&first, HASH, true)
+            .await
+            .is_err()
+    );
+    exclusive.commit().await.unwrap();
+}
+
+#[tokio::test]
+async fn test_content_md5_rejects_corruption_and_accepts_original_bytes() {
+    use tower::ServiceExt;
+    let Some(archive_config) = s3_archive_config() else {
+        return;
+    };
+    let db = setup_test_db().await;
+    let config = Config {
+        archive: Some(archive_config),
+        ..test_config()
+    };
+    let app = build_test_app_with_config(db.clone(), config);
+    let code = seed_connect_code(&db, "alice", "Checksum test").await;
+    let token = enrol_device(&app, &code).await;
+    let (_, initiated) = post_json(&app, "/api/archive/initiate",
+        &serde_json::json!({"content_hash": content_hash_of(b"reef"), "size_bytes": 4, "kind": "video"}), Some(&token)).await;
+    let id = initiated["object_id"].as_str().unwrap();
+    for (checksum, status) in [
+        ("AAAAAAAAAAAAAAAAAAAAAA==", 409),
+        ("lJgbRHlHweavXYvh4mLdfg==", 200),
+    ] {
+        let request = axum::http::Request::builder()
+            .method("PUT")
+            .uri(format!("/api/archive/{id}/parts/1"))
+            .header("authorization", format!("Bearer {token}"))
+            .header(deepreefmap_api::common::contract::CONTRACT_HEADER, "1-1")
+            .header("content-length", "4")
+            .header("content-md5", checksum)
+            .body(axum::body::Body::from("reef"))
+            .unwrap();
+        assert_eq!(app.clone().oneshot(request).await.unwrap().status(), status);
+    }
+    let (status, body) = post_json(
+        &app,
+        &format!("/api/archive/{id}/complete"),
+        &serde_json::json!({"parts": []}),
+        Some(&token),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
 }

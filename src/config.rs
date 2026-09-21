@@ -133,6 +133,7 @@ pub struct Config {
     pub db_min_connections: u32,
 
     pub request_timeout_seconds: u64,
+    pub archive_request_timeout_seconds: u64,
 
     /// How long a freshly minted connect code stays usable. Short: it is a bearer
     /// secret that travels through chat and email on its way to a laptop.
@@ -180,6 +181,7 @@ impl Default for Config {
             db_max_connections: 20,
             db_min_connections: 5,
             request_timeout_seconds: 60,
+            archive_request_timeout_seconds: 600,
             connect_code_ttl_seconds: 900,
             token_cache_ttl_seconds: 5,
             disable_rate_limiting: false,
@@ -248,6 +250,10 @@ impl Config {
             db_max_connections: parse_or("DB_MAX_CONNECTIONS", fallback.db_max_connections),
             db_min_connections: parse_or("DB_MIN_CONNECTIONS", fallback.db_min_connections),
 
+            archive_request_timeout_seconds: parse_or(
+                "ARCHIVE_REQUEST_TIMEOUT_SECONDS",
+                fallback.archive_request_timeout_seconds,
+            ),
             request_timeout_seconds: parse_or(
                 "REQUEST_TIMEOUT_SECONDS",
                 fallback.request_timeout_seconds,

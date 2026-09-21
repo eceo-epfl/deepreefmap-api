@@ -38,6 +38,7 @@ pub fn test_config() -> Config {
         db_max_connections: 5,
         db_min_connections: 1,
         request_timeout_seconds: 30,
+        archive_request_timeout_seconds: 600,
         connect_code_ttl_seconds: 900,
         // Zero falls back to the default, and a short TTL keeps revocation honest.
         token_cache_ttl_seconds: 1,

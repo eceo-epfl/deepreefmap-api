@@ -831,6 +831,7 @@ async fn test_comparison_consolidates_workloads_and_filters_evidence() {
     assert_eq!(status, 200, "{body}");
     assert_eq!(body["configurations"].as_array().unwrap().len(), 1);
     assert_eq!(body["baseline"]["count"], 2);
+    assert_eq!(body["groups"][0]["count"], 2);
     assert_eq!(body["baseline"]["stats"]["ram"]["median"], 20.0);
     assert_eq!(
         body["baseline"]["stats"]["seconds_per_frame"]["median"],
@@ -890,6 +891,7 @@ async fn test_comparison_consolidates_workloads_and_filters_evidence() {
     )
     .await;
     assert!(different["alternatives"].as_array().unwrap().is_empty());
+    assert_eq!(different["groups"].as_array().unwrap().len(), 2);
 }
 
 #[tokio::test]

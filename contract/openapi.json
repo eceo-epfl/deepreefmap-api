@@ -2168,12 +2168,19 @@
               "string",
               "null"
             ]
+          },
+          "uploaded_parts": {
+            "items": {
+              "$ref": "#/components/schemas/UploadedPart"
+            },
+            "type": "array"
           }
         },
         "required": [
           "object_id",
           "status",
-          "parts_done"
+          "parts_done",
+          "uploaded_parts"
         ],
         "type": "object"
       },
@@ -3002,10 +3009,17 @@
               "$ref": "#/components/schemas/PerformanceEvidence"
             },
             "type": "array"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/ConfigurationSummary"
+            },
+            "type": "array"
           }
         },
         "required": [
           "configurations",
+          "groups",
           "alternatives"
         ],
         "type": "object"
@@ -5688,7 +5702,7 @@
       "UploadPartResponse": {
         "properties": {
           "etag": {
-            "description": "The `ETag` the store recorded, which is the part's MD5 on every store this\nregistry deploys against, so the sender can verify what landed.",
+            "description": "The storage receipt. Clients validate MD5-compatible receipts before resuming.",
             "type": "string"
           },
           "part_number": {
@@ -5768,6 +5782,27 @@
           "camera_calibration_id",
           "version",
           "created"
+        ],
+        "type": "object"
+      },
+      "UploadedPart": {
+        "properties": {
+          "etag": {
+            "type": "string"
+          },
+          "part_number": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "size_bytes": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "part_number",
+          "etag",
+          "size_bytes"
         ],
         "type": "object"
       },
@@ -6844,6 +6879,18 @@
             "schema": {
               "format": "int32",
               "type": "integer"
+            }
+          },
+          {
+            "description": "Base64-encoded MD5 of the part bytes, verified by storage",
+            "in": "header",
+            "name": "Content-MD5",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
             }
           }
         ],

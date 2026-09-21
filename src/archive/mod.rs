@@ -10,3 +10,5 @@ pub mod keys;
 pub mod purpose;
 pub mod reaper;
 pub mod store;
+
+pub mod locks;

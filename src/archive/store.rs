@@ -22,6 +22,13 @@ pub struct OpenUpload {
     pub initiated_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
+#[derive(Debug, serde::Serialize, utoipa::ToSchema)]
+pub struct UploadedPart {
+    pub part_number: i32,
+    pub etag: String,
+    pub size_bytes: i64,
+}
+
 pub struct ArchiveStore {
     client: aws_sdk_s3::Client,
     bucket: String,
@@ -85,7 +92,7 @@ impl ArchiveStore {
             .uploaded_parts(key, upload_id)
             .await?
             .into_iter()
-            .map(|(number, _)| number)
+            .map(|part| part.part_number)
             .collect())
     }
 
@@ -94,11 +101,7 @@ impl ArchiveStore {
     /// S3 is the authority on what was uploaded. A resuming client only holds
     /// `ETag`s for the parts it sent itself, so assembly must never depend on a
     /// client's list.
-    pub async fn uploaded_parts(
-        &self,
-        key: &str,
-        upload_id: &str,
-    ) -> AppResult<Vec<(i32, String)>> {
+    pub async fn uploaded_parts(&self, key: &str, upload_id: &str) -> AppResult<Vec<UploadedPart>> {
         let mut parts = Vec::new();
         let mut marker: Option<String> = None;
         loop {
@@ -112,17 +115,19 @@ impl ArchiveStore {
                 .send()
                 .await
                 .map_err(|e| internal("ListParts", &e))?;
-            parts.extend(
-                page.parts()
-                    .iter()
-                    .filter_map(|part| Some((part.part_number()?, part.e_tag()?.to_string()))),
-            );
+            parts.extend(page.parts().iter().filter_map(|part| {
+                Some(UploadedPart {
+                    part_number: part.part_number()?,
+                    etag: part.e_tag()?.trim_matches('"').to_string(),
+                    size_bytes: part.size()?,
+                })
+            }));
             if page.is_truncated() != Some(true) {
                 break;
             }
             marker = page.next_part_number_marker().map(ToString::to_string);
         }
-        parts.sort_unstable_by_key(|(number, _)| *number);
+        parts.sort_unstable_by_key(|part| part.part_number);
         Ok(parts)
     }
 
@@ -138,8 +143,10 @@ impl ArchiveStore {
         upload_id: &str,
         part_number: i32,
         content_length: i64,
+        content_md5: Option<String>,
         body: ByteStream,
     ) -> AppResult<String> {
+        let started = std::time::Instant::now();
         let uploaded = self
             .client
             .upload_part()
@@ -148,10 +155,18 @@ impl ArchiveStore {
             .upload_id(upload_id)
             .part_number(part_number)
             .content_length(content_length)
+            .set_content_md5(content_md5)
             .body(body)
             .send()
             .await
             .map_err(|e| internal("UploadPart", &e))?;
+        tracing::debug!(
+            key,
+            part_number,
+            content_length,
+            elapsed_ms = started.elapsed().as_millis(),
+            "Archive part stored"
+        );
         uploaded
             .e_tag()
             .map(|etag| etag.trim_matches('"').to_string())
@@ -178,17 +193,24 @@ impl ArchiveStore {
     ///
     /// Returns the number of parts assembled, zero meaning nothing was
     /// uploaded and there is nothing to complete.
-    pub async fn complete_multipart(&self, key: &str, upload_id: &str) -> AppResult<usize> {
+    pub async fn complete_multipart(
+        &self,
+        key: &str,
+        upload_id: &str,
+        size: i64,
+        part_size: i64,
+    ) -> AppResult<usize> {
         let parts = self.uploaded_parts(key, upload_id).await?;
         if parts.is_empty() {
             return Ok(0);
         }
+        validate_parts(&parts, size, part_size)?;
         let completed: Vec<CompletedPart> = parts
             .iter()
-            .map(|(number, etag)| {
+            .map(|part| {
                 CompletedPart::builder()
-                    .part_number(*number)
-                    .e_tag(etag)
+                    .part_number(part.part_number)
+                    .e_tag(&part.etag)
                     .build()
             })
             .collect();
@@ -343,6 +365,7 @@ fn client_against(config: &ArchiveConfig, endpoint_url: &str) -> aws_sdk_s3::Cli
     );
     let s3_config = aws_sdk_s3::config::Builder::new()
         .behavior_version(aws_config::BehaviorVersion::latest())
+        .request_checksum_calculation(aws_sdk_s3::config::RequestChecksumCalculation::WhenRequired)
         // MinIO ignores the region but sigv4 needs one to sign under.
         .region(aws_config::Region::new("us-east-1"))
         .endpoint_url(endpoint_url)
@@ -356,5 +379,42 @@ fn client_against(config: &ArchiveConfig, endpoint_url: &str) -> aws_sdk_s3::Cli
 /// SDK error with its full source chain, logged by [`AppError::Internal`] and never
 /// shown to the caller.
 fn internal<E: std::error::Error>(operation: &str, error: &E) -> AppError {
-    AppError::Internal(format!("{operation}: {}", DisplayErrorContext(error)))
+    let detail = format!("{}", DisplayErrorContext(error));
+    tracing::error!(operation, error = %detail, "Archive storage request failed");
+    let code = if detail.contains("trailing checksum is not supported") {
+        "archive_storage_incompatible"
+    } else if detail.contains("NoSuchUpload") {
+        "archive_upload_missing"
+    } else if detail.contains("BadDigest") {
+        "archive_integrity"
+    } else {
+        "archive_storage_unavailable"
+    };
+    AppError::Archive {
+        code,
+        message: format!("Archive storage failed during {operation}"),
+    }
 }
+
+fn validate_parts(parts: &[UploadedPart], size: i64, part_size: i64) -> AppResult<()> {
+    let count = (size + part_size - 1) / part_size;
+    if i64::try_from(parts.len()).ok() != Some(count) {
+        return Err(AppError::Conflict(
+            "The upload is missing parts".to_string(),
+        ));
+    }
+    for (index, part) in parts.iter().enumerate() {
+        let number = i64::try_from(index).expect("part count fits i64") + 1;
+        let expected = part_size.min(size - (number - 1) * part_size);
+        if i64::from(part.part_number) != number || part.size_bytes != expected {
+            return Err(AppError::Conflict(
+                "The upload has an invalid part size or sequence".to_string(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+#[path = "tests/store.rs"]
+mod tests;

@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use crate::archive::store::ArchiveStore;
 use crate::common::AppState;
-use crate::error::AppResult;
+use crate::error::{AppError, AppResult};
 use crate::routes::private::archive::model as stored_object;
 
 /// Sweep on an interval for as long as the process runs.
@@ -44,6 +44,23 @@ async fn sweep(state: &AppState, store: &Arc<ArchiveStore>) -> AppResult<()> {
         if now - row.last_part_at.unwrap_or(row.created_at) < timeout {
             continue;
         }
+        let guard = match crate::archive::locks::upload_guard(state, &row.content_hash, false).await
+        {
+            Ok(guard) => guard,
+            Err(AppError::Conflict(_)) => continue,
+            Err(error) => return Err(error),
+        };
+        let Some(row) = stored_object::Entity::find_by_id(row.id)
+            .one(&guard)
+            .await?
+        else {
+            continue;
+        };
+        if row.status != stored_object::STATUS_PENDING
+            || now - row.last_part_at.unwrap_or(row.created_at) < timeout
+        {
+            continue;
+        }
         if let Some(upload_id) = row.s3_upload_id.as_deref() {
             store.abort_multipart(&row.s3_key, upload_id).await;
         }
@@ -55,7 +72,8 @@ async fn sweep(state: &AppState, store: &Arc<ArchiveStore>) -> AppResult<()> {
             "Upload abandoned: no part activity before the timeout".to_string(),
         ));
         update.updated_at = Set(now);
-        update.update(&state.db).await?;
+        update.update(&guard).await?;
+        guard.commit().await?;
         tracing::info!(%object_id, "Abandoned a stalled upload");
     }
 

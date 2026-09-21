@@ -1,13 +1,13 @@
 pub mod private;
 pub mod public;
 
+use axum::response::IntoResponse;
 use axum::{
     Router, extract::connect_info::IntoMakeServiceWithConnectInfo, http::StatusCode, middleware,
     routing::get,
 };
 use std::net::SocketAddr;
 use std::time::Duration;
-use tower::ServiceBuilder;
 use tower_http::{compression::CompressionLayer, cors::CorsLayer, trace::TraceLayer};
 use utoipa::OpenApi;
 use utoipa_axum::router::OpenApiRouter;
@@ -261,13 +261,13 @@ fn build(state: &AppState, forced_identity: Option<AuthContext>) -> Router {
         .nest("/api", api)
         .merge(health)
         .merge(Scalar::with_url("/docs", openapi))
-        .layer(
-            ServiceBuilder::new()
-                .layer(axum::error_handling::HandleErrorLayer::new(
-                    |_: tower::BoxError| async { StatusCode::REQUEST_TIMEOUT },
-                ))
-                .timeout(Duration::from_secs(config.request_timeout_seconds)),
-        )
+        .layer(middleware::from_fn_with_state(
+            (
+                config.request_timeout_seconds,
+                config.archive_request_timeout_seconds,
+            ),
+            request_deadline,
+        ))
         .layer(CompressionLayer::new())
         .layer(cors_layer(&config))
         .layer(TraceLayer::new_for_http())
@@ -308,9 +308,30 @@ fn cors_layer(config: &crate::config::Config) -> CorsLayer {
             axum::http::header::AUTHORIZATION,
             axum::http::header::CONTENT_TYPE,
             axum::http::header::ACCEPT,
+            axum::http::HeaderName::from_static("content-md5"),
             axum::http::HeaderName::from_static(CONTRACT_HEADER),
             axum::http::HeaderName::from_static(SECTIONS_HEADER),
         ])
         .allow_credentials(true)
         .expose_headers([axum::http::header::CONTENT_RANGE])
 }
+
+async fn request_deadline(
+    axum::extract::State((ordinary, archive)): axum::extract::State<(u64, u64)>,
+    request: axum::extract::Request,
+    next: middleware::Next,
+) -> axum::response::Response {
+    let path = request.uri().path();
+    let transfer = path.starts_with("/api/archive/")
+        && ((request.method() == axum::http::Method::PUT && path.contains("/parts/"))
+            || (request.method() == axum::http::Method::POST && path.ends_with("/complete")));
+    let seconds = if transfer { archive } else { ordinary };
+    match tokio::time::timeout(Duration::from_secs(seconds), next.run(request)).await {
+        Ok(response) => response,
+        Err(_) => StatusCode::REQUEST_TIMEOUT.into_response(),
+    }
+}
+
+#[cfg(test)]
+#[path = "tests/timeout.rs"]
+mod timeout_tests;
