@@ -102,7 +102,35 @@ pub struct PerformanceSummary {
 /// configuration costs, not the population of everything it could ever cost. It returns
 /// null for a single observation, which is the honest answer.
 const SUMMARY_SQL: &str = "\
-    WITH per_run AS ( \
+    WITH observations AS ( \
+      SELECT p.id, p.device_id, p.observation->'settings'->>'preset_name' AS preset_name, \
+             CASE WHEN jsonb_typeof(p.observation->'settings'->'preset_version') = 'number' \
+                  THEN (p.observation->'settings'->>'preset_version')::INTEGER END AS preset_version, \
+             p.observation->'settings'->>'preset_hash' AS preset_hash, \
+             p.observation->'settings'->>'segmentation_model' AS segmentation_model, \
+             p.observation->'settings'->>'mapping_backend' AS mapping_backend, \
+             CASE WHEN jsonb_typeof(p.observation->'settings'->'processing_width') = 'number' \
+                  THEN (p.observation->'settings'->>'processing_width')::INTEGER END AS processing_width, \
+             CASE WHEN jsonb_typeof(p.observation->'settings'->'processing_height') = 'number' \
+                  THEN (p.observation->'settings'->>'processing_height')::INTEGER END AS processing_height, \
+             CASE WHEN jsonb_typeof(p.observation->'settings'->'fps') = 'number' \
+                  THEN (p.observation->'settings'->>'fps')::INTEGER END AS fps, \
+             CASE WHEN jsonb_typeof(p.observation->'settings'->'preprocess_batch_size') = 'number' \
+                  THEN (p.observation->'settings'->>'preprocess_batch_size')::INTEGER END AS preprocess_batch_size, \
+             COALESCE(p.observation->>'status', 'completed') AS status, \
+             CASE WHEN jsonb_typeof(p.observation->'duration_s') = 'number' \
+                  THEN (p.observation->>'duration_s')::DOUBLE PRECISION END AS run_duration_s, \
+             p.created_at AS started_at, p.stage_peaks \
+      FROM performance_observation p \
+      UNION ALL \
+      SELECT r.id, r.device_id, r.preset_name, r.preset_version, r.preset_hash, \
+             r.segmentation_model, r.mapping_backend, r.processing_width, \
+             r.processing_height, r.fps, r.preprocess_batch_size, r.status, \
+             r.run_duration_s, r.started_at, r.stage_peaks \
+      FROM run_record r \
+      WHERE r.deleted_at IS NULL \
+        AND NOT EXISTS (SELECT 1 FROM performance_observation p WHERE p.run_id = r.id) \
+    ), per_run AS ( \
       SELECT r.id, r.device_id, r.preset_name, r.preset_version, r.preset_hash, \
              r.segmentation_model, r.mapping_backend, r.processing_width, \
              r.processing_height, r.fps, r.preprocess_batch_size, r.status, \
@@ -113,13 +141,16 @@ const SUMMARY_SQL: &str = "\
                       THEN (stage.value->>'swap_bytes')::DOUBLE PRECISION END) AS swap_bytes, \
              MAX(CASE WHEN jsonb_typeof(stage.value->'vram_bytes') = 'number' \
                       THEN (stage.value->>'vram_bytes')::DOUBLE PRECISION END) AS vram_bytes \
-      FROM run_record r \
+      FROM observations r \
       LEFT JOIN LATERAL jsonb_each( \
         CASE WHEN jsonb_typeof(r.stage_peaks) = 'object' THEN r.stage_peaks END \
       ) AS stage ON TRUE \
-      WHERE r.deleted_at IS NULL AND jsonb_typeof(r.stage_peaks) = 'object' \
+      WHERE jsonb_typeof(r.stage_peaks) = 'object' \
             AND r.stage_peaks <> '{}'::jsonb \
-      GROUP BY r.id \
+      GROUP BY r.id, r.device_id, r.preset_name, r.preset_version, r.preset_hash, \
+               r.segmentation_model, r.mapping_backend, r.processing_width, \
+               r.processing_height, r.fps, r.preprocess_batch_size, r.status, \
+               r.run_duration_s, r.started_at \
     ) \
     SELECT per_run.device_id, d.name AS device_name, \
            d.system_profile->'gpu'->>'name' AS gpu_name, \

@@ -8,7 +8,8 @@ mod common;
 
 use common::*;
 
-use deepreefmap_api::routes::private::sync::schema::CONTRACT_VERSION;
+use deepreefmap_api::common::contract::CONTRACT_HEADER;
+use deepreefmap_api::routes::private::sync::schema::{CONTRACT_VERSION, MIN_CONTRACT_VERSION};
 
 const UPLOAD: &str = "/api/camera_calibrations/upload";
 
@@ -248,7 +249,14 @@ async fn test_a_run_carries_the_calibration_it_was_rectified_with() {
             }],
         }
     });
-    let (status, body) = post(&app, "/api/sync/push", &push, Some(&token)).await;
+    let mut headers = negotiation();
+    for (name, value) in &mut headers {
+        if name == CONTRACT_HEADER {
+            *value = format!("{MIN_CONTRACT_VERSION}-{CONTRACT_VERSION}");
+        }
+    }
+    let (status, _, body) =
+        post_declaring(&app, "/api/sync/push", &push, Some(&token), &headers).await;
     assert_eq!(status, 200, "{body}");
     let pushed: serde_json::Value = serde_json::from_str(&body).expect("JSON");
     assert_eq!(applied(&pushed["sections"]["runs"]), 1, "{pushed}");

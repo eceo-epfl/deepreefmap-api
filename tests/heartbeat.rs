@@ -26,6 +26,7 @@ async fn test_heartbeat_updates_the_calling_device() {
     .await;
     assert_eq!(status, 200, "{body}");
     assert!(body["assigned_preset"].is_null(), "{body}");
+    assert_eq!(body["performance_observations_version"], 1);
 
     let gui: Option<String> = one_value(&db, "SELECT gui_version FROM device").await;
     assert_eq!(gui.as_deref(), Some("0.10.0"));

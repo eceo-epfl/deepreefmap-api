@@ -51,6 +51,8 @@ pub struct AssignedPreset {
 pub struct HeartbeatResponse {
     /// Null when nothing is assigned, or the assigned preset has been deleted.
     pub assigned_preset: Option<AssignedPreset>,
+    /// Version of the independent performance-observation upload endpoint.
+    pub performance_observations_version: u32,
 }
 
 /// Update the calling device's own record and learn its assigned preset.
@@ -148,5 +150,8 @@ pub async fn heartbeat(
             }),
     };
 
-    Ok(Json(HeartbeatResponse { assigned_preset }))
+    Ok(Json(HeartbeatResponse {
+        assigned_preset,
+        performance_observations_version: 1,
+    }))
 }

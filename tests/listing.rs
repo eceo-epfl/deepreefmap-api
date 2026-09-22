@@ -141,6 +141,7 @@ const RUN_ONE_KEYS: &[&str] = &[
     "mapping_backend",
     "model_revisions",
     "pass_id",
+    "performance_observation",
     "pixel_size_m",
     "preprocess_batch_size",
     "preset_deviations",

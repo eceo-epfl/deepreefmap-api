@@ -7,15 +7,19 @@ use axum::{
     extract::{Query, State},
     middleware,
 };
-use sea_orm::{ConnectionTrait, Statement};
+use sea_orm::{ConnectionTrait, Statement, TransactionTrait};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use utoipa::{IntoParams, ToSchema};
 use utoipa_axum::router::OpenApiRouter;
 use uuid::Uuid;
 
-use crate::common::{AppState, auth::deny_device_crud};
+use crate::common::{
+    AppState,
+    auth::{AuthContext, Origin, deny_device_crud, require_device},
+};
 use crate::error::{AppError, AppResult};
+use crate::routes::CRUD_BODY_LIMIT;
 
 #[derive(Clone, Copy, Default, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
@@ -107,6 +111,40 @@ pub struct PerformanceEvidence {
     pub ram: Option<f64>,
     pub swap: Option<f64>,
     pub vram: Option<f64>,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct ObservationUpload {
+    pub id: Uuid,
+    #[serde(default)]
+    pub run_id: Option<Uuid>,
+    pub observation: Value,
+    #[serde(default)]
+    pub stage_peaks: Value,
+    #[serde(default = "default_source")]
+    pub source: String,
+}
+
+fn default_source() -> String {
+    "device".to_owned()
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct ObservationBatch {
+    pub observations: Vec<ObservationUpload>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct RejectedObservation {
+    pub id: Uuid,
+    pub reason: String,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ObservationBatchResponse {
+    pub accepted: Vec<Uuid>,
+    pub already_present: Vec<Uuid>,
+    pub rejected: Vec<RejectedObservation>,
 }
 
 fn peak(peaks: &Value, metric: &str) -> Option<f64> {
@@ -292,20 +330,43 @@ fn summarize(rows: &[&PerformanceEvidence]) -> ConfigurationSummary {
     }
 }
 
-const OBSERVATIONS_SQL: &str = "SELECT jsonb_build_object(
-    'id', r.id, 'device_id', r.device_id, 'device_name', d.name, 'status', r.status,
-    'recorded_at', r.started_at, 'run_duration_s', r.run_duration_s,
-    'stage_peaks', r.stage_peaks, 'performance_observation', r.performance_observation,
-    'legacy_settings', jsonb_build_object('processing_width', r.processing_width,
-        'processing_height', r.processing_height, 'fps', r.fps,
-        'preprocess_batch_size', r.preprocess_batch_size, 'mapping_backend', r.mapping_backend,
-        'segmentation_model', r.segmentation_model, 'preset_hash', r.preset_hash)
-    ) AS observation FROM run_record r LEFT JOIN device d ON d.id = r.device_id
-    WHERE r.deleted_at IS NULL AND ($1::uuid IS NULL OR r.device_id = $1)
-        AND ($2::text IS NULL OR r.preset_name = $2)
-        AND ($3::int IS NULL OR r.preset_version = $3)
+const OBSERVATIONS_SQL: &str = "WITH observations AS (
+    SELECT p.id, p.device_id, p.observation AS meta, p.stage_peaks,
+        COALESCE(p.observation->>'status', 'completed') AS status,
+        p.observation->>'recorded_at' AS recorded_at,
+        p.observation->'duration_s' AS duration,
+        COALESCE(p.observation->'settings', '{}'::jsonb) AS legacy_settings
+    FROM performance_observation p
+    UNION ALL
+    SELECT r.id, r.device_id, COALESCE(r.performance_observation, '{}'::jsonb),
+        COALESCE(r.stage_peaks, '{}'::jsonb), r.status, r.started_at::text,
+        to_jsonb(r.run_duration_s),
+        jsonb_build_object('processing_width', r.processing_width,
+            'processing_height', r.processing_height, 'fps', r.fps,
+            'preprocess_batch_size', r.preprocess_batch_size,
+            'mapping_backend', r.mapping_backend,
+            'segmentation_model', r.segmentation_model,
+            'preset_name', r.preset_name, 'preset_version', r.preset_version,
+            'preset_hash', r.preset_hash)
+    FROM run_record r
+    WHERE r.deleted_at IS NULL
         AND (r.stage_peaks IS NOT NULL OR r.performance_observation IS NOT NULL)
-    ORDER BY r.started_at DESC NULLS LAST, r.id";
+        AND NOT EXISTS (SELECT 1 FROM performance_observation p WHERE p.run_id = r.id)
+    )
+    SELECT jsonb_build_object(
+        'id', o.id, 'device_id', o.device_id, 'device_name', d.name,
+        'status', o.status, 'recorded_at', o.recorded_at,
+        'run_duration_s', o.duration, 'stage_peaks', o.stage_peaks,
+        'performance_observation', o.meta, 'legacy_settings', o.legacy_settings
+    ) AS observation
+    FROM observations o LEFT JOIN device d ON d.id = o.device_id
+    WHERE ($1::uuid IS NULL OR o.device_id = $1)
+        AND ($2::text IS NULL OR COALESCE(o.meta->'settings', o.legacy_settings)->>'preset_name' = $2)
+        AND ($3::int IS NULL OR CASE
+            WHEN jsonb_typeof(COALESCE(o.meta->'settings', o.legacy_settings)->'preset_version') = 'number'
+            THEN (COALESCE(o.meta->'settings', o.legacy_settings)->>'preset_version')::int
+        END = $3)
+    ORDER BY o.recorded_at DESC NULLS LAST, o.id";
 
 async fn observations(
     state: &AppState,
@@ -434,12 +495,163 @@ async fn evidence(
     }))
 }
 
+fn valid_upload(row: &ObservationUpload) -> Option<&'static str> {
+    let Some(observation) = row.observation.as_object() else {
+        return Some("observation must be an object");
+    };
+    if observation.get("id").and_then(Value::as_str) != Some(&row.id.to_string()) {
+        return Some("observation.id must match id");
+    }
+    if !matches!(
+        observation.get("version").and_then(Value::as_u64),
+        Some(0 | 1)
+    ) {
+        return Some("observation.version must be 0 or 1");
+    }
+    if !observation.get("settings").is_some_and(Value::is_object)
+        || !observation.get("hardware").is_some_and(Value::is_object)
+    {
+        return Some("observation settings and hardware must be objects");
+    }
+    if !matches!(
+        observation.get("basis").and_then(Value::as_str),
+        Some("process" | "machine" | "unknown")
+    ) {
+        return Some("observation basis is invalid");
+    }
+    if !matches!(
+        observation.get("status").and_then(Value::as_str),
+        Some("completed" | "failed")
+    ) {
+        return Some("observation status is invalid");
+    }
+    if !row.stage_peaks.is_object() {
+        return Some("stage_peaks must be an object");
+    }
+    if !matches!(row.source.as_str(), "device" | "legacy" | "run") {
+        return Some("source must be device, legacy or run");
+    }
+    None
+}
+
+#[utoipa::path(
+    post,
+    path = "/performance/observations",
+    request_body = ObservationBatch,
+    responses((status = 200, body = ObservationBatchResponse)),
+    tag = "performance"
+)]
+async fn upload_observations(
+    State(state): State<AppState>,
+    axum::Extension(auth): axum::Extension<AuthContext>,
+    Json(body): Json<ObservationBatch>,
+) -> AppResult<Json<ObservationBatchResponse>> {
+    let Origin::Device { device_id, .. } = auth.origin() else {
+        return Err(AppError::Forbidden(
+            "Performance observations are accepted from enrolled devices".to_owned(),
+        ));
+    };
+    if body.observations.len() > 100 {
+        return Err(AppError::BadRequest(
+            "At most 100 performance observations may be uploaded at once".to_owned(),
+        ));
+    }
+
+    let txn = state.db.begin().await?;
+    let mut response = ObservationBatchResponse {
+        accepted: Vec::new(),
+        already_present: Vec::new(),
+        rejected: Vec::new(),
+    };
+    for row in body.observations {
+        if let Some(reason) = valid_upload(&row) {
+            response.rejected.push(RejectedObservation {
+                id: row.id,
+                reason: reason.to_owned(),
+            });
+            continue;
+        }
+        let existing = txn
+            .query_one_raw(Statement::from_sql_and_values(
+                sea_orm::DatabaseBackend::Postgres,
+                "SELECT id, device_id, run_id, observation, stage_peaks, source
+                 FROM performance_observation
+                 WHERE id = $1 OR ($2::uuid IS NOT NULL AND run_id = $2)",
+                vec![row.id.into(), row.run_id.into()],
+            ))
+            .await?;
+        if let Some(existing) = existing {
+            let existing_id = existing.try_get::<Uuid>("", "id")?;
+            let same_measurements = existing.try_get::<Uuid>("", "device_id")? == device_id
+                && existing.try_get::<Value>("", "observation")? == row.observation
+                && existing.try_get::<Value>("", "stage_peaks")? == row.stage_peaks;
+            let same_identity = existing_id == row.id
+                && existing.try_get::<Option<Uuid>>("", "run_id")? == row.run_id
+                && existing.try_get::<String>("", "source")? == row.source;
+            let linked_duplicate = row.run_id.is_some()
+                && existing.try_get::<Option<Uuid>>("", "run_id")? == row.run_id;
+            if same_measurements && (same_identity || linked_duplicate) {
+                response.already_present.push(row.id);
+            } else {
+                response.rejected.push(RejectedObservation {
+                    id: row.id,
+                    reason: "The observation ID already names different measurements".to_owned(),
+                });
+            }
+            continue;
+        }
+        if let Some(run_id) = row.run_id {
+            let owned = txn
+                .query_one_raw(Statement::from_sql_and_values(
+                    sea_orm::DatabaseBackend::Postgres,
+                    "SELECT 1 FROM run_record WHERE id = $1 AND device_id = $2",
+                    vec![run_id.into(), device_id.into()],
+                ))
+                .await?
+                .is_some();
+            if !owned {
+                response.rejected.push(RejectedObservation {
+                    id: row.id,
+                    reason: "The linked run does not belong to this device".to_owned(),
+                });
+                continue;
+            }
+        }
+        txn.execute_raw(Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            "INSERT INTO performance_observation
+             (id, device_id, run_id, observation, stage_peaks, source)
+             VALUES ($1, $2, $3, $4, $5, $6)",
+            vec![
+                row.id.into(),
+                device_id.into(),
+                row.run_id.into(),
+                row.observation.into(),
+                row.stage_peaks.into(),
+                row.source.into(),
+            ],
+        ))
+        .await?;
+        response.accepted.push(row.id);
+    }
+    txn.commit().await?;
+    Ok(Json(response))
+}
+
 pub fn router(state: &AppState) -> OpenApiRouter {
-    OpenApiRouter::new()
+    let reads = OpenApiRouter::new()
         .routes(utoipa_axum::routes!(comparison))
         .routes(utoipa_axum::routes!(evidence))
         .layer(middleware::from_fn(deny_device_crud))
-        .with_state(state.clone())
+        .with_state(state.clone());
+    let uploads = OpenApiRouter::new()
+        .routes(utoipa_axum::routes!(upload_observations))
+        .layer(middleware::from_fn(require_device))
+        .layer(tower_http::limit::RequestBodyLimitLayer::new(
+            CRUD_BODY_LIMIT,
+        ))
+        .with_state(state.clone());
+    reads.merge(uploads)
 }
 
 #[cfg(test)]

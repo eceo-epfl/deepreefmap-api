@@ -2097,8 +2097,17 @@
                 "description": "Null when nothing is assigned, or the assigned preset has been deleted."
               }
             ]
+          },
+          "performance_observations_version": {
+            "description": "Version of the independent performance-observation upload endpoint.",
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
           }
         },
+        "required": [
+          "performance_observations_version"
+        ],
         "type": "object"
       },
       "InitiateRequest": {
@@ -2289,6 +2298,75 @@
         "required": [
           "code",
           "expires_at"
+        ],
+        "type": "object"
+      },
+      "ObservationBatch": {
+        "properties": {
+          "observations": {
+            "items": {
+              "$ref": "#/components/schemas/ObservationUpload"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "observations"
+        ],
+        "type": "object"
+      },
+      "ObservationBatchResponse": {
+        "properties": {
+          "accepted": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "already_present": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "rejected": {
+            "items": {
+              "$ref": "#/components/schemas/RejectedObservation"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "accepted",
+          "already_present",
+          "rejected"
+        ],
+        "type": "object"
+      },
+      "ObservationUpload": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "observation": {},
+          "run_id": {
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source": {
+            "type": "string"
+          },
+          "stage_peaks": {}
+        },
+        "required": [
+          "id",
+          "observation"
         ],
         "type": "object"
       },
@@ -3782,6 +3860,22 @@
       },
       "Refusal": {
         "description": "A row that did not land, and why. The ledger keeps its values either way.",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "RejectedObservation": {
         "properties": {
           "id": {
             "format": "uuid",
@@ -10549,6 +10643,36 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PerformanceEvidencePage"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": [
+          "performance"
+        ]
+      }
+    },
+    "/performance/observations": {
+      "post": {
+        "operationId": "upload_observations",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ObservationBatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObservationBatchResponse"
                 }
               }
             },

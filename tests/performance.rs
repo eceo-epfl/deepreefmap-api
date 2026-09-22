@@ -895,6 +895,80 @@ async fn test_comparison_consolidates_workloads_and_filters_evidence() {
 }
 
 #[tokio::test]
+async fn test_device_performance_upload_is_idempotent_and_device_scoped() {
+    let db = setup_test_db().await;
+    let member = build_test_app_as_member(db.clone());
+    let device_app = build_test_app(db.clone());
+    let (device, token) = seed_device(&db, &device_app, "journal", "Journal device", "GPU").await;
+    let id = "aaaaaaaa-1111-4111-8111-111111111111";
+    let observation = serde_json::json!({
+        "observations": [{
+            "id": id,
+            "run_id": null,
+            "source": "legacy",
+            "observation": {
+                "version": 0,
+                "id": id,
+                "settings": {"fps": 5, "processing_width": 1376, "processing_height": 768,
+                    "preprocess_batch_size": 4, "mapping_backend": "map",
+                    "segmentation_model": "seg", "mode": "semantic"},
+                "hardware": {"total_ram_bytes": 100},
+                "basis": "machine", "frames": 150, "timing_complete": false,
+                "status": "completed", "duration_s": null, "recorded_at": null
+            },
+            "stage_peaks": {"mapping": {"ram_bytes": 60, "swap_bytes": 5}}
+        }]
+    });
+    let (status, first) = post_json(
+        &device_app,
+        "/api/performance/observations",
+        &observation,
+        Some(&token),
+    )
+    .await;
+    assert_eq!(status, 200, "{first}");
+    assert_eq!(first["accepted"], serde_json::json!([id]));
+
+    let (_, repeated) = post_json(
+        &device_app,
+        "/api/performance/observations",
+        &observation,
+        Some(&token),
+    )
+    .await;
+    assert_eq!(repeated["already_present"], serde_json::json!([id]));
+    let stored: i64 = one_value(
+        &db,
+        &format!(
+            "SELECT COUNT(*)::BIGINT FROM performance_observation WHERE device_id = '{device}'"
+        ),
+    )
+    .await;
+    assert_eq!(stored, 1);
+
+    let (status, compared) = get_json(
+        &member,
+        &format!("/api/performance/comparison?device_id={device}"),
+        None,
+    )
+    .await;
+    assert_eq!(status, 200, "{compared}");
+    assert_eq!(compared["groups"][0]["count"], 1);
+    assert_eq!(compared["groups"][0]["stats"]["ram"]["median"], 60.0);
+
+    let mut conflicting = observation;
+    conflicting["observations"][0]["stage_peaks"]["mapping"]["ram_bytes"] = 61.into();
+    let (_, rejected) = post_json(
+        &device_app,
+        "/api/performance/observations",
+        &conflicting,
+        Some(&token),
+    )
+    .await;
+    assert_eq!(rejected["rejected"][0]["id"], id);
+}
+
+#[tokio::test]
 async fn test_performance_observation_sync_preserves_older_clients() {
     let db = setup_test_db().await;
     let app = build_test_app(db.clone());
@@ -926,6 +1000,20 @@ async fn test_performance_observation_sync_preserves_older_clients() {
         summary["baseline"]["stats"]["seconds_per_frame"]["median"],
         2.0
     );
+    let mut uploaded_meta = meta.clone();
+    uploaded_meta["id"] = id.clone().into();
+    uploaded_meta["status"] = "completed".into();
+    uploaded_meta["recorded_at"] = "2026-09-21T12:00:00Z".into();
+    let upload = serde_json::json!({"observations": [{
+        "id": id, "run_id": id, "source": "device", "observation": uploaded_meta,
+        "stage_peaks": {"mapping": {"ram_bytes": 20}}
+    }]});
+    let (status, uploaded) =
+        post_json(&app, "/api/performance/observations", &upload, Some(&token)).await;
+    assert_eq!(status, 200, "{uploaded}");
+    assert_eq!(uploaded["accepted"], serde_json::json!([id]));
+    let (_, deduplicated) = get_json(&member, "/api/performance/comparison", None).await;
+    assert_eq!(deduplicated["groups"][0]["count"], 1, "{deduplicated}");
     let (status, _, pulled) =
         get_declaring(&app, "/api/sync/pull?since=0", Some(&token), &headers).await;
     assert_eq!(status, 200, "{pulled}");
